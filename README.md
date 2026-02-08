@@ -26,7 +26,7 @@ The X_step Multiplier reduces the resolution along the X-axis in order to reduce
 Premove adds an overscan to allow your machine to reach a constant velocity before the laser starts engraving, ensuring consistent power delivery.
 
 ## Miscellaneous
-* The last configuration used is automatically saved via `alig_config.json`.
+* The last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.*
 
 ---
 
