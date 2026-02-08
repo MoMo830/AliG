@@ -39,7 +39,7 @@ M67 commands and Laser drivers have internal delays. Therefore, there's a parame
 Premove adds an overscan to allow your machine to reach a constant velocity before the laser starts engraving, ensuring consistent power delivery.
 
 ## Miscellaneous
-* The last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.*
+* The last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
 
 ---
 
