@@ -9,7 +9,7 @@ A specialized G-Code generator for grayscale laser engraving using Mach4/PoKeys5
 Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
 
 ![Aperçu de l'interface](assets/v0.92b.png)
-*Patterned vertical lines on X-axis. Likely mechanical vibration or PWM interference. If someone has the same artifacts, please let me know.*
+*Patterned vertical lines on X-axis. Likely mechanical vibration, PWM interference or image resolution conflict. If someone has the same artifacts, please let me know.*
 
 ## Parameters
 
