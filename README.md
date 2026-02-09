@@ -80,6 +80,9 @@ This software is intended to be used on a CNC machine. I developped it as a desi
         * Select the correct **PWM Duty** (corresponding to your hardware PWM pin).
         * **Crucially:** Set both the **Numerator and Denominator to 1**, and leave the **Offset at 0**.
 
+* **Z-Axis & Focus:** Please note that **A.L.I.G. does not command any Z-axis movement.** * You **must** manually set your laser focus and your Z-zero position prior to starting the job. 
+    * Ensure your laser is at the optimal height for your material, as the generated G-code only manages X, Y, and Q (power) parameters.
+      
 * **PWM Frequency:** Depending on your motion controller and laser driver, you should experiment to find the optimal PWM frequency. For instance, I originally used 20 kHz but struggled to achieve a full range of grayscale. Lowering the frequency to **5000 Hz** significantly improved the laser's response and the subtlety of the gradients.
 
 * **Reference Point:** Currently, the origin (0,0) is fixed to the **lower-left corner** of the image.
