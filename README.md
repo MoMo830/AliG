@@ -90,6 +90,16 @@ This software is intended to be used on a CNC machine. I developped it as a desi
 * **Dedicated Mach4 Profile:** It is highly recommended to create a **separate profile** in Mach4 specifically for laser engraving. 
     * This prevents laser settings (like PWM mapping and Spindle-to-None configuration) from interfering with your standard milling/routing setups.
     * It allows you to fine-tune your motor acceleration and velocity for laser work without affecting your heavy-duty milling parameters.
+ 
+## How to Download & Run
+
+If you just want to use the software without installing Python, follow these steps:
+
+1.  Look at the **"Releases"** section on the right side of this page.
+2.  Click on the latest version (e.g., `v0.92b`).
+3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.92b.exe`).
+    * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
+4.  Run the `.exe` on your Windows machine. No installation is required.
 
 
 
