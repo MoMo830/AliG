@@ -73,8 +73,9 @@ This software is intended to be used on a CNC machine. I developped it as a desi
 * **Speed and Responsiveness (Q vs S):** In Mach4, the standard `S` command (Spindle speed) is often processed too slowly for high-speed laser engraving, leading to stuttering or "blobs" in the image. A.L.I.G. uses the **`Q` parameter** (mapped to a PWM Analog Output) because it is processed instantly by the motion controller, ensuring synchronized power changes at high feed rates.
 
 
-* **Software version used:** * MACH4 : build 6693
-*  Pokeys plugin : 9.17.0.5596
+* **Software version used:**
+   * MACH4 : build 6693
+   * Pokeys plugin : 9.17.0.5596
 * **Software Settings (Mach4/PoKeys):** * In the PoKeys plugin settings (**Configure > Plugins > PoKeys > Miscellaneous**), ensure your PWM pin box is checked and set **Spindle Control** to "None".
     * In the Mach4 Analog Output settings:
         * Map **Analog Output 0** to your device name (**PoKeys_XXXXX**).
