@@ -71,7 +71,10 @@ If you encounter any issues or have suggestions, feel free to open an **Issue**.
 * **Verify that your emergency stop is functional** before starting any job.
 
 ##  Infos, Tips & Tuning
-This software is intended to be used on a CNC machine. I developped it as a desire to expand the capabilities of my Workbee/Queenbee based CNC. I used to work with **Auggie**, which is a functional solution, but I found it difficult to constantly switch **back and forth** between it and Mach4. I developed A.L.I.G. to provide a more streamlined workflow, allowing for direct integration and better control within the Mach4/PoKeys ecosystem.
+This software is intended to be used on a CNC machine. I developped it as a desire to expand the capabilities of my Workbee/Queenbee based CNC. 
+* **Workflow Efficiency:** I used to work with **Auggie**, which is a functional solution, but I found it difficult to constantly switch **back and forth** between it and Mach4. A.L.I.G. allows for a more streamlined workflow within a single ecosystem.
+* **Speed and Responsiveness (Q vs S):** In Mach4, the standard `S` command (Spindle speed) is often processed too slowly for high-speed laser engraving, leading to stuttering or "blobs" in the image. A.L.I.G. uses the **`Q` parameter** (mapped to a PWM Analog Output) because it is processed instantly by the motion controller, ensuring synchronized power changes at high feed rates.
+
 
 * **Software version used:** MACH4 : build 6693 / Pokeys plugin : 9.17.0.5596
 * **Software Settings (Mach4/PoKeys):** * In the PoKeys plugin settings (**Configure > Plugins > PoKeys > Miscellaneous**), ensure your PWM pin box is checked and set **Spindle Control** to "None".
