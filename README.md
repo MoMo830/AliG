@@ -71,13 +71,14 @@ If you encounter any issues or have suggestions, feel free to open an **Issue**.
 * **Verify that your emergency stop is functional** before starting any job.
 
 ##  Infos, Tips & Tuning
-This software is intended to be used on a CNC machine. I developped it as a desire to expand the capabilities of my Workbee/Queenbee based CNC. I used to work with Auggie 
+This software is intended to be used on a CNC machine. I developped it as a desire to expand the capabilities of my Workbee/Queenbee based CNC. I used to work with **Auggie**, which is a functional solution, but I found it difficult to constantly switch **back and forth** between it and Mach4. I developed A.L.I.G. to provide a more streamlined workflow, allowing for direct integration and better control within the Mach4/PoKeys ecosystem.
 
 * **Software version:** MACH4 : build 6693 / Pokeys plugin : 9.17.0.5596
-* **Software Settings (Mach4/PoKeys):** 1. In the PoKeys plugin settings (**Configure > Plugins > PoKeys > Miscellaneous**), ensure your PWM pin box is checked and set **Spindle Control** to "None".
-    2. In the Mach4 Analog Output settings, map **Analog Output 0** to your device (**PoKeys_XXXXX**).
-    3. Select the correct **PWM Duty** (corresponding to your hardware pin). 
-    4. Crucially, set both the **Numerator and Denominator to 1**, and leave the **Offset at 0**.
+* **Software Settings (Mach4/PoKeys):** * In the PoKeys plugin settings (**Configure > Plugins > PoKeys > Miscellaneous**), ensure your PWM pin box is checked and set **Spindle Control** to "None".
+    * In the Mach4 Analog Output settings:
+        * Map **Analog Output 0** to your device name (**PoKeys_XXXXX**).
+        * Select the correct **PWM Duty** (corresponding to your hardware PWM pin).
+        * **Crucially:** Set both the **Numerator and Denominator to 1**, and leave the **Offset at 0**.
 
 * **PWM Frequency:** Depending on your motion controller and laser driver, you should experiment to find the optimal PWM frequency. For instance, I originally used 20 kHz but struggled to achieve a full range of grayscale. Lowering the frequency to **5000 Hz** significantly improved the laser's response and the subtlety of the gradients.
 
