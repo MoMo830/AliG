@@ -76,7 +76,8 @@ This software is intended to be used on a CNC machine. I developped it as a desi
 * **Software version used:**
    * MACH4 : build 6693
    * Pokeys plugin : 9.17.0.5596
-* **Software Settings (Mach4/PoKeys):** * In the PoKeys plugin settings (**Configure > Plugins > PoKeys > Miscellaneous**), ensure your PWM pin box is checked and set **Spindle Control** to "None".
+* **Software Settings (Mach4/PoKeys):**
+    * In the PoKeys plugin settings (**Configure > Plugins > PoKeys > Miscellaneous**), ensure your PWM pin box is checked and set **Spindle Control** to "None".
     * In the Mach4 Analog Output settings:
         * Map **Analog Output 0** to your device name (**PoKeys_XXXXX**).
         * Select the correct **PWM Duty** (corresponding to your hardware PWM pin).
