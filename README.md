@@ -38,9 +38,6 @@ M67 commands and Laser drivers have internal delays. Therefore, there's a parame
 ### Premove (Overscan)
 Premove adds an overscan to allow your machine to reach a constant velocity before the laser starts engraving, ensuring consistent power delivery.
 
-## Miscellaneous
-* The last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
-
 ---
 
 ## Support & Contributions
@@ -100,6 +97,7 @@ If you just want to use the software without installing Python, follow these ste
 3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.92b.exe`).
     * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
 4.  Run the `.exe` on your Windows machine. No installation is required.
+5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
 
 
 
