@@ -84,5 +84,9 @@ This software is intended to be used on a CNC machine. I developped it as a desi
 
 * **Reference Point:** Currently, the origin (0,0) is fixed to the **lower-left corner** of the image.
 
+* **Dedicated Mach4 Profile:** It is highly recommended to create a **separate profile** in Mach4 specifically for laser engraving. 
+    * This prevents laser settings (like PWM mapping and Spindle-to-None configuration) from interfering with your standard milling/routing setups.
+    * It allows you to fine-tune your motor acceleration and velocity for laser work without affecting your heavy-duty milling parameters.
+
 
 
