@@ -1,12 +1,11 @@
 <p align="right">
-  <span style="float:left; font-size: 2em; font-weight: bold;">A.L.I.G. - Advanced Laser Imaging Generator</span>
+  <span style="float:left; font-size: 3em; font-weight: bold;">A.L.I.G. - Advanced Laser Imaging Generator</span>
   <img src="https://img.shields.io/github/v/release/MoMo830/AliG?style=for-the-badge&color=orange" alt="Version">
   <img src="https://img.shields.io/github/downloads/MoMo830/AliG/total?style=for-the-badge&color=blue" alt="Total Downloads">
 </p>
 
 ---
 
----
 
 <p align="center">
   <img src="assets/screen_alig_0.971b.jpg" alt="AMC" width="80%">
