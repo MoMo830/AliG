@@ -1,4 +1,3 @@
-# A.L.I.G. - Advanced Laser Imaging Generator
 <table width="100%">
   <tr>
     <td align="left" border="0">
