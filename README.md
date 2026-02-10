@@ -11,7 +11,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * **v0.94b** : Added analog ouput choice for M67 and S support.
 * **v0.93b** : Origin selection added / improved display.
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
-* 
+ 
 <p align="center">
   <img src="assets/v0.92b.png" alt="AMC" width="50%">
 </p>
@@ -123,8 +123,8 @@ This software is intended to be used on a CNC machine. I developped it as a desi
 If you just want to use the software without installing Python, follow these steps:
 
 1.  Look at the **"Releases"** section on the right side of this page.
-2.  Click on the latest version (e.g., `v0.94b`).
-3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.94b.exe`).
+2.  Click on the latest version (e.g., `v0.95b`).
+3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.95b.exe`).
     * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
 4.  Run the `.exe` on your Windows machine. No installation is required.
 5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
