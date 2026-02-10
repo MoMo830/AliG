@@ -1,6 +1,6 @@
 # A.L.I.G. - Advanced Laser Imaging Generator
 
-![Aperçu de l'interface](assets/screen_alig.jpg)
+![Aperçu de l'interface](assets/screen_alig_0.93.jpg)
 
 ## Description
 A specialized G-Code generator for grayscale laser engraving using Mach4/PoKeys57CNC and M67 commands. This application is bundled with PyInstaller as a standalone executable, requiring no Python installation to run.
