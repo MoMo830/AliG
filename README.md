@@ -72,7 +72,9 @@ If you encounter any issues or have suggestions, feel free to open an **Issue**.
 ## ⚠️ WARNING & SAFETY DISCLAIMER
 
 > [!CAUTION]
-> **LASER SAFETY:** This software generates G-Code utilizing `M3` and `M67` commands. **`M3` is used to arm the laser**, but on certain CNC configurations, it may trigger a spindle motor instead.
+> **NOT A CONTROL SOFTWARE:** This application is a **G-Code Generator (CAM)**. It does not connect to or control your CNC machine directly. It is designed to process images and export `.nc` files. You must use a dedicated controller software (like Mach4, UGS, or LaserGRBL) to run the generated files.
+> 
+> **LASER SAFETY:** This software generates G-Code utilizing `M3` by default and `M67/S` commands. **`M3` is used to arm the laser**, but on certain CNC configurations, it may trigger a spindle motor instead.
 > 
 > **HARDWARE COMPATIBILITY:** Always verify your G-Code and ensure your controller is explicitly set to **Laser Mode** before execution. Use this program at your own risk. The author assumes no liability for hardware damage or personal injury.
 > 
@@ -93,20 +95,6 @@ If you encounter any issues or have suggestions, feel free to open an **Issue**.
 * **Verify Emergency Stop:** Ensure your E-Stop is functional and within reach before starting any job.
 * **Ventilation:** Ensure proper air extraction; laser engraving can produce toxic fumes depending on the material.
 
-
-
-## ⚠️ WARNING & SAFETY DISCLAIMER
-
-> [!CAUTION]
-> **NOT A CONTROL SOFTWARE:** This application is a **G-Code Generator (CAM)**. It does not connect to or control your CNC machine directly. It is designed to process images and export `.nc` files. You must use a dedicated controller software (like Mach4, UGS, or LaserGRBL) to run the generated files.
-
-> [!WARNING]
-> **LASER SAFETY:** This software generates G-Code utilizing `M3/M4` and `M67/S` commands. **`M3/M4` is used to arm the laser.** On certain CNC configurations, these commands may trigger a spindle motor instead. Always ensure your hardware is properly configured for laser operations.
-
-**HARDWARE COMPATIBILITY:** Always verify your G-Code and ensure your controller is explicitly set to **Laser Mode** (e.g., `$32=1` for GRBL) before execution. Use this program at your own risk. The author assumes no liability for hardware damage or personal injury.
-
-**BETA SOFTWARE:** This application is currently in **Beta**. While it has been tested, bugs may still exist. **Always perform a manual inspection of the generated G-Code text** before running it on your CNC machine.
-  
 ---
 
 ##  Infos, Tips & Tuning
