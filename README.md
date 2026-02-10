@@ -38,9 +38,9 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * G-Code Command Abstraction (Decoupling machine configuration (Header/Footer) from functional laser commands).
 * File Management Improvements: Better path handling and profile persistence.
 * Greyscale Depth Maps: Support for 3D relief engraving (Inversion and contrast optimization for depth control).
-* Option for auto-homing.
-* (maybe) Dithering Implementation: Integration of the Floyd-Steinberg algorithm ?
-
+* Option for auto-homing at start.
+* (maybe) Dithering Implementation: Integration of the Floyd-Steinberg algorithm.
+* (maybe) Auto-Contour Detection & Trace & Fill Logic: Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
 
 ## Gcode Export
 All trajectories are calculated using **Absolute Coordinates**. This ensures that every pixel of the image is tied to a fixed position relative to your origin, preventing cumulative errors or trajectory drift common in incremental modes.
