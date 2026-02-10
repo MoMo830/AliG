@@ -86,7 +86,7 @@ Premove adds an overscan to allow your machine to reach a constant velocity befo
 ---
 
 ## Support & Contributions
-A.L.I.G. is a free, personal project developed during my spare time. If this tool has helped you with your CNC projects or saved you time, please consider supporting its development. Your contributions help cover the costs of testing materials and hardware for further compatibility tests.
+A.L.I.G. is a free project, developed during their spare time by a world-class team of... just me. If this tool has helped you with your CNC projects or saved you time, please consider supporting its development. Your contributions help cover the costs of testing materials and hardware for further compatibility tests.
 
 * **Donations:** [Support A.L.I.G. on Buy Me a Coffee](https://buymeacoffee.com/momo830)
 * **Feedback:** If you encounter any issues or have suggestions for new features, feel free to open an **Issue**.
