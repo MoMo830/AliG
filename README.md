@@ -1,7 +1,7 @@
 # A.L.I.G. - Advanced Laser Imaging Generator
 
 <p align="center">
-  <img src="assets/screen_alig_0.97b.jpg" alt="AMC" width="80%">
+  <img src="assets/screen_alig_0.971b.jpg" alt="AMC" width="80%">
   <br>
   <a href="https://buymeacoffee.com/momo830"><img src="https://img.shields.io/badge/Donate-Buy%20Me%20A%20Coffee-orange?style=flat-square&logo=buy-me-a-coffee" alt="Support the project"></a>
 </p>
@@ -11,6 +11,7 @@ A specialized G-Code generator for grayscale laser engraving.
 Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports standard S commands as well. This application is bundled with PyInstaller as a standalone executable, requiring no Python installation to run.
 
 ## Last version change 
+* **v0.971b** : Added **DPI input field** / **Controller Max Value** / **Import / Export** of configuration profiles.
 * **v0.97b** : Added Calibration tools (generation of two patterns to help calibrate settings).
 * **v0.96b** : Added custom origin point / frame check option.
 * **v0.94b** : Added analog ouput choice for M67 and S support.
@@ -136,8 +137,8 @@ This software is intended to be used on a CNC machine. I developped it as a desi
 If you just want to use the software without installing Python, follow these steps:
 
 1.  Look at the **"Releases"** section on the right side of this page.
-2.  Click on the latest version (e.g., `v0.97b`).
-3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.97b.exe`).
+2.  Click on the latest version (e.g., `v0.971b`).
+3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.971b.exe`).
     * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
 4.  Run the `.exe` on your Windows machine. No installation is required.
 5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
