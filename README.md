@@ -70,6 +70,7 @@ If you encounter any issues or have suggestions, feel free to open an **Issue**.
 > **LASER SAFETY:** This software generates G-Code utilizing `M3` and `M67` commands. **`M3` is used to arm the laser**, but on certain CNC configurations, it may trigger a spindle motor instead.
 > 
 > **HARDWARE COMPATIBILITY:** Always verify your G-Code and ensure your controller is explicitly set to **Laser Mode** before execution. Use this program at your own risk. The author assumes no liability for hardware damage or personal injury.
+> **BETA SOFTWARE:** This application is currently in **Beta**. While it has been tested, bugs may still exist. **Always perform a manual inspection of the generated G-Code text** (check for unexpected values or command syntax) before running it on your CNC machine.
 
 ### Work Area & Premove Warning
 
@@ -105,8 +106,6 @@ This software is intended to be used on a CNC machine. I developped it as a desi
       
 * **PWM Frequency:** Depending on your motion controller and laser driver, you should experiment to find the optimal PWM frequency. For instance, I originally used 20 kHz but struggled to achieve a full range of grayscale. Lowering the frequency to **5000 Hz** significantly improved the laser's response and the subtlety of the gradients.
 
-* **Reference Point:** Currently, the origin (0,0) is fixed to the **lower-left corner** of the image.
-
 * **Dedicated Mach4 Profile:** It is highly recommended to create a **separate profile** in Mach4 specifically for laser engraving. 
     * This prevents laser settings (like PWM mapping and Spindle-to-None configuration) from interfering with your standard milling/routing setups.
     * It allows you to fine-tune your motor acceleration and velocity for laser work without affecting your heavy-duty milling parameters.
@@ -116,8 +115,8 @@ This software is intended to be used on a CNC machine. I developped it as a desi
 If you just want to use the software without installing Python, follow these steps:
 
 1.  Look at the **"Releases"** section on the right side of this page.
-2.  Click on the latest version (e.g., `v0.92b`).
-3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.92b.exe`).
+2.  Click on the latest version (e.g., `v0.94b`).
+3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.94b.exe`).
     * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
 4.  Run the `.exe` on your Windows machine. No installation is required.
 5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
