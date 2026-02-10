@@ -1,7 +1,7 @@
 # A.L.I.G. - Advanced Laser Imaging Generator
 
 <p align="center">
-  <img src="assets/screen_alig_0.97b.jpg" alt="AMC" width="50%">
+  <img src="assets/screen_alig_0.97b.jpg" alt="AMC" width="80%">
   <br>
   <a href="https://buymeacoffee.com/momo830"><img src="https://img.shields.io/badge/Donate-Buy%20Me%20A%20Coffee-orange?style=flat-square&logo=buy-me-a-coffee" alt="Support the project"></a>
 </p>
