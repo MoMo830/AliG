@@ -1,13 +1,14 @@
 # A.L.I.G. - Advanced Laser Imaging Generator
 
-![Aperçu de l'interface](assets/screen_alig_0.93.jpg)
+![Aperçu de l'interface](assets/screen_alig_0.94.jpg)
 
 ## Description
 A specialized G-Code generator for grayscale laser engraving using Mach4/PoKeys57CNC and M67 commands. This application is bundled with PyInstaller as a standalone executable, requiring no Python installation to run.
 
 ## Last version change 
-* **v0.9.3b** : Origin selection added / improved display.
-* **v0.9.2b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges. 
+* **v0.94b** : Added analog ouput choice for M67 and S support.
+* **v0.93b** : Origin selection added / improved display.
+* **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges. 
 
 ![Aperçu de l'interface](assets/v0.92b.png)
 *Patterned vertical lines on X-axis. Likely mechanical vibration, PWM interference or image resolution conflict. If someone has the same artifacts, please let me know.*
