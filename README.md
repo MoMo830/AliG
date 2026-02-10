@@ -130,11 +130,13 @@ This software is intended to be used on a CNC machine. I developped it as a desi
  
 ## How to Download & Run
 
+**Configuration Safety**: If you updated your version and encounter errors, rename your previous `alig_config.json` in order to avoid **conflicts with new configuration keys**. This will allow the software to generate a fresh, compatible settings file on the next launch.
+  
 If you just want to use the software without installing Python, follow these steps:
 
 1.  Look at the **"Releases"** section on the right side of this page.
-2.  Click on the latest version (e.g., `v0.95b`).
-3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.95b.exe`).
+2.  Click on the latest version (e.g., `v0.96b`).
+3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.96b.exe`).
     * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
 4.  Run the `.exe` on your Windows machine. No installation is required.
 5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
