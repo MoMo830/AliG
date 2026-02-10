@@ -15,11 +15,6 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * **v0.93b** : Origin selection added / improved display.
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
  
-<p align="center">
-  <img src="assets/v0.92b.png" alt="AMC" width="50%">
-</p>
-
-*Patterned vertical lines on X-axis. Likely mechanical vibration, PWM interference or image resolution conflict. If someone has the same artifacts, please let me know.*
 
 ## Gcode Export
 All trajectories are calculated using **Absolute Coordinates**. This ensures that every pixel of the image is tied to a fixed position relative to your origin, preventing cumulative errors or trajectory drift common in incremental modes.
