@@ -3,7 +3,8 @@
 ![Aperçu de l'interface](assets/screen_alig_0.94b.jpg)
 
 ## Description
-A specialized G-Code generator for grayscale laser engraving using Mach4/PoKeys57CNC and M67 commands. This application is bundled with PyInstaller as a standalone executable, requiring no Python installation to run.
+A specialized G-Code generator for grayscale laser engraving.
+Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports standard S commands as well. This application is bundled with PyInstaller as a standalone executable, requiring no Python installation to run.
 
 ## Last version change 
 * **v0.94b** : Added analog ouput choice for M67 and S support.
@@ -12,6 +13,20 @@ A specialized G-Code generator for grayscale laser engraving using Mach4/PoKeys5
 
 ![Changes](assets/v0.92b.png)
 *Patterned vertical lines on X-axis. Likely mechanical vibration, PWM interference or image resolution conflict. If someone has the same artifacts, please let me know.*
+
+### Gcode Export
+All trajectories are calculated using **Absolute Coordinates**. This ensures that every pixel of the image is tied to a fixed position relative to your origin, preventing cumulative errors or trajectory drift common in incremental modes.
+
+| Parameter | Description | G-Code Command |
+| :--- | :--- | :--- |
+| **Distance Mode** | **Absolute Positioning** (Fixed precision) | `G90` |
+| **Unit System** | Metric (**Millimeters**) | `G21` |
+| **Plane Selection** | **X / Y** Working Plane | `G17` |
+| **Feedrate Mode** | **Units per Minute** | `G94` |
+| **Laser (Analog)** | Real-time synced modulation (Mach4/PoKeys) | `M67 E[0-3] Q[0-100]` |
+| **Laser (Spindle)** | Universal Spindle command (GRBL/Smoothie) | `S[0-100]` |
+
+The final file is exported with the `.nc` extension.
 
 ## Parameters
 ### Line Step / Resolution (mm)
