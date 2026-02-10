@@ -45,19 +45,19 @@ This is the "vertical resolution" of your project. It defines the distance betwe
 ### Thermal Correction
 The Thermal Correction setting adjusts the power ramp of your laser. By increasing this coefficient, you slow down the power rise, keeping the laser at lower intensities for a longer range of gray tones. This prevents premature wood carbonization and preserves subtle details in highlights and mid-tones, ensuring that high power is only reached for the deepest blacks.
 
-### Min Power (Q)
+### Min Power (%)
 Sets the power level for the lightest parts of your image. Since every material (wood types, MDF, etc.) has a different combustion threshold, this setting ensures the laser is already at its "starting point" for the first level of gray, preventing "dead zones" in the highlights.
 
-### Max Power (Q)
+### Max Power (%)
 Defines the upper power limit for the darkest pixels. Adjust this based on your laser's wattage and the material's density. The goal is to achieve a deep black without deep charring or structural damage to the wood fibers.
 
-### X_step Multiplier
-The X_step Multiplier reduces the resolution along the X-axis in order to reduce the controller workload and reach the desired feedrate. To maintain a feedrate of 3000mm/min, a value of **1.2** is sufficient for my setup.
+### X-resolution scale
+The X-resolution scale reduces the resolution along the X-axis in order to reduce the controller workload and reach the desired feedrate. To maintain a feedrate of 3000mm/min, a value of **1.2** is sufficient for my setup.
 
-### Delay Compensation
+### Laser latency/delay (ms)
 M67 commands and Laser drivers have internal delays. Therefore, there's a parameter to take this into account. In my build, at a feedrate of 3000mm/min, the ideal setting is **11.5 ms**. If this parameter is not correctly set, you will experience blur as the engraved lines will not align.
 
-### Premove (Overscan)
+### Premove /Overscan (mm)
 Premove adds an overscan to allow your machine to reach a constant velocity before the laser starts engraving, ensuring consistent power delivery.
 
 ---
@@ -89,6 +89,8 @@ If you encounter any issues or have suggestions, feel free to open an **Issue**.
 * **Check your work surface:** Ensure the material is flat and that the extended travel path (including overscan) is clear of obstacles.
 * **Never leave the machine unattended** while the laser is active.
 * **Verify that your emergency stop is functional** before starting any job.
+
+---
 
 ##  Infos, Tips & Tuning
 This software is intended to be used on a CNC machine. I developped it as a desire to expand the capabilities of my Workbee/Queenbee based CNC. 
