@@ -3,6 +3,7 @@
 <p align="center">
   <img src="assets/screen_alig_0.94b.jpg" alt="AMC" width="50%">
 </p>
+
 ## Description
 A specialized G-Code generator for grayscale laser engraving.
 Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports standard S commands as well. This application is bundled with PyInstaller as a standalone executable, requiring no Python installation to run.
