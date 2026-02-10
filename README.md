@@ -9,7 +9,7 @@
 
 # A.L.I.G. - Advanced Laser Imaging Generator 
 
----
+
 
 
 <p align="center">
