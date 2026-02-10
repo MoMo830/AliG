@@ -37,6 +37,8 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * Framing Refinement: Implementation of safety pauses and synchronization.
 * G-Code Command Abstraction (Decoupling machine configuration (Header/Footer) from functional laser commands).
 * File Management Improvements: Better path handling and profile persistence.
+* Greyscale Depth Maps: Support for 3D relief engraving (Inversion and contrast optimization for depth control).
+* Option for auto-homing.
 * (maybe) Dithering Implementation: Integration of the Floyd-Steinberg algorithm ?
 
 
