@@ -1,15 +1,17 @@
-<table width="100%">
-  <tr>
-    <td align="left" border="0">
-      <h1>A.L.I.G. - Advanced Laser Imaging Generator</h1>
-    </td>
-    <td align="right" border="0">
-      <img src="https://img.shields.io/github/v/release/MoMo830/AliG?style=flat-square" alt="Version">
-      <br>
-      <img src="https://img.shields.io/github/downloads/MoMo830/AliG/total?style=for-the-badge&color=blue" alt="Total Downloads">
-    </td>
-  </tr>
-</table>
+<p align="right">
+  <img src="https://img.shields.io/github/v/release/MoMo830/AliG?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/github/downloads/MoMo830/AliG/total?style=for-the-badge&color=blue" alt="Total Downloads">
+</p>
+
+# A.L.I.G. - Advanced Laser Imaging Generator
+
+---
+
+<p align="center">
+  <img src="assets/screen_alig_0.971b.jpg" alt="AMC" width="80%">
+  <br>
+  <a href="https://buymeacoffee.com/momo830"><img src="https://img.shields.io/badge/Donate-Buy%20Me%20A%20Coffee-orange?style=flat-square&logo=buy-me-a-coffee" alt="Support the project"></a>
+</p>
 
 <p align="center">
   <img src="assets/screen_alig_0.971b.jpg" alt="AMC" width="80%">
