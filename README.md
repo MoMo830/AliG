@@ -11,6 +11,7 @@ A specialized G-Code generator for grayscale laser engraving.
 Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports standard S commands as well. This application is bundled with PyInstaller as a standalone executable, requiring no Python installation to run.
 
 ## Last version change 
+* **v0.96b** : Added custom origin point / frame check option.
 * **v0.94b** : Added analog ouput choice for M67 and S support.
 * **v0.93b** : Origin selection added / improved display.
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
