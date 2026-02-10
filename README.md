@@ -42,8 +42,8 @@ All trajectories are calculated using **Absolute Coordinates**. This ensures tha
 | **Unit System** | Metric (**Millimeters**) | `G21` |
 | **Plane Selection** | **X / Y** Working Plane | `G17` |
 | **Feedrate Mode** | **Units per Minute** | `G94` |
-| **Laser (Analog)** | Real-time synced modulation (Mach4/PoKeys) | `M67 E[0-3] Q[0-100]` |
-| **Laser (Spindle)** | Universal Spindle command (GRBL/Smoothie) | `S[0-100]` |
+| **Laser (Analog)** | Real-time synced modulation (Mach4/PoKeys) | `M67 E[0-3] Q[0-XXX]` |
+| **Laser (Spindle)** | Universal Spindle command (GRBL/Smoothie) | `S[0-XXX]` |
 
 The final file is exported with the `.nc` extension.
 
