@@ -1,9 +1,9 @@
-<table width="100%">
-  <tr>
-    <td align="left">
+<table role="presentation" border="0" cellspacing="0" cellpadding="0" style="border: none !important; border-collapse: collapse;">
+  <tr style="border: none !important;">
+    <td align="left" style="border: none !important;">
       <h1>A.L.I.G. - Advanced Laser Imaging Generator</h1>
     </td>
-    <td align="right" valign="middle">
+    <td align="right" valign="middle" style="border: none !important;">
       <img src="https://img.shields.io/github/v/release/MoMo830/AliG?style=for-the-badge&color=orange" alt="Version">
       <img src="https://img.shields.io/github/downloads/MoMo830/AliG/total?style=for-the-badge&color=blue" alt="Total Downloads">
     </td>
