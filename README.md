@@ -81,16 +81,32 @@ If you encounter any issues or have suggestions, feel free to open an **Issue**.
 ### Work Area & Premove Warning
 
 > [!IMPORTANT]
-> **OVERSCAN CALCULATION:** The "Premove" feature adds an **overscan distance** (default 15mm) to both sides of your image. 
+> **OVERSCAN CALCULATION:** The "X-Spacing Factor" and "Premove" features affect the total travel distance of your laser head.
+> * **Premove:** Adds an overscan distance (default 15mm) to both sides of your image. 
 > * **Example:** If your image is 100mm wide with a 15mm premove, the laser head will travel **130mm** in total.
-> * **Action Required:** Ensure your machine's physical travel limits (Soft Limits/Hard Limits) can accommodate this extra width to avoid crashing into the frame. Always perform a "frame" or "boundary" check before firing.
+> * **Action Required:** Ensure your machine's physical travel limits (Soft/Hard Limits) can accommodate this extra width to avoid crashing into the frame. Always perform a "frame" or "boundary" check.
 
 ### Operational Rules
 * **Always wear certified laser safety goggles** matching your laser's wavelength.
-* **Check your work surface:** Ensure the material is flat and that the extended travel path (including overscan) is clear of obstacles.
+* **Check your work surface:** Ensure the material is flat and the extended travel path is clear of obstacles.
 * **Never leave the machine unattended** while the laser is active.
-* **Verify that your emergency stop is functional** before starting any job.
+* **Verify Emergency Stop:** Ensure your E-Stop is functional and within reach before starting any job.
+* **Ventilation:** Ensure proper air extraction; laser engraving can produce toxic fumes depending on the material.
 
+
+
+## ⚠️ WARNING & SAFETY DISCLAIMER
+
+> [!CAUTION]
+> **NOT A CONTROL SOFTWARE:** This application is a **G-Code Generator (CAM)**. It does not connect to or control your CNC machine directly. It is designed to process images and export `.nc` files. You must use a dedicated controller software (like Mach4, UGS, or LaserGRBL) to run the generated files.
+
+> [!WARNING]
+> **LASER SAFETY:** This software generates G-Code utilizing `M3/M4` and `M67/S` commands. **`M3/M4` is used to arm the laser.** On certain CNC configurations, these commands may trigger a spindle motor instead. Always ensure your hardware is properly configured for laser operations.
+
+**HARDWARE COMPATIBILITY:** Always verify your G-Code and ensure your controller is explicitly set to **Laser Mode** (e.g., `$32=1` for GRBL) before execution. Use this program at your own risk. The author assumes no liability for hardware damage or personal injury.
+
+**BETA SOFTWARE:** This application is currently in **Beta**. While it has been tested, bugs may still exist. **Always perform a manual inspection of the generated G-Code text** before running it on your CNC machine.
+  
 ---
 
 ##  Infos, Tips & Tuning
