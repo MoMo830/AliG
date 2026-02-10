@@ -87,6 +87,7 @@ If you encounter any issues or have suggestions, feel free to open an **Issue**.
 
 ##  Infos, Tips & Tuning
 This software is intended to be used on a CNC machine. I developped it as a desire to expand the capabilities of my Workbee/Queenbee based CNC. 
+![Aperçu de l'interface](assets/AMC.jpg)
 * **Workflow Efficiency:** I used to work with **Auggie**, which is a functional solution, but I found it difficult to constantly switch **back and forth** between it and Mach4. A.L.I.G. allows for a more streamlined workflow within a single ecosystem.
 * **Speed and Responsiveness (Q vs S):** In Mach4, the standard `S` command (Spindle speed) is often processed too slowly for high-speed laser engraving, leading to stuttering or "blobs" in the image. A.L.I.G. uses the **`Q` parameter** (mapped to a PWM Analog Output) because it is processed instantly by the motion controller, ensuring synchronized power changes at high feed rates.
 
@@ -102,7 +103,7 @@ This software is intended to be used on a CNC machine. I developped it as a desi
         * **Crucially:** Set both the **Numerator and Denominator to 1**, and leave the **Offset at 0**.
 
 * **Z-Axis & Focus:** Please note that **A.L.I.G. does not command any Z-axis movement.** * You **must** manually set your laser focus and your Z-zero position prior to starting the job. 
-    * Ensure your laser is at the optimal height for your material, as the generated G-code only manages X, Y, and Q (power) parameters.
+    * Ensure your laser is at the optimal height for your material, as the generated G-code only manages X, Y, and Q/S (power) parameters.
       
 * **PWM Frequency:** Depending on your motion controller and laser driver, you should experiment to find the optimal PWM frequency. For instance, I originally used 20 kHz but struggled to achieve a full range of grayscale. Lowering the frequency to **5000 Hz** significantly improved the laser's response and the subtlety of the gradients.
 
