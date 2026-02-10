@@ -2,6 +2,8 @@
 
 <p align="center">
   <img src="assets/screen_alig_0.94b.jpg" alt="AMC" width="50%">
+  <br>
+  <a href="https://buymeacoffee.com/momo830"><img src="https://img.shields.io/badge/Donate-Buy%20Me%20A%20Coffee-orange?style=flat-square&logo=buy-me-a-coffee" alt="Support the project"></a>
 </p>
 
 ## Description
@@ -63,7 +65,10 @@ Premove adds an overscan to allow your machine to reach a constant velocity befo
 ---
 
 ## Support & Contributions
-If you encounter any issues or have suggestions, feel free to open an **Issue**.
+A.L.I.G. is a free, personal project developed during my spare time. If this tool has helped you with your CNC projects or saved you time, please consider supporting its development. Your contributions help cover the costs of testing materials and hardware for further compatibility tests.
+
+* **Donations:** [Support A.L.I.G. on Buy Me a Coffee](https://buymeacoffee.com/momo830)
+* **Feedback:** If you encounter any issues or have suggestions for new features, feel free to open an **Issue**.
 
 **Author:** Alexandre "MoMo"
 
