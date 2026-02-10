@@ -75,6 +75,7 @@ If you encounter any issues or have suggestions, feel free to open an **Issue**.
 > **LASER SAFETY:** This software generates G-Code utilizing `M3` and `M67` commands. **`M3` is used to arm the laser**, but on certain CNC configurations, it may trigger a spindle motor instead.
 > 
 > **HARDWARE COMPATIBILITY:** Always verify your G-Code and ensure your controller is explicitly set to **Laser Mode** before execution. Use this program at your own risk. The author assumes no liability for hardware damage or personal injury.
+> 
 > **BETA SOFTWARE:** This application is currently in **Beta**. While it has been tested, bugs may still exist. **Always perform a manual inspection of the generated G-Code text** (check for unexpected values or command syntax) before running it on your CNC machine.
 
 ### Work Area & Premove Warning
