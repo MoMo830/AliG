@@ -32,7 +32,13 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * **v0.94b** : Added analog ouput choice for M67 and S support.
 * **v0.93b** : Origin selection added / improved display.
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
- 
+
+## Roadmap :
+* Framing Refinement: Implementation of safety pauses and synchronization.
+* G-Code Command Abstraction (Decoupling machine configuration (Header/Footer) from functional laser commands).
+* File Management Improvements: Better path handling and profile persistence.
+* (maybe) Dithering Implementation: Integration of the Floyd-Steinberg algorithm ?
+
 
 ## Gcode Export
 All trajectories are calculated using **Absolute Coordinates**. This ensures that every pixel of the image is tied to a fixed position relative to your origin, preventing cumulative errors or trajectory drift common in incremental modes.
