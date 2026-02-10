@@ -10,9 +10,11 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 ## Last version change 
 * **v0.94b** : Added analog ouput choice for M67 and S support.
 * **v0.93b** : Origin selection added / improved display.
-* **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges. 
-
-![Changes](assets/v0.92b.png)
+* **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
+* 
+<p align="center">
+  <img src="assets/v0.92b.png" alt="AMC" width="50%">
+</p>
 *Patterned vertical lines on X-axis. Likely mechanical vibration, PWM interference or image resolution conflict. If someone has the same artifacts, please let me know.*
 
 ### Gcode Export
@@ -90,7 +92,7 @@ If you encounter any issues or have suggestions, feel free to open an **Issue**.
 This software is intended to be used on a CNC machine. I developped it as a desire to expand the capabilities of my Workbee/Queenbee based CNC. 
 
 <p align="center">
-  <img src="assets/AMC.jpg" alt="AMC" width="250">
+  <img src="assets/AMC.jpg" alt="AMC" width="50%">
 </p>
 * **Workflow Efficiency:** I used to work with **Auggie**, which is a functional solution, but I found it difficult to constantly switch **back and forth** between it and Mach4. A.L.I.G. allows for a more streamlined workflow within a single ecosystem.
 * **Speed and Responsiveness (Q vs S):** In Mach4, the standard `S` command (Spindle speed) is often processed too slowly for high-speed laser engraving, leading to stuttering or "blobs" in the image. A.L.I.G. uses the **`Q` parameter** (mapped to a PWM Analog Output) because it is processed instantly by the motion controller, ensuring synchronized power changes at high feed rates.
