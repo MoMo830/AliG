@@ -40,10 +40,13 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 ## Roadmap :
 * Framing Refinement: Implementation of safety pauses and synchronization.
 * G-Code Command Abstraction (Decoupling machine configuration (Header/Footer) from functional laser commands).
-* File Management Improvements: Better path handling and profile persistence.
+* File Management Improvements : Better path handling and profile persistence.
+* Add an option to force the target width to match the desired one (with a x-resolution scale change).
+* User interface improvements (not fond of all these sliders) 
 * Greyscale Depth Maps: Support for 3D relief engraving (Inversion and contrast optimization for depth control).
 * Option for auto-homing at start.
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
+* Performance increase with vectorization
 * Keep this readme up-to-date !
 * (maybe) Dithering Implementation: Integration of the Floyd-Steinberg algorithm.
 * (maybe) Auto-Contour Detection & Trace & Fill Logic: Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
