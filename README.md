@@ -19,7 +19,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 
 *Patterned vertical lines on X-axis. Likely mechanical vibration, PWM interference or image resolution conflict. If someone has the same artifacts, please let me know.*
 
-### Gcode Export
+## Gcode Export
 All trajectories are calculated using **Absolute Coordinates**. This ensures that every pixel of the image is tied to a fixed position relative to your origin, preventing cumulative errors or trajectory drift common in incremental modes.
 
 | Parameter | Description | G-Code Command |
