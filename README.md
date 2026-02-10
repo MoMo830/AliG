@@ -1,7 +1,7 @@
 # A.L.I.G. - Advanced Laser Imaging Generator
 
 <p align="center">
-  <img src="assets/screen_alig_0.94b.jpg" alt="AMC" width="250">
+  <img src="assets/screen_alig_0.94b.jpg" alt="AMC" width="50%">
 </p>
 ## Description
 A specialized G-Code generator for grayscale laser engraving.
