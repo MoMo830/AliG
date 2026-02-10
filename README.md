@@ -16,6 +16,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 <p align="center">
   <img src="assets/v0.92b.png" alt="AMC" width="50%">
 </p>
+
 *Patterned vertical lines on X-axis. Likely mechanical vibration, PWM interference or image resolution conflict. If someone has the same artifacts, please let me know.*
 
 ### Gcode Export
