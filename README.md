@@ -87,7 +87,8 @@ If you encounter any issues or have suggestions, feel free to open an **Issue**.
 
 ##  Infos, Tips & Tuning
 This software is intended to be used on a CNC machine. I developped it as a desire to expand the capabilities of my Workbee/Queenbee based CNC. 
-<img src="assets/AMC.jpg" alt="AMC" width="50%">
+
+<img src="assets/AMC.jpg" alt="AMC" width="30%">
 * **Workflow Efficiency:** I used to work with **Auggie**, which is a functional solution, but I found it difficult to constantly switch **back and forth** between it and Mach4. A.L.I.G. allows for a more streamlined workflow within a single ecosystem.
 * **Speed and Responsiveness (Q vs S):** In Mach4, the standard `S` command (Spindle speed) is often processed too slowly for high-speed laser engraving, leading to stuttering or "blobs" in the image. A.L.I.G. uses the **`Q` parameter** (mapped to a PWM Analog Output) because it is processed instantly by the motion controller, ensuring synchronized power changes at high feed rates.
 
