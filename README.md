@@ -163,6 +163,7 @@ This software is intended to be used on a CNC machine. I developped it as a desi
 ## How to Download & Run
 
 **Configuration Safety**: If you updated your version and encounter errors, rename your previous `alig_config.json` in order to avoid **conflicts with new configuration keys**. This will allow the software to generate a fresh, compatible settings file on the next launch.
+
 [![GitHub release](https://img.shields.io/github/v/release/MoMo830/ALIG?label=Latest%20Version&color=orange)](https://github.com/MoMo830/ALIG/releases/latest)  
 If you just want to use the software without installing Python, follow these steps:
 
