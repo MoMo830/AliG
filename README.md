@@ -27,6 +27,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 
 ## Last version change 
 ### (10/02/2026)
+* **v0.973b** : Added firing mode selection (M3/M4), fixed framing logic & UI, optimized graphic performance.
 * **v0.972b** : Added optional integrated framing with customizable pause commands (M0/M1)
  > ⚠️ **Warning:** Laser might still be active during pause. Work in progress: ensuring `M3` re-arming after pause.
 * **v0.971b** : Added **DPI input field** / **Controller Max Value** / **Import / Export** of configuration profiles.
@@ -169,8 +170,8 @@ This software is intended to be used on a CNC machine. I developped it as a desi
 If you just want to use the software without installing Python, follow these steps:
 
 1.  Look at the **"Releases"** section on the right side of this page.
-2.  Click on the latest version (e.g., `v0.971b`).
-3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.971b.exe`).
+2.  Click on the latest version (e.g., `v0.973b`).
+3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.973b.exe`).
     * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
 4.  Run the `.exe` on your Windows machine. No installation is required.
 5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
