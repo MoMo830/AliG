@@ -28,7 +28,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 ## Last version change 
 ### (11/02/2026)
 * **v0.974b** : Added "Force width" parameter to automatically adapt the X-step / Rationalized internal logic for settings storage and profile exportation.
-* **v0.973b** : Added firing mode selection (M3/M4), fixed framing logic & UI, optimized graphic performance adn image/output folder UI.
+* **v0.973b** : Added firing mode selection (M3/M4), fixed framing logic & UI, optimized graphic performance and image/output folder UI.
 ### (10/02/2026)
 * **v0.972b** : Added optional integrated framing with customizable pause commands (M0/M1)
 * **v0.971b** : Added **DPI input field** / **Controller Max Value** / **Import / Export** of configuration profiles.
