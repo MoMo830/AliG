@@ -47,6 +47,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * Grayscale clustering option to reduce .nc file size.
 * (maybe) Dithering Implementation: Integration of the Floyd-Steinberg algorithm.
 * (maybe) Auto-Contour Detection & Trace & Fill Logic: Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
+* (maybe) implementation of SVG path parsing to allow hybrid projects (Raster engraving + Vector cutting) in a single G-code file.
 * Add a Wiki.
 
 ## Gcode Export
