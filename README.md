@@ -45,6 +45,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
 * Performance increase with vectorization.
 * Keep this readme up-to-date !
+* Grayscale clustering option to reduce .nc file size.
 * (maybe) Dithering Implementation: Integration of the Floyd-Steinberg algorithm.
 * (maybe) Auto-Contour Detection & Trace & Fill Logic: Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
 
