@@ -4,6 +4,8 @@
 
   <img src="https://img.shields.io/github/downloads/MoMo830/AliG/total?style=for-the-badge&color=blue" alt="Total Downloads">
 
+  <img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FMoMo830%2FAliG&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=Unique+Cloners&edge_flat=false" alt="Unique Cloners">
+
 </p>
 
 
