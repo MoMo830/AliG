@@ -27,6 +27,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 
 ## Last version change 
 ### (11/02/2026)
+* **v0.974b** : Added "Force width" parameter to automatically adapt the X-step / Rationalized internal logic for settings storage and profile exportation.
 * **v0.973b** : Added firing mode selection (M3/M4), fixed framing logic & UI, optimized graphic performance adn image/output folder UI.
 ### (10/02/2026)
 * **v0.972b** : Added optional integrated framing with customizable pause commands (M0/M1)
@@ -39,7 +40,6 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
 
 ## Roadmap :
-* Add an option to force the target width to match the desired one (with a x-resolution scale change).
 * User interface improvements (not fond of all these sliders) 
 * Greyscale Depth Maps: Support for 3D relief engraving (Inversion and contrast optimization for depth control).
 * Option for auto-homing at start.
@@ -167,8 +167,8 @@ This software is intended to be used on a CNC machine. I developped it as a desi
 If you just want to use the software without installing Python, follow these steps:
 
 1.  Look at the **"Releases"** section on the right side of this page.
-2.  Click on the latest version (e.g., `v0.973b`).
-3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.973b.exe`).
+2.  Click on the latest version (e.g., `v0.974b`).
+3.  Under **Assets**, download the `.exe` file (e.g., `ALIG_v0.974b.exe`).
     * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
 4.  Run the `.exe` on your Windows machine. No installation is required.
 5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
