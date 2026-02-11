@@ -42,7 +42,6 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 ## Roadmap :
 * User interface improvements (not fond of all these sliders) 
 * Greyscale Depth Maps: Support for 3D relief engraving (Inversion and contrast optimization for depth control).
-* Option for auto-homing at start.
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
 * Performance increase with vectorization.
 * Keep this readme up-to-date !
