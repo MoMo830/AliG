@@ -37,6 +37,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
 
 ## Roadmap :
+* Option to split big Gcode files.
 * User interface improvements (not fond of all these sliders) 
 * Greyscale Depth Maps: Support for 3D relief engraving (Inversion and contrast optimization for depth control).
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
