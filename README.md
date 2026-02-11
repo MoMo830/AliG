@@ -41,9 +41,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * Option to split big Gcode files.
 * Option to point the laser at minimum power at the origin with a manual pause before starting the job.
 * User interface improvements (not fond of all these sliders) 
-* Greyscale Depth Maps: Support for 3D relief engraving (Inversion and contrast optimization for depth control).
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
-* Performance increase with vectorization.
 * Keep this readme up-to-date !
 * Grayscale clustering option to reduce .nc file size.
 * (maybe) Dithering Implementation: Integration of the Floyd-Steinberg algorithm.
