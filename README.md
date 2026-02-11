@@ -46,7 +46,7 @@ ALIG gives you **total control** over the G-Code generation process. Whether you
 
 ## Roadmap :
 * Implement a simulation window upon clicking "Generate" to visualize laser paths, framing boundaries, anchor points and options (pointing & framing) before file export.
-* Option to split big Gcode files.
+* Option to split big Gcode files? 
 * User interface improvements (not fond of all these sliders) 
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
 * Keep this readme up-to-date !
