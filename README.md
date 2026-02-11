@@ -46,6 +46,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * Grayscale clustering option to reduce .nc file size.
 * (maybe) Dithering Implementation: Integration of the Floyd-Steinberg algorithm.
 * (maybe) Auto-Contour Detection & Trace & Fill Logic: Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
+* Add a Wiki.
 
 ## Gcode Export
 All trajectories are calculated using **Absolute Coordinates**. This ensures that every pixel of the image is tied to a fixed position relative to your origin, preventing cumulative errors or trajectory drift common in incremental modes.
