@@ -19,8 +19,13 @@
 
 
 ## Description
-A specialized G-Code generator for grayscale laser engraving.
-Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports standard S commands as well. This application is bundled with PyInstaller as a standalone executable, requiring no Python installation to run.
+### A Specialized & Optimized G-Code Generator for Laser Engraving
+ALIG gives you **total control** over the G-Code generation process. Whether you are using a standard hobbyist controller or a professional industrial setup, you can fine-tune every parameter to match your hardware's response.
+
+* **Universal Compatibility**: Supports standard **S (Spindle)** commands for GRBL, Marlin, and FluidNC, as well as high-speed **M67 (Analog)** commands for Mach4/PoKeys57CNC systems.
+* **Smart File Optimization**: Built-in **Grayscale Clustering** and quantization (2-256 steps) to drastically reduce G-Code size and ensure jitter-free motion.
+* **Hardware Calibration**: Adjust laser latency (ms), overscan, and power curves (Gamma/Contrast) with a real-time visual preview.
+* **Portable**: Standalone executable—no Python installation required.
 
 ## Last version change 
 ### (11/02/2026)
