@@ -27,7 +27,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 
 ## Last version change 
 ### (11/02/2026)
-* **v0.973b** : Added firing mode selection (M3/M4), fixed framing logic & UI, optimized graphic performance.
+* **v0.973b** : Added firing mode selection (M3/M4), fixed framing logic & UI, optimized graphic performance adn image/output folder UI.
 ### (10/02/2026)
 * **v0.972b** : Added optional integrated framing with customizable pause commands (M0/M1)
 * **v0.971b** : Added **DPI input field** / **Controller Max Value** / **Import / Export** of configuration profiles.
@@ -39,7 +39,6 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
 
 ## Roadmap :
-* File Management Improvements : Better path handling and profile persistence.
 * Add an option to force the target width to match the desired one (with a x-resolution scale change).
 * User interface improvements (not fond of all these sliders) 
 * Greyscale Depth Maps: Support for 3D relief engraving (Inversion and contrast optimization for depth control).
