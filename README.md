@@ -1,7 +1,6 @@
 <p align="right">
   <img src="https://img.shields.io/github/v/release/MoMo830/AliG?style=for-the-badge&color=orange" alt="Version">
   <img src="https://img.shields.io/github/downloads/MoMo830/AliG/total?style=for-the-badge&color=blue" alt="Total Downloads">
-  <img src="https://img.shields.io/badge/Unique_Cloners-225-brightgreen?style=for-the-badge" alt="Unique Cloners">
 </p>
 
 
