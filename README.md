@@ -24,6 +24,7 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 
 ## Last version change 
 ### (11/02/2026)
+* **v0.976b** : Added Pointing Features: Users can now include a dedicated "Pointing Command" at the origin anchor point. This ensures precise physical alignment of the laser head before the engraving process begins.
 * **v0.975b** : Added matrix inversion for deep engraving, strict input validation, and dynamic UI feedback on the G-code generation button.
 * **v0.974b** : Added "Force width" parameter to automatically adapt the X-step / Rationalized internal logic for settings storage and profile exportation.
 * **v0.973b** : Added firing mode selection (M3/M4), fixed framing logic & UI, optimized graphic performance and image/output folder UI.
@@ -39,7 +40,6 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 
 ## Roadmap :
 * Option to split big Gcode files.
-* Option to point the laser at minimum power at the origin with a manual pause before starting the job.
 * User interface improvements (not fond of all these sliders) 
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
 * Keep this readme up-to-date !
