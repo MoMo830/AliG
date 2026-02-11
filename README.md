@@ -39,8 +39,6 @@ Originally developed for Mach4/PoKeys57CNC using M67 commands, it now supports s
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
 
 ## Roadmap :
-* Framing Refinement: Implementation of safety pauses and synchronization.
-* G-Code Command Abstraction (Decoupling machine configuration (Header/Footer) from functional laser commands).
 * File Management Improvements : Better path handling and profile persistence.
 * Add an option to force the target width to match the desired one (with a x-resolution scale change).
 * User interface improvements (not fond of all these sliders) 
