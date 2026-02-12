@@ -75,7 +75,7 @@ If you just want to use the software without installing Python, follow these ste
 * [In discussion] 3D Relief Engraving Mode:** Implementation of multi-pass logic with Z-axis decrement for deep carving. *Since my current laser lacks the power to benchmark this properly, I'm looking for user interest/feedback before developing this.*
 * [Likely] Dithering Implementation: Integration of the Floyd-Steinberg algorithm.
 * [Under consideration] Auto-Contour Detection & Trace & Fill Logic: Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
-* **(Under consideration] Diagonal Rastering (45°):** Advanced trajectory logic to engrave at 45 degrees. 
+* [Under consideration] Diagonal Rastering (45°):** Advanced trajectory logic to engrave at 45 degrees. 
 * [Theoretical] Implementation of SVG path parsing to allow hybrid projects (Raster engraving + Vector cutting) in a single G-code file.
 * Keep this readme up-to-date !
 * Add a Wiki.
