@@ -28,8 +28,8 @@ ALIG gives you **total control** over the G-Code generation process. Whether you
 * **Portable**: Standalone executable—no Python installation required.
 
 ## Known issues 
-* Incorrect parameters could lead in crashes
-* DPI parameter not correctly implemented changing Linestep instead of X-resolution scale
+* Incorrect parameters may lead to crashes.
+* DPI handling is currently incorrect: it modifies the line step instead of properly scaling the X-axis resolution.
  
 ## Last version change 
 ### (11/02/2026)
