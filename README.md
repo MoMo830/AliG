@@ -26,7 +26,20 @@ ALIG gives you **total control** over the G-Code generation process. Whether you
 * **Hardware Calibration**: Adjust laser latency (ms), overscan, and power curves (Gamma/Contrast) with a real-time visual preview.
 * **Portable**: Standalone executable—no Python installation required.
 
- 
+## How to Download & Run
+
+**Configuration Safety**: If you updated your version and encounter errors, rename your previous `alig_config.json` in order to avoid **conflicts with new configuration keys**. This will allow the software to generate a fresh, compatible settings file on the next launch.
+
+[![GitHub release](https://img.shields.io/github/v/release/MoMo830/ALIG?label=Latest%20Version&color=orange)](https://github.com/MoMo830/ALIG/releases/latest)  
+If you just want to use the software without installing Python, follow these steps:
+
+1.  Look at the **"Releases"** section on the right side of this page.
+2.  Click on the latest version.
+3.  Under **Assets**, download the `.exe` file.
+    * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
+4.  Run the `.exe` on your Windows machine. No installation is required.
+5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
+
 ## Last version change 
 ### (12/02/2026)
 * **v0.978b** : Added Simulation window with real-time stats; Fixed overscan/burn issues via "Overscan Chopping" for frequent M67 refreshes; Enhanced Safety Protocol using G4 "Safety Flushes" before rapid moves
@@ -52,20 +65,6 @@ ALIG gives you **total control** over the G-Code generation process. Whether you
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
 
 </details>
-
-## How to Download & Run
-
-**Configuration Safety**: If you updated your version and encounter errors, rename your previous `alig_config.json` in order to avoid **conflicts with new configuration keys**. This will allow the software to generate a fresh, compatible settings file on the next launch.
-
-[![GitHub release](https://img.shields.io/github/v/release/MoMo830/ALIG?label=Latest%20Version&color=orange)](https://github.com/MoMo830/ALIG/releases/latest)  
-If you just want to use the software without installing Python, follow these steps:
-
-1.  Look at the **"Releases"** section on the right side of this page.
-2.  Click on the latest version.
-3.  Under **Assets**, download the `.exe` file.
-    * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
-4.  Run the `.exe` on your Windows machine. No installation is required.
-5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
 
 ## Roadmap :
 * Option to split big Gcode files? 
