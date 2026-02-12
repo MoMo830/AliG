@@ -70,6 +70,7 @@ If you just want to use the software without installing Python, follow these ste
 * Option to split big Gcode files? 
 * User interface improvements (not fond of all these sliders) 
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
+* **[In discussion] 3D Relief Engraving Mode:** Implementation of multi-pass logic with Z-axis decrement for deep carving. *Since my current laser lacks the power to benchmark this properly, I'm looking for user interest/feedback before developing this.*
 * Keep this readme up-to-date !
 * (maybe) Dithering Implementation: Integration of the Floyd-Steinberg algorithm.
 * (maybe) Auto-Contour Detection & Trace & Fill Logic: Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
