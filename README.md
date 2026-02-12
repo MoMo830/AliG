@@ -70,7 +70,6 @@ If you just want to use the software without installing Python, follow these ste
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files and multi-hour engraving sessions.
 * **UI/UX Overhaul:** Rationalizing the interface to move away from "slider-heavy" menus towards a more intuitive workflow.
 * Option to split big Gcode files?
-* Option to split big Gcode files? 
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
 * [In discussion] 3D Relief Engraving Mode:** Implementation of multi-pass logic with Z-axis decrement for deep carving. *Since my current laser lacks the power to benchmark this properly, I'm looking for user interest/feedback before developing this.*
 * Keep this readme up-to-date !
