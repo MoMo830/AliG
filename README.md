@@ -67,7 +67,7 @@ If you just want to use the software without installing Python, follow these ste
 </details>
 
 ## Roadmap :
-* **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files and multi-hour engraving sessions.
+* **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
 * **UI/UX Overhaul:** Rationalizing the interface to move away from "slider-heavy" menus towards a more intuitive workflow.
 * Option to split big Gcode files?
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
