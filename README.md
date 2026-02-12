@@ -9,9 +9,8 @@
 
 
 
-
 <p align="center">
-  <img src="assets/screen_alig_0.971b.jpg" alt="AMC" width="95%">
+  <img src="assets/ALIG_Anim.gif" alt="A.L.I.G. Interface Demo" width="95%">
   <br>
   <a href="https://buymeacoffee.com/momo830"><img src="https://img.shields.io/badge/Donate-Buy%20Me%20A%20Coffee-orange?style=flat-square&logo=buy-me-a-coffee" alt="Support the project"></a>
 </p>
