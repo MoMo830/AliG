@@ -30,6 +30,7 @@ ALIG gives you **total control** over the G-Code generation process. Whether you
  
 ## Last version change 
 ### (11/02/2026)
+* **v0.978b** : Added Simulation window with real-time stats; Fixed overscan/burn issues via "Overscan Chopping" for frequent M67 refreshes; Enhanced Safety Protocol using G4 "Safety Flushes" before rapid moves
 * **v0.9771b** : Fixed DPI calculation based on line step and suppressed x-resolution parameter.
 * **v0.977b** : Added Grayscale Steps & G-Code Clustering Features: Users can now select the number of power quantization levels (2-256) reducing .nc file size and prevents controller buffer overflow.
 * **v0.976b** : Added Pointing Features: Users can now include a dedicated "Pointing Command" at the origin anchor point. This ensures precise physical alignment of the laser head before the engraving process begins.
@@ -47,7 +48,6 @@ ALIG gives you **total control** over the G-Code generation process. Whether you
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
 
 ## Roadmap :
-* Implement a simulation window upon clicking "Generate" to visualize laser paths, framing boundaries, anchor points and options (pointing & framing) before file export.
 * Option to split big Gcode files? 
 * User interface improvements (not fond of all these sliders) 
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
