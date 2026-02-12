@@ -27,6 +27,10 @@ ALIG gives you **total control** over the G-Code generation process. Whether you
 * **Hardware Calibration**: Adjust laser latency (ms), overscan, and power curves (Gamma/Contrast) with a real-time visual preview.
 * **Portable**: Standalone executable—no Python installation required.
 
+## Known issues 
+* Incorrect parameters could lead in crashes
+* DPI parameter not correctly implemented changing Linestep instead of X-resolution scale
+ 
 ## Last version change 
 ### (11/02/2026)
 * **v0.977b** : Added Grayscale Steps & G-Code Clustering Features: Users can now select the number of power quantization levels (2-256) reducing .nc file size and prevents controller buffer overflow.
