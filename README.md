@@ -27,12 +27,10 @@ ALIG gives you **total control** over the G-Code generation process. Whether you
 * **Hardware Calibration**: Adjust laser latency (ms), overscan, and power curves (Gamma/Contrast) with a real-time visual preview.
 * **Portable**: Standalone executable—no Python installation required.
 
-## Known issues 
-* Incorrect parameters may lead to crashes.
-* DPI handling is currently incorrect: it modifies the line step instead of properly scaling the X-axis resolution.
  
 ## Last version change 
 ### (11/02/2026)
+* **v0.9771b** : Fixed DPI calculation based on line step and suppressed x-resolution parameter.
 * **v0.977b** : Added Grayscale Steps & G-Code Clustering Features: Users can now select the number of power quantization levels (2-256) reducing .nc file size and prevents controller buffer overflow.
 * **v0.976b** : Added Pointing Features: Users can now include a dedicated "Pointing Command" at the origin anchor point. This ensures precise physical alignment of the laser head before the engraving process begins.
 * **v0.975b** : Added matrix inversion for deep engraving, strict input validation, and dynamic UI feedback on the G-code generation button.
@@ -82,8 +80,6 @@ This is the "vertical resolution" of your project. It defines the distance betwe
 * **Too Low:** If the Line Step is too small, the laser passes will overlap excessively. This results in a **much darker image**, loss of detail, and potential over-charring of the wood fibers due to accumulated heat.
 * **Too High:** If the Line Step is too large, you will see **visible gaps or white "striped" zones** between the passes where the material remains unmarked, leading to a faded and inconsistent result.
 
-### X-resolution scale
-The X-resolution scale reduces the resolution along the X-axis in order to reduce the controller workload and reach the desired feedrate. To maintain a feedrate of 3000mm/min, a value of **1.2** is sufficient for my setup.
 
 ### Thermal Correction
 The Thermal Correction setting adjusts the power ramp of your laser. By increasing this coefficient, you slow down the power rise, keeping the laser at lower intensities for a longer range of gray tones. This prevents premature wood carbonization and preserves subtle details in highlights and mid-tones, ensuring that high power is only reached for the deepest blacks.
