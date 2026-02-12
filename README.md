@@ -52,6 +52,7 @@ ALIG gives you **total control** over the G-Code generation process. Whether you
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
 
 </details>
+
 ## How to Download & Run
 
 **Configuration Safety**: If you updated your version and encounter errors, rename your previous `alig_config.json` in order to avoid **conflicts with new configuration keys**. This will allow the software to generate a fresh, compatible settings file on the next launch.
