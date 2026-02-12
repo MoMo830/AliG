@@ -52,6 +52,19 @@ ALIG gives you **total control** over the G-Code generation process. Whether you
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
 
 </details>
+## How to Download & Run
+
+**Configuration Safety**: If you updated your version and encounter errors, rename your previous `alig_config.json` in order to avoid **conflicts with new configuration keys**. This will allow the software to generate a fresh, compatible settings file on the next launch.
+
+[![GitHub release](https://img.shields.io/github/v/release/MoMo830/ALIG?label=Latest%20Version&color=orange)](https://github.com/MoMo830/ALIG/releases/latest)  
+If you just want to use the software without installing Python, follow these steps:
+
+1.  Look at the **"Releases"** section on the right side of this page.
+2.  Click on the latest version.
+3.  Under **Assets**, download the `.exe` file.
+    * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
+4.  Run the `.exe` on your Windows machine. No installation is required.
+5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
 
 ## Roadmap :
 * Option to split big Gcode files? 
@@ -177,19 +190,7 @@ This software is intended to be used on a CNC machine. I developped it as a desi
     * This prevents laser settings (like PWM mapping and Spindle-to-None configuration) from interfering with your standard milling/routing setups.
     * It allows you to fine-tune your motor acceleration and velocity for laser work without affecting your heavy-duty milling parameters.
  
-## How to Download & Run
 
-**Configuration Safety**: If you updated your version and encounter errors, rename your previous `alig_config.json` in order to avoid **conflicts with new configuration keys**. This will allow the software to generate a fresh, compatible settings file on the next launch.
-
-[![GitHub release](https://img.shields.io/github/v/release/MoMo830/ALIG?label=Latest%20Version&color=orange)](https://github.com/MoMo830/ALIG/releases/latest)  
-If you just want to use the software without installing Python, follow these steps:
-
-1.  Look at the **"Releases"** section on the right side of this page.
-2.  Click on the latest version.
-3.  Under **Assets**, download the `.exe` file.
-    * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
-4.  Run the `.exe` on your Windows machine. No installation is required.
-5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
 
 
 
