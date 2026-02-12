@@ -79,7 +79,12 @@ This is the "vertical resolution" of your project. It defines the distance betwe
 * **The Focus Factor:** The ideal setting depends heavily on your **laser focus**. A perfectly focused laser allows for a finer step, while a slightly out-of-focus beam will require a larger step to cover the surface.
 * **Too Low:** If the Line Step is too small, the laser passes will overlap excessively. This results in a **much darker image**, loss of detail, and potential over-charring of the wood fibers due to accumulated heat.
 * **Too High:** If the Line Step is too large, you will see **visible gaps or white "striped" zones** between the passes where the material remains unmarked, leading to a faded and inconsistent result.
-
+  
+### DPI (Dots Per Inch)
+This parameter defines the horizontal resolution of your engraving. While the Line Step controls the vertical spacing between passes, the DPI determines how many individual laser pulses occur along each horizontal line.
+* X-Axis Resolution: Adjusting the DPI directly changes the density of points on the X-axis. A higher DPI results in more concentrated laser pulses per inch, increasing the level of horizontal detail.
+* Risk of Overloading: Be cautious with excessively high values. A DPI that exceeds your laser's physical capabilities or the material's thermal threshold can overload the engraving area, leading to excessive heat buildup and a charred appearance.
+* Hardware Limitations: Beyond the material, an extremely high DPI can overload the controller board. Forcing the processor to handle too many instructions per second may cause "stuttering," buffer underuns, or communication timeouts, potentially ruining the job. It also significantly increases processing time without necessarily improving visual quality.
 
 ### Thermal Correction
 The Thermal Correction setting adjusts the power ramp of your laser. By increasing this coefficient, you slow down the power rise, keeping the laser at lower intensities for a longer range of gray tones. This prevents premature wood carbonization and preserves subtle details in highlights and mid-tones, ensuring that high power is only reached for the deepest blacks.
