@@ -153,7 +153,7 @@ A.L.I.G. is a free project, developed during their spare time by a world-class t
 ### Work Area & Premove Warning
 
 > [!IMPORTANT]
-> **OVERSCAN CALCULATION:** The "X-resolution scale" and "Premove" features affect the total travel distance of your laser head.
+> **OVERSCAN CALCULATION:** The “Premove” feature affects the total travel distance of your laser head.
 > * **Premove:** Adds an overscan distance (default 15mm) to both sides of your image. 
 > * **Example:** If your image is 100mm wide with a 15mm premove, the laser head will travel **130mm** in total.
 > * **Action Required:** Ensure your machine's physical travel limits (Soft/Hard Limits) can accommodate this extra width to avoid crashing into the frame. Always perform a "frame" or "boundary" check.
