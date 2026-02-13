@@ -66,6 +66,9 @@ If you just want to use the software without installing Python, follow these ste
 
 </details>
 
+## Known issues :
+* On low resolution screens or high Windows scaling settings (150%+), some UI elements may be cut off or overlap.
+
 ## Roadmap :
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
 * **UI/UX Overhaul:** Rationalizing the interface to move away from "slider-heavy" menus towards a more intuitive workflow.
