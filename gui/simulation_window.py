@@ -259,51 +259,106 @@ class SimulationWindow(ctk.CTkToplevel):
         ix = ex - self.x0
         iy = ey - self.y0
 
-        # 1. ON INITIALISE À NONE
         final_img = None 
 
-        if 0 <= ix < self.rect_w and 0 <= iy < self.rect_h:
-            r = (self.loupe_size / 2) / self.loupe_zoom
-            img_obj = Image.fromarray(self.display_data)
+        # On autorise une petite marge autour de l'image pour voir la grille
+        if -50 <= ix < self.rect_w + 50 and -50 <= iy < self.rect_h + 50:
+            # Rayon de la zone à capturer (en pixels "image")
+            crop_r = (self.loupe_size / 2) / self.loupe_zoom
+            # r est la marge de sécurité dans notre image temporaire pour éviter les bords noirs
+            r = crop_r + 10 
             
-            left = max(0, int(ix - r))
-            top = max(0, int(iy - r))
-            right = min(self.rect_w, int(ix + r))
-            bottom = min(self.rect_h, int(iy + r))
+            # 1. Préparation du fond
+            img_obj = Image.fromarray(self.display_data).convert("RGB")
+            bg_w, bg_h = self.rect_w + int(2*r), self.rect_h + int(2*r)
+            bg = Image.new("RGB", (bg_w, bg_h), (255, 255, 255))
+            bg.paste(img_obj, (int(r), int(r)))
+            
+            draw_v = ImageDraw.Draw(bg)
+            
+            # --- PARAMÈTRES DE STYLE ---
+            sc = getattr(self, 'current_scale', 1.0)
+            sx = self.stats.get("offX", 0) - self.premove
+            sy = self.stats.get("offY", 0)
+            w_mm_img = self.stats.get("real_w", 100)
+            h_mm_img = self.stats.get("real_h", 100)
+            tw = w_mm_img + (self.premove * 2)
+            th = h_mm_img
+            
+            grid_col = (209, 209, 209)  # #d1d1d1
+            dash_len, gap_len = 2, 4
 
-            crop = img_obj.crop((left, top, right, bottom))
+            def draw_dashed_line(draw, start, end, fill, dash, gap):
+                x1, y1 = start
+                x2, y2 = end
+                length = ((x2-x1)**2 + (y2-y1)**2)**0.5
+                if length == 0: return
+                dx, dy = (x2-x1)/length, (y2-y1)/length
+                current_pos = 0
+                while current_pos < length:
+                    segment_end = min(current_pos + dash, length)
+                    draw.line([(x1 + dx*current_pos, y1 + dy*current_pos),
+                               (x1 + dx*segment_end, y1 + dy*segment_end)], fill=fill, width=1)
+                    current_pos += dash + gap
+
+            # 2. DESSIN DE LA GRILLE (AVEC ALIGNEMENT FORCÉ)
+            gx0_bg = r - self.pre_px  # Position du début du premove dans 'bg'
+            gy_bottom_bg = r + self.rect_h # Position du bas de l'image dans 'bg'
+
+            # Lignes Verticales
+            for vx in range(int(sx//10)*10, int((sx+tw)//10)*10+10, 10):
+                x = gx0_bg + (vx - sx) * sc
+                
+                # --- SNAPPING : Alignement parfait sur les bords de l'image ---
+                if abs(vx - (sx + self.premove)) < 0.01: # Bord gauche
+                    x = r
+                elif abs(vx - (sx + self.premove + w_mm_img)) < 0.01: # Bord droit
+                    x = r + self.rect_w
+                
+                if -r <= x <= bg_w + r:
+                    draw_dashed_line(draw_v, (x, 0), (x, bg.height), grid_col, dash_len, gap_len)
+                
+            # Lignes Horizontales
+            for vy in range(int(sy//10)*10, int((sy+th)//10)*10+10, 10):
+                y = gy_bottom_bg - (vy - sy) * sc
+                
+                # --- SNAPPING : Alignement parfait ---
+                if abs(vy - sy) < 0.01: # Bord bas
+                    y = gy_bottom_bg
+                elif abs(vy - (sy + h_mm_img)) < 0.01: # Bord haut
+                    y = r
+                    
+                if -r <= y <= bg_h + r:
+                    draw_dashed_line(draw_v, (0, y), (bg.width, y), grid_col, dash_len, gap_len)
+
+            # 3. Crop et Resize
+            # On centre le crop sur la position de la souris relative à l'image (+ décalage r)
+            center_x, center_y = ix + r, iy + r
+            left, top = center_x - crop_r, center_y - crop_r
+            right, bottom = center_x + crop_r, center_y + crop_r
+            
+            crop = bg.crop((int(left), int(top), int(right), int(bottom)))
             zoom_img = crop.resize((self.loupe_size, self.loupe_size), Image.NEAREST)
             
+            # 4. Masque Circulaire et Finalisation
             mask = Image.new("L", (self.loupe_size, self.loupe_size), 0)
-            draw = ImageDraw.Draw(mask)
-            draw.ellipse((0, 0, self.loupe_size, self.loupe_size), fill=255)
+            ImageDraw.Draw(mask).ellipse((0, 0, self.loupe_size, self.loupe_size), fill=255)
 
             zoom_img = zoom_img.convert("RGBA")
-            
-            # 2. ON DÉFINIT LA VARIABLE ICI
             final_img = Image.new("RGBA", (self.loupe_size, self.loupe_size), (0, 0, 0, 0))
             final_img.paste(zoom_img, (0, 0), mask)
 
-        # 3. ON VÉRIFIE SI ELLE EXISTE AVANT USAGE
         if final_img:
             self.tk_loupe = ImageTk.PhotoImage(final_img)
-            
             self.preview_canvas.itemconfig(self.loupe_container, image=self.tk_loupe, state="normal")
             self.preview_canvas.coords(self.loupe_container, ex, ey)
-            
             self.preview_canvas.itemconfig(self.loupe_border, state="normal")
             self.preview_canvas.coords(self.loupe_border, 
                                     ex - self.loupe_size/2, ey - self.loupe_size/2,
                                     ex + self.loupe_size/2, ey + self.loupe_size/2)
-            
-            # Z-Index management
             self.preview_canvas.tag_raise(self.loupe_container)
             self.preview_canvas.tag_raise(self.loupe_border)
-            if hasattr(self, 'laser_head'):
-                self.preview_canvas.tag_raise(self.laser_halo)
-                self.preview_canvas.tag_raise(self.laser_head)
         else:
-            # Si on n'est pas sur l'image, on cache la loupe
             self._hide_loupe()
 
     def _hide_loupe(self):
@@ -426,22 +481,32 @@ class SimulationWindow(ctk.CTkToplevel):
 
         if target_idx >= self.current_point_idx:
             batch = self.points_list[self.current_point_idx : target_idx + 1]
-            for tx, ty, pwr in batch:
-                idx_x = min(max(0, int(tx)), self.rect_w - 1)
-                idx_y = min(max(0, int(ty)), self.rect_h - 1)
+            
+            for i, (tx, ty, pwr) in enumerate(batch): # Utilisation d'enumerate
+                ix = min(max(0, int(tx)), self.rect_w - 1)
+                iy = min(max(0, int(ty)), self.rect_h - 1)
                 
-                if is_framing:
-                    self.display_data[idx_y, idx_x] = pwr
-                    if pwr < 250:
-                        self.frame_mask[idx_y, idx_x] = True
+                # Calcul beaucoup plus rapide de la phase
+                point_is_framing = (self.current_point_idx + i) < self.framing_end_idx
+
+                if point_is_framing:
+                    if pwr < 255:
+                        if hasattr(self, 'prev_px_coords'):
+                            old_x, old_y = self.prev_px_coords
+                            if old_x != ix or old_y != iy: # Ne dessine que si mouvement réel
+                                self._draw_line_inplace(old_x, old_y, ix, iy, pwr)
+                                self._draw_line_inplace(old_x, old_y, ix, iy, True, is_mask=True)
+                        else:
+                            self.display_data[iy, ix] = pwr
+                            self.frame_mask[iy, ix] = True
+                    self.prev_px_coords = (ix, iy)
                 else:
-                    if not self.frame_mask[idx_y, idx_x]:
-                        self.display_data[idx_y, idx_x] = pwr
+                    if not self.frame_mask[iy, ix]:
+                        self.display_data[iy, ix] = pwr
                 
                 self.curr_x, self.curr_y = tx, ty
-            
-            self.current_point_idx = target_idx + 1
 
+            self.current_point_idx = target_idx + 1
         # MISE À JOUR UI
         progress = self.current_point_idx / max(1, len(self.points_list))
         self.progress_bar.set(progress)
@@ -460,11 +525,39 @@ class SimulationWindow(ctk.CTkToplevel):
 
     def skip_to_end(self):
         self.sim_running = False
-        if self.animation_job: self.after_cancel(self.animation_job)
+        if self.animation_job: 
+            self.after_cancel(self.animation_job)
         self.animation_job = None
-        self.display_data = self.full_data.copy()
+        
+        # 1. On part de l'image finale complète
+        final_view = self.full_data.copy()
+        
+        # 2. Si du framing existe, on le dessine par-dessus l'image finale
+        if self.framing_end_idx > 0:
+            # On réinitialise temporairement prev_px_coords pour le tracé complet
+            temp_prev_coords = None 
+            
+            # On parcourt uniquement les points de framing
+            for i in range(self.framing_end_idx):
+                tx, ty, pwr = self.points_list[i]
+                if pwr < 255:  # Si le laser était allumé
+                    ix = min(max(0, int(tx)), self.rect_w - 1)
+                    iy = min(max(0, int(ty)), self.rect_h - 1)
+                    
+                    if temp_prev_coords:
+                        old_x, old_y = temp_prev_coords
+                        # On dessine directement dans final_view
+                        self._draw_line_on_matrix(final_view, old_x, old_y, ix, iy, pwr)
+                    else:
+                        final_view[iy, ix] = pwr
+                    
+                    temp_prev_coords = (ix, iy)
+
+        # 3. Mise à jour de la matrice d'affichage et de l'index
+        self.display_data = final_view
         self.current_point_idx = len(self.points_list)
         
+        # UI et position finale
         t_str = self._format_seconds_to_hhmmss(self.total_sim_seconds)
         self.time_label.configure(text=f"Time: {t_str} / {t_str}")
         self.progress_bar.set(1.0)
@@ -472,8 +565,25 @@ class SimulationWindow(ctk.CTkToplevel):
         
         if self.points_list:
             self.curr_x, self.curr_y, _ = self.points_list[-1]
+            
         self.update_graphics()
         self.btn_play_pause.configure(text="▶", fg_color="#27ae60")
+
+    def _draw_line_on_matrix(self, matrix, x0, y0, x1, y1, pwr):
+        """Trace une ligne dans une matrice spécifique (ex: pour le rendu final)"""
+        x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
+        dx, dy = abs(x1 - x0), abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+
+        while True:
+            if 0 <= x0 < self.rect_w and 0 <= y0 < self.rect_h:
+                matrix[y0, x0] = pwr
+            if x0 == x1 and y0 == y1: break
+            e2 = 2 * err
+            if e2 > -dy: err -= dy; x0 += sx
+            if e2 < dx: err += dx; y0 += sy
 
     def update_graphics(self):
         if self.img_container is None: return
@@ -575,8 +685,11 @@ class SimulationWindow(ctk.CTkToplevel):
             
             # 2. CALCUL DU SCALE ET OFFSET
             scale = min((c_w * 0.85) / total_w_mm, (c_h * 0.8) / h_mm)
+            self.current_scale = scale
             self.rect_w, self.rect_h = int(w_mm * scale), int(h_mm * scale)
             self.pre_px = int(self.premove * scale)
+
+            # On recalcule x0 pour qu'il soit le point exact de début de l'image MATRICE
             self.x0 = int((c_w - (self.rect_w + 2*self.pre_px)) / 2 + self.pre_px)
             self.y0 = int((c_h - self.rect_h) / 2)
 
@@ -607,6 +720,9 @@ class SimulationWindow(ctk.CTkToplevel):
             self.pts_per_sec_framing = len(f_points) / max(0.1, f_dur)
             self.pts_per_sec_image = len(img_points) / max(0.1, img_est_sec)
 
+            vis_pad = 10 # 10 pixels de marge blanche tout autour
+            self.vis_pad = vis_pad
+
             # 5. DESSIN DU CANVAS
             self.preview_canvas.delete("all")
             # --- RECRÉATION DE LA LOUPE ---
@@ -622,9 +738,14 @@ class SimulationWindow(ctk.CTkToplevel):
             )
 
             self.preview_canvas.create_rectangle(
-                self.x0 - self.pre_px, self.y0, 
-                self.x0 + self.rect_w + self.pre_px, self.y0 + self.rect_h, 
-                fill="white", outline=""
+                self.x0 - self.pre_px - vis_pad, 
+                self.y0 - vis_pad, 
+                self.x0 + self.rect_w + self.pre_px + vis_pad, 
+                self.y0 + self.rect_h + vis_pad, 
+                fill="white", 
+                outline="#d1d1d1", # Optionnel: une petite bordure grise pour le cadre
+                width=1,
+                tags="bg_rect"
             )
             self.tk_img = ImageTk.PhotoImage(Image.fromarray(self.display_data))
             self.img_container = self.preview_canvas.create_image(self.x0, self.y0, anchor="nw", image=self.tk_img)
@@ -640,37 +761,47 @@ class SimulationWindow(ctk.CTkToplevel):
 
     def _parse_framing_gcode(self, scale):
         if not self.framing_gcode:
+            print("DEBUG: Aucun G-code de framing trouvé.")
             return [], 0.0
             
         points = []
         framing_duration = 0.0
         offX = self.stats.get("offX", 0)
         offY = self.stats.get("offY", 0)
-        ps_y = self.stats.get("pixel_size_y", 0.1)
         min_pwr = self.stats.get("min_power", 0) 
-        img_h_mm = self.matrix.shape[0] * ps_y
         
         is_framing_block = False
         curr_x, curr_y = None, None 
         current_f = 1000.0   
         current_pwr = 0.0    
+
+        lines = self.framing_gcode.split('\n')
+        print(f"DEBUG: Début du parsing de {len(lines)} lignes.")
         
-        for line in self.framing_gcode.split('\n'):
+        for i, line in enumerate(lines):
             line_u = line.strip().upper()
             if not line_u or line_u.startswith(';'): continue
             
             if "( --- FRAMING START --- )" in line_u:
                 is_framing_block = True
+                print(f"DEBUG L{i}: Bloc Framing START trouvé.")
                 continue
             if "( --- FRAMING END --- )" in line_u:
                 is_framing_block = False
+                print(f"DEBUG L{i}: Bloc Framing END trouvé.")
                 continue
             if not is_framing_block: continue
 
+            # --- DEBUG DES PARAMÈTRES ---
             match_f = re.search(r'F(\d+)', line_u)
-            if match_f: current_f = float(match_f.group(1))
+            if match_f: 
+                current_f = float(match_f.group(1))
+                print(f"DEBUG L{i}: Feedrate mis à jour : {current_f}")
+
             match_p = re.search(r'[SQ]([-+]?\d*\.\d+|\d+)', line_u)
-            if match_p: current_pwr = float(match_p.group(1))
+            if match_p: 
+                current_pwr = float(match_p.group(1))
+                print(f"DEBUG L{i}: Puissance détectée : {current_pwr}")
 
             mx = re.search(r'X([-+]?\d*\.\d+|\d+)', line_u)
             my = re.search(r'Y([-+]?\d*\.\d+|\d+)', line_u)
@@ -681,45 +812,89 @@ class SimulationWindow(ctk.CTkToplevel):
                 
                 if curr_x is None:
                     curr_x, curr_y = target_x_mm, target_y_mm
+                    print(f"DEBUG L{i}: Position initiale fixée à X={curr_x}, Y={curr_y}")
                     continue
+
+                color = 0 if current_pwr > min_pwr else 255
+                print(f"DEBUG L{i}: Mouvement vers X={target_x_mm}, Y={target_y_mm} | Puissance={current_pwr} | Couleur={color}")
 
                 s_px = (curr_x - offX) * scale
                 t_px = (target_x_mm - offX) * scale
                 s_py = self.rect_h - ((curr_y - offY) * scale)
                 t_py = self.rect_h - ((target_y_mm - offY) * scale)
                 
-                color = 0 if current_pwr > min_pwr else 255
                 dist = np.hypot(target_x_mm - curr_x, target_y_mm - curr_y)
                 
                 if dist > 0.001:
+                    # CALCUL DE LA DURÉE RÉELLE DU SEGMENT
                     duration_sec = dist / (current_f / 60.0)
-                    framing_duration += duration_sec
+                    framing_duration += duration_sec # <--- INDISPENSABLE
+                    
+                    # On génère assez de points pour la fluidité (ex: 60 pts/sec)
                     num_steps = max(2, int(duration_sec * 60)) 
                     
-                    for i in range(1, num_steps): 
-                        ratio = i / num_steps
-                        points.append((s_px + (t_px - s_px) * ratio, s_py + (t_py - s_py) * ratio, color))
+                    for j in range(num_steps):
+                        ratio = j / num_steps
+                        points.append((s_px + (t_px - s_px) * ratio, 
+                                       s_py + (t_py - s_py) * ratio, 
+                                       color))
                 
-                # --- SÉCURITÉ : On force le point final du segment ---
                 points.append((t_px, t_py, color))
                 curr_x, curr_y = target_x_mm, target_y_mm
-                    
+
+        print(f"DEBUG: Fin du parsing. Total points : {len(points)}")
         return points, framing_duration
 
     def draw_grid(self, tw, th, sc, sx, sy):
         col, txt_col, dash = "#d1d1d1", "#888888", (2, 4)
         gx0 = self.x0 - self.pre_px
+        # On définit la zone de dessin du rectangle blanc (padding inclus)
+        y_top = self.y0 - self.vis_pad
+        y_bottom = self.y0 + self.rect_h + self.vis_pad
+        x_left = gx0 - self.vis_pad
+        x_right = gx0 + (tw * sc) + self.vis_pad
+
+        # --- LIGNES VERTICALES ---
         for vx in range(int(sx//10)*10, int((sx+tw)//10)*10+10, 10):
             x = gx0 + (vx-sx)*sc
+            # On vérifie si la ligne est dans la zone visible
             if gx0-1 <= x <= gx0+(tw*sc)+1:
-                self.preview_canvas.create_line(x, self.y0, x, self.y0+self.rect_h, fill=col, dash=dash, tags="grid")
-                self.preview_canvas.create_text(x, self.y0+self.rect_h+15, text=str(vx), fill=txt_col, font=("Arial", 8), tags="grid")
+                # La ligne traverse tout le rectangle blanc (de y_top à y_bottom)
+                self.preview_canvas.create_line(x, y_top, x, y_bottom, fill=col, dash=dash, tags="grid")
+                # Le texte est placé 15 pixels sous le bord du rectangle blanc
+                self.preview_canvas.create_text(x, y_bottom + 15, text=str(vx), fill=txt_col, font=("Arial", 8), tags="grid")
+
+        # --- LIGNES HORIZONTALES ---
         for vy in range(int(sy//10)*10, int((sy+th)//10)*10+10, 10):
             y = (self.y0+self.rect_h) - (vy-sy)*sc
             if self.y0-1 <= y <= self.y0+self.rect_h+1:
-                self.preview_canvas.create_line(gx0, y, gx0+(tw*sc), y, fill=col, dash=dash, tags="grid")
-                self.preview_canvas.create_text(gx0-25, y, text=str(vy), fill=txt_col, font=("Arial", 8), tags="grid")
+                # La ligne traverse tout le rectangle blanc (de x_left à x_right)
+                self.preview_canvas.create_line(x_left, y, x_right, y, fill=col, dash=dash, tags="grid")
+                # Le texte est placé 25 pixels à gauche du bord du rectangle blanc
+                self.preview_canvas.create_text(x_left - 25, y, text=str(vy), fill=txt_col, font=("Arial", 8), tags="grid")
+
         self.preview_canvas.tag_raise("grid")
+
+    def _draw_line_inplace(self, x0, y0, x1, y1, pwr, is_mask=False):
+        """Trace une ligne continue de pixels dans la matrice"""
+        x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+
+        while True:
+            if 0 <= x0 < self.rect_w and 0 <= y0 < self.rect_h:
+                if is_mask:
+                    self.frame_mask[y0, x0] = True
+                else:
+                    self.display_data[y0, x0] = pwr
+            
+            if x0 == x1 and y0 == y1: break
+            e2 = 2 * err
+            if e2 > -dy: err -= dy; x0 += sx
+            if e2 < dx: err += dx; y0 += sy
 
     def estimate_file_size(self, matrix):
         if matrix is None: return "0 KB"

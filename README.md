@@ -42,7 +42,7 @@ If you just want to use the software without installing Python, follow these ste
 
 ## Last version change 
 ### (14/02/2026)
-* **v0.978b1** : Modular Architecture: Split project into core/ and gui/ folders; New Loupe Feature: Added interactive magnifying glass (hold left-click); UI Improvements: Refined control panel layout.
+* **v0.9781b** : Modular Architecture: Split project into core/ and gui/ folders; New Loupe Feature: Added interactive magnifying glass (hold left-click); UI Improvements: Refined control panel layout.
 
 <details>
 <summary><b> Click to view full version history</b></summary>
@@ -74,6 +74,7 @@ If you just want to use the software without installing Python, follow these ste
 ## Roadmap :
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
 * **UI/UX Overhaul:** Rationalizing the interface to move away from "slider-heavy" menus towards a more intuitive workflow.
+* **True G-code Simulation:** Change the simulation architecture to a G-code-parsing backend for 100% hardware-software fidelity.
 * Option to split big Gcode files?
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
 * **Variable Raster Direction:** Toggle between Horizontal (X-axis) and Vertical (Y-axis) engraving. This allows optimizing for machine rigidity or following wood grain patterns.
