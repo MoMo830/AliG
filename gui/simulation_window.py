@@ -41,6 +41,7 @@ class SimulationWindow(ctk.CTkToplevel):
         self.points_list = [] 
         self.current_point_idx = 0
         # Paramètres de la loupe
+        self.last_mouse_coords = (0, 0)
         self.loupe_size = 300
         self.loupe_zoom = 3    
         self.loupe_active = True
@@ -245,70 +246,64 @@ class SimulationWindow(ctk.CTkToplevel):
         self.loupe_active = True
         self._update_loupe(event)
 
-    def _update_loupe(self, event):
-        # Sécurités : image existante et loupe autorisée
+    def _update_loupe(self, event=None):
         if not hasattr(self, 'display_data') or self.display_data is None:
             return
         if not self.loupe_active: 
             return
 
-        # Coordonnées relatives à l'image (0,0 est le coin haut-gauche de l'image)
-        ix = event.x - self.x0
-        iy = event.y - self.y0
+        if event:
+            self.last_mouse_coords = (event.x, event.y)
+        
+        ex, ey = self.last_mouse_coords
+        ix = ex - self.x0
+        iy = ey - self.y0
 
-        # Si on est bien sur l'image
+        # 1. ON INITIALISE À NONE
+        final_img = None 
+
         if 0 <= ix < self.rect_w and 0 <= iy < self.rect_h:
             r = (self.loupe_size / 2) / self.loupe_zoom
-            
-            # Capture de la zone actuelle de simulation
             img_obj = Image.fromarray(self.display_data)
             
-            # Découpe (Crop) avec protection des bords
             left = max(0, int(ix - r))
             top = max(0, int(iy - r))
             right = min(self.rect_w, int(ix + r))
             bottom = min(self.rect_h, int(iy + r))
 
             crop = img_obj.crop((left, top, right, bottom))
-
             zoom_img = crop.resize((self.loupe_size, self.loupe_size), Image.NEAREST)
             
-            # --- Création masque circulaire ---
             mask = Image.new("L", (self.loupe_size, self.loupe_size), 0)
             draw = ImageDraw.Draw(mask)
             draw.ellipse((0, 0, self.loupe_size, self.loupe_size), fill=255)
 
-            # --- Zoom en RGBA ---
             zoom_img = zoom_img.convert("RGBA")
-
-            # --- Image finale transparente ---
+            
+            # 2. ON DÉFINIT LA VARIABLE ICI
             final_img = Image.new("RGBA", (self.loupe_size, self.loupe_size), (0, 0, 0, 0))
-
-            # --- Collage avec masque (transparence réelle) ---
             final_img.paste(zoom_img, (0, 0), mask)
 
+        # 3. ON VÉRIFIE SI ELLE EXISTE AVANT USAGE
+        if final_img:
             self.tk_loupe = ImageTk.PhotoImage(final_img)
-
             
-            # Mise à jour de l'image (référence self.tk_loupe obligatoire)
             self.preview_canvas.itemconfig(self.loupe_container, image=self.tk_loupe, state="normal")
-            self.preview_canvas.coords(self.loupe_container, event.x, event.y)
+            self.preview_canvas.coords(self.loupe_container, ex, ey)
             
-            # Mise à jour du cercle de bordure
             self.preview_canvas.itemconfig(self.loupe_border, state="normal")
             self.preview_canvas.coords(self.loupe_border, 
-                                    event.x - self.loupe_size/2, event.y - self.loupe_size/2,
-                                    event.x + self.loupe_size/2, event.y + self.loupe_size/2)
+                                    ex - self.loupe_size/2, ey - self.loupe_size/2,
+                                    ex + self.loupe_size/2, ey + self.loupe_size/2)
             
-            # --- ORDRE D'AFFICHAGE (Z-INDEX) ---
+            # Z-Index management
             self.preview_canvas.tag_raise(self.loupe_container)
             self.preview_canvas.tag_raise(self.loupe_border)
-            
-            # Le laser doit rester visible même par-dessus la loupe
             if hasattr(self, 'laser_head'):
                 self.preview_canvas.tag_raise(self.laser_halo)
                 self.preview_canvas.tag_raise(self.laser_head)
         else:
+            # Si on n'est pas sur l'image, on cache la loupe
             self._hide_loupe()
 
     def _hide_loupe(self):
@@ -432,17 +427,14 @@ class SimulationWindow(ctk.CTkToplevel):
         if target_idx >= self.current_point_idx:
             batch = self.points_list[self.current_point_idx : target_idx + 1]
             for tx, ty, pwr in batch:
-                # Clamping de sécurité pour les bordures
                 idx_x = min(max(0, int(tx)), self.rect_w - 1)
                 idx_y = min(max(0, int(ty)), self.rect_h - 1)
                 
                 if is_framing:
-                    # Phase framing : on dessine tout et on verrouille dans le masque
                     self.display_data[idx_y, idx_x] = pwr
-                    if pwr < 250: # Si c'est un trait noir (pas un saut G0)
+                    if pwr < 250:
                         self.frame_mask[idx_y, idx_x] = True
                 else:
-                    # Phase image : ON N'ÉCRIT QUE SI LE MASQUE EST FALSE
                     if not self.frame_mask[idx_y, idx_x]:
                         self.display_data[idx_y, idx_x] = pwr
                 
@@ -459,7 +451,11 @@ class SimulationWindow(ctk.CTkToplevel):
         t_total = self._format_seconds_to_hhmmss(self.total_sim_seconds)
         self.time_label.configure(text=f"Time: {t_now} / {t_total}")
 
-        self.update_graphics()
+        self.update_graphics()  
+        
+        if self.loupe_active:
+            self._update_loupe() 
+            
         self.animation_job = self.after(16, self.animate_loop)
 
     def skip_to_end(self):
@@ -489,10 +485,34 @@ class SimulationWindow(ctk.CTkToplevel):
 
     def update_laser_ui(self):
         if self.laser_head is None: return
+        
+        # 1. Coordonnées cibles du laser sur le canvas
         lx, ly = self.x0 + self.curr_x, self.y0 + self.curr_y
+        
+        # Par défaut, le laser est visible
+        laser_state = "normal"
+        
+        # 2. LOGIQUE D'ÉVITEMENT DE LA LOUPE
+        if self.loupe_active and hasattr(self, 'last_mouse_coords'):
+            # Centre de la loupe (dernière position souris)
+            mx, my = self.last_mouse_coords
+            
+            # Calcul de la distance entre le laser et le centre de la loupe (Pythagore)
+            # distance = sqrt((x2-x1)² + (y2-y1)²)
+            distance = ((lx - mx)**2 + (ly - my)**2)**0.5
+            
+            # Si le laser est à l'intérieur du rayon de la loupe
+            # On utilise (self.loupe_size / 2) pour le rayon
+            if distance < (self.loupe_size / 2):
+                laser_state = "hidden"
+
+        # 3. Mise à jour des positions et de la visibilité
         if hasattr(self, 'laser_halo'):
             self.preview_canvas.coords(self.laser_halo, lx-6, ly-6, lx+6, ly+6)
+            self.preview_canvas.itemconfig(self.laser_halo, state=laser_state)
+            
         self.preview_canvas.coords(self.laser_head, lx-3, ly-3, lx+3, ly+3)
+        self.preview_canvas.itemconfig(self.laser_head, state=laser_state)
 
     # --- HELPERS ---
 

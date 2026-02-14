@@ -1,12 +1,12 @@
 {
-    "width": 121.52,
+    "width": 159.05,
     "line_step": 0.1307,
     "dpi": 254,
     "custom_x": 0.0,
     "custom_y": 0.0,
-    "contrast": -0.22,
-    "gamma": 1.0,
-    "thermal": 1.0,
+    "contrast": -0.24,
+    "gamma": 3.02,
+    "thermal": 1.16,
     "feedrate": 3000,
     "premove": 10.0,
     "max_p": 46.0,
@@ -27,7 +27,7 @@
     "frame_power": "2",
     "custom_pause_cmd": "M0",
     "framing_ratio": "50%",
-    "force_width": false,
+    "force_width": true,
     "invert_relief": false,
     "window_geometry": "2560x1369+-8+30"
 }

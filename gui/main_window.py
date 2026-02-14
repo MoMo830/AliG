@@ -409,11 +409,19 @@ class LaserGeneratorApp(ctk.CTk):
         
         steps = (end - start) if is_int else 200
         
-        slider = ctk.CTkSlider(sub_frame, from_=start, to=end, number_of_steps=steps, 
-                                command=lambda v: [self.sync_from_slider(slider, entry, v, is_int, precision), 
-                                                self.delayed_update()])
+        # MODIFICATION : Le slider ne fait plus que synchroniser le texte de l'Entry en temps réel
+        slider = ctk.CTkSlider(
+            sub_frame, 
+            from_=start, 
+            to=end, 
+            number_of_steps=steps, 
+            command=lambda v: self.sync_from_slider(slider, entry, v, is_int, precision)
+        )
         slider.set(default)
         slider.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        
+        # AJOUT : On lance le calcul de l'image uniquement quand on relâche la souris
+        slider.bind("<ButtonRelease-1>", lambda e: self.update_preview())
         
         entry = ctk.CTkEntry(sub_frame, width=65, height=22, font=("Arial", 10))
         format_str = f"{{:.{precision}f}}"
@@ -422,8 +430,9 @@ class LaserGeneratorApp(ctk.CTk):
         
         self.controls[key] = {"slider": slider, "entry": entry, "is_int": is_int, "precision": precision}
         
-        entry.bind("<Return>", lambda e: self.sync_from_entry(slider, entry, is_int, precision))
-        entry.bind("<FocusOut>", lambda e: self.sync_from_entry(slider, entry, is_int, precision))
+        # Pour l'Entry, on garde l'update immédiat sur 'Entrée' car c'est une action volontaire
+        entry.bind("<Return>", lambda e: [self.sync_from_entry(slider, entry, is_int, precision), self.update_preview()])
+        entry.bind("<FocusOut>", lambda e: [self.sync_from_entry(slider, entry, is_int, precision), self.update_preview()])
 
         # --- AJOUT TOOLTIP ---
         if help_text:
@@ -655,6 +664,7 @@ class LaserGeneratorApp(ctk.CTk):
          self.get_val(self.controls["custom_x"]),
          self.get_val(self.controls["custom_y"])
       )
+
 
     def process_logic(self):
       # 1. On prépare les réglages dans un dictionnaire
@@ -993,35 +1003,15 @@ class LaserGeneratorApp(ctk.CTk):
             self.btn_gen.configure(text=original_text, state="normal", fg_color="#1f538d")
 
     def sync_from_slider(self, slider, entry, value, is_int, precision):
+        """Met à jour uniquement le texte de l'Entry pendant le mouvement du slider."""
         val = int(float(value)) if is_int else float(value)
         entry.delete(0, tk.END)
         format_str = f"{{:.{precision}f}}"
         entry.insert(0, str(val) if is_int else format_str.format(val))
         
-        # --- INFO VISUELLE : Pas besoin de synchro complexe ---
-        if hasattr(self, 'controls'):
-            if "dpi" in self.controls and slider == self.controls["dpi"]["slider"]:
-                # Optionnel : Mettre à jour un label d'info "x_step_info"
-                x_step = 25.4 / max(1, val)
-                # self.lbl_x_info.configure(text=f"X-Step: {x_step:.4f} mm")
+        if hasattr(self, 'power_viz'):
+            self.power_viz.refresh_visuals()
 
-        self.update_preview()
-
-
-    def sync_from_slider(self, slider, entry, value, is_int, precision):
-        val = int(float(value)) if is_int else float(value)
-        entry.delete(0, tk.END)
-        format_str = f"{{:.{precision}f}}"
-        entry.insert(0, str(val) if is_int else format_str.format(val))
-        
-        # --- INFO VISUELLE : Pas besoin de synchro complexe ---
-        if hasattr(self, 'controls'):
-            if "dpi" in self.controls and slider == self.controls["dpi"]["slider"]:
-                # Optionnel : Mettre à jour un label d'info "x_step_info"
-                x_step = 25.4 / max(1, val)
-                # self.lbl_x_info.configure(text=f"X-Step: {x_step:.4f} mm")
-
-        self.update_preview()
 
     def sync_from_entry(self, slider, entry, is_int, precision):
         try:
