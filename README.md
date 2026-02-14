@@ -10,7 +10,7 @@
 
 
 <p align="center">
-  <img src="assets/ALIG_Anim.gif" alt="A.L.I.G. Interface Demo" width="95%">
+  <img src="Ressources/ALIG_Anim.gif" alt="A.L.I.G. Interface Demo" width="95%">
   <br>
   <a href="https://buymeacoffee.com/momo830"><img src="https://img.shields.io/badge/Donate-Buy%20Me%20A%20Coffee-orange?style=flat-square&logo=buy-me-a-coffee" alt="Support the project"></a>
 </p>
@@ -171,7 +171,7 @@ A.L.I.G. is a free project, developed during their spare time by a world-class t
 This software is intended to be used on a CNC machine. I developped it as a desire to expand the capabilities of my Workbee/Queenbee based CNC. 
 
 <p align="center">
-  <img src="assets/AMC.jpg" alt="AMC" width="50%">
+  <img src="Ressources/AMC.jpg" alt="AMC" width="50%">
 </p>
 
 * **Workflow Efficiency:** I used to work with **Auggie**, which is a functional solution, but I found it difficult to constantly switch **back and forth** between it and Mach4. A.L.I.G. allows for a more streamlined workflow within a single ecosystem.
