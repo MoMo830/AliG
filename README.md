@@ -42,7 +42,7 @@ If you just want to use the software without installing Python, follow these ste
 
 ## Last version change 
 ### (14/02/2026)
-* **v0.978b1** : Modular Architecture: Split project into core/ and gui/ folders; New Loupe Feature: Added interactive magnifying glass (hold left-click); UI Improvements: Refined control panel layout.
+* **v0.9781b** : Modular Architecture: Split project into core/ and gui/ folders; New Loupe Feature: Added interactive magnifying glass (hold left-click); UI Improvements: Refined control panel layout.
 
 <details>
 <summary><b> Click to view full version history</b></summary>
