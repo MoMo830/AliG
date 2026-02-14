@@ -32,7 +32,7 @@ from core.utils import get_app_paths
 class LaserGeneratorApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.version = "0.978b"
+        self.version = "0.9781b"
         self.after_id = None
 
         # --- 1. GESTION DES CHEMINS  ---

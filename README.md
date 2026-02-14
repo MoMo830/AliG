@@ -41,6 +41,8 @@ If you just want to use the software without installing Python, follow these ste
 5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
 
 ## Last version change 
+### (14/02/2026)
+* **v0.9781b** : Refactoring / UI Improved
 ### (12/02/2026)
 * **v0.978b** : Added Simulation window with real-time stats; Fixed overscan/burn issues via "Overscan Chopping" for frequent M67 refreshes; Enhanced Safety Protocol using G4 "Safety Flushes" before rapid moves
 * **v0.9771b** : Fixed DPI calculation based on line step and suppressed x-resolution parameter.
