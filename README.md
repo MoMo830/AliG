@@ -41,13 +41,15 @@ If you just want to use the software without installing Python, follow these ste
 5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
 
 ## Last version change 
-### (12/02/2026)
-* **v0.978b** : Added Simulation window with real-time stats; Fixed overscan/burn issues via "Overscan Chopping" for frequent M67 refreshes; Enhanced Safety Protocol using G4 "Safety Flushes" before rapid moves
-* **v0.9771b** : Fixed DPI calculation based on line step and suppressed x-resolution parameter.
+### (14/02/2026)
+* **v0.978b1** : Modular Architecture: Split project into core/ and gui/ folders; New Loupe Feature: Added interactive magnifying glass (hold left-click); UI Improvements: Refined control panel layout.
 
 <details>
 <summary><b> Click to view full version history</b></summary>
-  
+
+### (12/02/2026)
+* **v0.978b** : Added Simulation window with real-time stats; Fixed overscan/burn issues via "Overscan Chopping" for frequent M67 refreshes; Enhanced Safety Protocol using G4 "Safety Flushes" before rapid moves
+* **v0.9771b** : Fixed DPI calculation based on line step and suppressed x-resolution parameter.  
 ### (11/02/2026)
 * **v0.977b** : Added Grayscale Steps & G-Code Clustering Features: Users can now select the number of power quantization levels (2-256) reducing .nc file size and prevents controller buffer overflow.
 * **v0.976b** : Added Pointing Features: Users can now include a dedicated "Pointing Command" at the origin anchor point. This ensures precise physical alignment of the laser head before the engraving process begins.
