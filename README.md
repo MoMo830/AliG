@@ -41,12 +41,23 @@ If you just want to use the software without installing Python, follow these ste
 5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
 
 ## Last version change 
-### (14/02/2026)
-* **v0.9781b** : Modular Architecture: Split project into core/ and gui/ folders; New Loupe Feature: Added interactive magnifying glass (hold left-click); UI Improvements: Refined control panel layout.
+### (18/02/2026)
+* **v0.9781b** :
+- **Real G-Code Parser Simulation**: Re-engineered the simulation engine to process actual G-Code commands for 100% fidelity between preview and final laser output.
+- **Interactive Dashboard**: Added a new landing page featuring usage statistics (total lines, G-Code generated).
+- **Project Thumbnails**: Implemented automatic generation of visual previews for every processed G-Code, stored in an optimized thumbnail gallery.
+- **Machine Calibration Suite**: Introduced a dedicated calibration view with built-in tests for laser latency (alignment) and power scaling grids.
+- **Advanced Settings Page**: Added a new configuration interface to manage machine parameters and UI themes without editing JSON files manually.
+- **UI/UX Overhaul**: Completely redesigned the TopBar and navigation flow for smoother transitions between Raster, Calibration, and Dashboard views.
+- **Internationalization (i18n)**: Initial support for multi-language handling (English/French) to prepare for global community use.
+
 
 <details>
 <summary><b> Click to view full version history</b></summary>
 
+
+### (14/02/2026)
+* **v0.9781b** : Modular Architecture: Split project into core/ and gui/ folders; New Loupe Feature: Added interactive magnifying glass (hold left-click); UI Improvements: Refined control panel layout.
 ### (12/02/2026)
 * **v0.978b** : Added Simulation window with real-time stats; Fixed overscan/burn issues via "Overscan Chopping" for frequent M67 refreshes; Enhanced Safety Protocol using G4 "Safety Flushes" before rapid moves
 * **v0.9771b** : Fixed DPI calculation based on line step and suppressed x-resolution parameter.  

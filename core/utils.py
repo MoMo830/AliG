@@ -26,7 +26,8 @@ def save_dashboard_data(config_manager, matrix, gcode_content, estimated_time=0)
     Gère la miniature et les stats (incluant le temps de simulation)
     """
     try:
-        thumb_dir = "assets/thumbnails"
+        base_path, app_path = get_app_paths()
+        thumb_dir = os.path.join(app_path, "assets", "thumbnails")
         os.makedirs(thumb_dir, exist_ok=True)
 
         # 1. Normalisation et Inversion
