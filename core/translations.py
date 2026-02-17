@@ -32,7 +32,17 @@ TRANSLATIONS = {
             "parser_title": "GCODE CHECK",
             "parser_desc": "Use the Gcode parser to check any 2D GcodeFile.\n(Coming Soon)",
             "settings_title": "SETTINGS",
-            "settings_desc": "Configure G-Code commands, hardware offsets, and global laser limits."
+            "settings_desc": "Configure G-Code commands, hardware offsets, and global laser limits.",
+            "no_history": "No recent generations found",
+            "history": "Recent Generations"
+        },
+        "topbar": {
+            "support": "☕ Support the project",
+            "credits": "Developed by Alexandre 'MoMo'",
+            "dashboard": "DASHBOARD",
+            "raster": "Raster engraving",
+            "simulation": "G-Code Simulation",
+            "calibration": "Machine Calibration"
         }
     },
     "Français": {
@@ -64,7 +74,17 @@ TRANSLATIONS = {
             "parser_title": "Vérificateur de GCODE",
             "parser_desc": "Utilisez le parseur G-code pour vérifier n'importe quel fichier G-code 2D.\n(Prochainement)",
             "settings_title": "REGLAGES",
-            "settings_desc": "Configurez les commandes G-Code, les décalages matériels et les limites globales du laser."
+            "settings_desc": "Configurez les commandes G-Code, les décalages matériels et les limites globales du laser.",
+            "no_history": "Aucune génération récente",
+            "history": "Générations récentes"
+        },
+        "topbar": {
+            "support": "☕ Soutenir le projet",
+            "credits": "Developpé par Alexandre 'MoMo'",
+            "dashboard": "Tableau de bord",
+            "raster": "Gravure en boustrophédon",
+            "simulation": "Simulation de G-Code",
+            "calibration": "Calibrage machine"
         }
     }
 }

@@ -3,6 +3,7 @@ import os
 import customtkinter as ctk
 from tkinter import messagebox
 from core.translations import TRANSLATIONS
+import webbrowser
 
 class LaserGeneratorApp(ctk.CTk):
     def __init__(self, config_manager):
@@ -10,6 +11,8 @@ class LaserGeneratorApp(ctk.CTk):
         
         # 1. Ressources et Configuration
         self.config_manager = config_manager
+        lang = self.config_manager.get_item("machine_settings", "language", "English")
+        self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
         self.version = "0.9782b"
         self.title(f"A.L.I.G. - Advanced Laser Imaging Generator v{self.version}")
         self.current_view = None
@@ -29,6 +32,7 @@ class LaserGeneratorApp(ctk.CTk):
 
         # 4. Lancement de la vue initiale
         self.show_dashboard()
+
 
     # --- Gestion de l'Interface Système ---
 
@@ -67,11 +71,6 @@ class LaserGeneratorApp(ctk.CTk):
             window_data = {"is_maximized": is_zoomed}
             
             if is_zoomed:
-                # SI AGRANDI : On ne veut pas sauvegarder la géométrie plein écran.
-                # On essaie de récupérer la dernière taille "normale" connue.
-                # 'wm_geometry' sans arguments renvoie la géométrie actuelle,
-                # mais beaucoup de managers de fenêtres stockent la géométrie pre-zoom.
-                # Si ton config_manager a déjà une géométrie, on la garde.
                 old_geom = self.config_manager.get_item("window_settings", "geometry", "1300x900+50+50")
                 window_data["geometry"] = old_geom
             else:
@@ -111,14 +110,17 @@ class LaserGeneratorApp(ctk.CTk):
 
     def show_dashboard(self):
         self._clear_container()
-        self.view_title.configure(text="Home")
+        
+        self.view_title.configure(text=self.texts.get("dashboard", "DASHBOARD"))
+        
         from gui.views.dashboard_view import DashboardView
         self.current_view = DashboardView(self.container, self)
         self.current_view.pack(fill="both", expand=True)
 
     def show_raster_mode(self, image_to_load=None, reset_filters=False):
         self._clear_container()
-        self.view_title.configure(text="Raster Engraving")
+        self.set_topbar_title(self.texts.get("raster", "Raster engraving"))
+
         from gui.views.raster_view import RasterView
         
         view = RasterView(self.container, self)
@@ -134,47 +136,47 @@ class LaserGeneratorApp(ctk.CTk):
         
         self.current_view = view
 
-    def show_settings_mode(self):
+    def show_settings_mode(self, just_saved=False):
         self._clear_container()
         
-        # Récupérer la langue actuelle
         lang = self.config_manager.get_item("machine_settings", "language", "English")
-        # Aller chercher le titre traduit (celui que nous avons mis dans core/translations.py)
-        title_text = TRANSLATIONS.get(lang, TRANSLATIONS["English"])["settings"]["title"]
+        self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
         
+        # On recharge aussi le titre spécifique aux paramètres
+        title_text = TRANSLATIONS.get(lang, TRANSLATIONS["English"])["settings"]["title"]
         self.view_title.configure(text=title_text)
         
+        # Mettre à jour les boutons de la top_bar si nécessaire (ex: Support)
+        self.btn_support.configure(text=self.texts.get("support", "Support"))
+        # ------------------------------------------------------------------
+
         from gui.views.settings_view import SettingsView 
-        self.current_view = SettingsView(self.container, self)
+        self.current_view = SettingsView(self.container, self, just_saved=just_saved)
         self.current_view.pack(expand=True, fill="both")
 
+    
     def show_calibration_mode(self):
         self._clear_container()
-        self.view_title.configure(text="Machine Calibration")
+        self.set_topbar_title(self.texts.get("calibration", "Machine calibration"))
         from gui.views.calibration_view import CalibrationView
         self.current_view = CalibrationView(self.container, self)
         self.current_view.pack(expand=True, fill="both")
 
     def show_simulation(self, engine, payload, return_view="dashboard"):
         self._clear_container()
-        self.view_title.configure(text="G-Code Simulation")
+        self.set_topbar_title(self.texts.get("simulation", "G-Code Simulation"))
         from gui.views.simulation_view import SimulationView
         self.current_view = SimulationView(self.container, self, engine, payload, return_view)
         self.current_view.pack(fill="both", expand=True)
 
     # --- Composants UI Fixes ---
 
+
+
     def setup_top_bar(self):
-        """Crée la barre supérieure permanente."""
+        """Crée la barre supérieure permanente avec liens de support."""
         self.top_bar = ctk.CTkFrame(self, height=50, corner_radius=0)
         self.top_bar.pack(side="top", fill="x")
-
-        # # Label Logo
-        # self.logo_label = ctk.CTkLabel(
-        #     self.top_bar, text="A.L.I.G.", 
-        #     font=("Arial", 18, "bold"), text_color="#e67e22"
-        # )
-        # self.logo_label.pack(side="left", padx=20)
 
         # Bouton Home
         self.home_btn = ctk.CTkButton(
@@ -183,17 +185,66 @@ class LaserGeneratorApp(ctk.CTk):
         )
         self.home_btn.pack(side="left", padx=5)
 
-        # Indicateur de Titre de Vue
-        self.view_title = ctk.CTkLabel(self.top_bar, text="DASHBOARD", font=("Arial", 13))
+        # UNIQUE INDICATEUR DE TITRE
+        # On le crée ici et on ne le recréera JAMAIS ailleurs
+        self.view_title = ctk.CTkLabel(
+            self.top_bar, 
+            text="", # Texte vide au départ
+            font=("Arial", 13, "bold")
+        )
         self.view_title.pack(side="left", padx=20)
 
-        # Bouton Settings (à droite)
+        # --- PARTIE DROITE ---
+        # Bouton Settings (le plus à droite)
         self.settings_btn = ctk.CTkButton(
             self.top_bar, text="⚙️", width=40, fg_color="transparent", 
             command=self.show_settings_mode
         )
         self.settings_btn.pack(side="right", padx=10)
 
+        # Séparateur visuel vertical
+        ctk.CTkLabel(self.top_bar, text="|", text_color="gray").pack(side="right", padx=5)
+
+        # Lien GitHub
+        self.btn_github = ctk.CTkButton(
+            self.top_bar, text="🌐 GitHub", width=80, fg_color="transparent",
+            font=("Arial", 11), text_color=["#3B8ED0", "#1F6AA5"],
+            hover_color=["#DCDCDC", "#323232"], cursor="hand2",
+            command=lambda: webbrowser.open("https://github.com/MoMo830/ALIG")
+        )
+        self.btn_github.pack(side="right", padx=5)
+
+        # Bouton Support 
+        self.btn_support = ctk.CTkButton(
+            self.top_bar, text=self.texts.get("support", "Support"), width=90, height=28,
+            fg_color="#FFDD00", text_color="black", font=("Arial", 11, "bold"),
+            hover_color="#f7d000", cursor="hand2",
+            command=lambda: webbrowser.open("https://buymeacoffee.com/momo830")
+        )
+        self.btn_support.pack(side="right", padx=5)
+
+        # Crédit Développeur (Traduit et Discret)
+        self.dev_label = ctk.CTkLabel(
+            self.top_bar, 
+            text=self.texts.get("credits", "By MoMo"), 
+            font=("Arial", 9), 
+            text_color="#666666"
+        )
+        self.dev_label.pack(side="right", padx=15)
+
+    def set_topbar_title(self, title_text):
+        # Si le label n'existe pas ou a été détruit par erreur
+        if not hasattr(self, 'view_title') or not self.view_title.winfo_exists():
+            self.view_title = ctk.CTkLabel(
+                self.top_bar, 
+                text=title_text,
+                font=("Arial", 13, "bold")
+            )
+            # On le place après le bouton home (index 1 car home est à l'index 0)
+            self.view_title.pack(side="left", padx=20, before=self.btn_support if hasattr(self, 'btn_support') else None)
+        else:
+            # S'il existe, on change juste le texte
+            self.view_title.configure(text=title_text)
 
     def on_closing(self):
         """Gère la fermeture propre."""

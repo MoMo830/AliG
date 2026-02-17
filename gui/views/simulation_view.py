@@ -15,7 +15,7 @@ from tkinter import messagebox
 import cv2
 
 from engine.gcode_parser import GCodeParser
-from utils.gui_utils import apply_window_icon, setup_toplevel_window, bind_minimize_sync
+from core.utils import save_dashboard_data
 
 class SimulationView(ctk.CTkFrame):
     def __init__(self, parent, controller, engine, payload, return_view="dashboard"):
@@ -259,42 +259,45 @@ class SimulationView(ctk.CTkFrame):
 
 
     def _build_left_panel(self, payload):
-        self.left_panel = ctk.CTkFrame(self, corner_radius=0, width=200)
+        self.left_panel = ctk.CTkFrame(self, corner_radius=0, width=220)
         self.left_panel.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
         self.left_panel.grid_propagate(False) 
         
         ctk.CTkLabel(self.left_panel, text="PATH SIMULATION", font=("Arial", 14, "bold")).pack(pady=15)
         
-        # 1. Stats Scrollable
-        info_scroll = ctk.CTkScrollableFrame(self.left_panel, fg_color="transparent")
-        info_scroll.pack(fill="both", expand=True, padx=5)
         
-        excluded = [
-            "pixel_size", "min_power", "max_power", 
-            "is_pointing", "is_framing", "est_sec",
-            "pixel_size_x", "pixel_size_y"
-        ]
+        # 1. Conteneur des infos techniques (Remplace la boucle for)
+        info_container = ctk.CTkFrame(self.left_panel, fg_color="transparent")
+        info_container.pack(fill="x", padx=10, pady=5)
+
+        # --- RÉCUPÉRATION ET AFFICHAGE DES DONNÉES CIBLÉES ---
         
-        for label, val in payload.items():
-            if label not in excluded:
-                row = ctk.CTkFrame(info_scroll, fg_color="transparent")
-                row.pack(fill="x", pady=2)
-                clean_label = label.replace("_", " ").capitalize()
-                ctk.CTkLabel(row, text=clean_label, font=("Arial", 10, "bold"), width=80, anchor="w").pack(side="left")
-                ctk.CTkLabel(row, text=str(val), font=("Arial", 10), anchor="e", wraplength=100).pack(side="right", fill="x", expand=True)
+        # 1. Extraction des données depuis le tuple 'dims'
+        # Structure : (0: h_px, 1: w_px, 2: l_step, 3: x_st)
+        dims = payload.get('dims', (0, 0, 0, 0))
+        h_px, w_px, step_y, step_x = dims
 
-        # Temps formaté
-        t_sec = payload.get("est_sec", 0)
-        time_str = f"{int(t_sec // 60)}:{int(t_sec % 60):02d}"
+        # 2. Affichage des statistiques sur une ligne (Label à gauche, Valeur à droite)
+        self._add_stat(info_container, "Matrix (px)", f"{w_px}x{h_px}")
+        self._add_stat(info_container, "Step X", f"{step_x:.3f}")
+        self._add_stat(info_container, "Step Y", f"{step_y:.3f}")
 
-        time_frame = ctk.CTkFrame(info_scroll, fg_color="transparent")
-        time_frame.pack(fill="x", pady=2)
-        ctk.CTkLabel(time_frame, text="Estimated Time:", font=("Arial", 10, "bold"), width=80, anchor="w").pack(side="left")
-        ctk.CTkLabel(time_frame, text=time_str, font=("Arial", 10), anchor="e").pack(side="right", fill="x", expand=True)
+        # 3. Calcul et affichage de la taille finale en mm
+        # (Largeur = pixels * pas)
+        w_mm = w_px * step_x
+        h_mm = h_px * step_y
+        self._add_stat(info_container, "Size (mm)", f"{w_mm:.1f}x{h_mm:.1f}")
+
+        # --- CHEMIN DE SORTIE FORMATÉ ---
+        out_dir = payload.get('metadata', {}).get('output_dir', 'C:/')
+        out_name = payload.get('metadata', {}).get('file_name', 'output.nc')
+        full_path = os.path.join(out_dir, out_name).replace("\\", "/")
+        
+        self._add_stat(info_container, "Output Path:", full_path, is_path=True)
 
         # Échelle de Puissance
         p_min, p_max = float(payload.get("min_power", 0)), float(payload.get("max_power", 100))
-        power_scale_frame = ctk.CTkFrame(info_scroll, fg_color="transparent")
+        power_scale_frame = ctk.CTkFrame(info_container, fg_color="transparent")
         power_scale_frame.pack(fill="x", pady=10, padx=5)
         ctk.CTkLabel(power_scale_frame, text="Power Range (0-100%)", font=("Arial", 10, "bold")).pack(anchor="w")
 
@@ -317,11 +320,11 @@ class SimulationView(ctk.CTkFrame):
 
         self.after(200, draw_power_scale)
 
-        # File Name
-        fname_frame = ctk.CTkFrame(info_scroll, fg_color="transparent")
-        fname_frame.pack(fill="x", pady=2)
-        ctk.CTkLabel(fname_frame, text="File:", font=("Arial", 10, "bold"), width=40, anchor="w").pack(side="left")
-        ctk.CTkLabel(fname_frame, text=payload.get("file_name", "N/A"), font=("Arial", 10), anchor="e", wraplength=120).pack(side="right", fill="x", expand=True)
+        # # File Name
+        # fname_frame = ctk.CTkFrame(info_container, fg_color="transparent")
+        # fname_frame.pack(fill="x", pady=2)
+        # ctk.CTkLabel(fname_frame, text="File:", font=("Arial", 10, "bold"), width=40, anchor="w").pack(side="left")
+        # ctk.CTkLabel(fname_frame, text=payload.get("file_name", "N/A"), font=("Arial", 10), anchor="e", wraplength=120).pack(side="right", fill="x", expand=True)
 
         #Gcode visualizer
         ctk.CTkLabel(self.left_panel, text="LIVE G-CODE", font=("Arial", 11, "bold")).pack(pady=(10, 0))
@@ -363,6 +366,35 @@ class SimulationView(ctk.CTkFrame):
         ctk.CTkButton(btn_act, text="EXPORT GCODE", fg_color="#27ae60", height=40, font=("Arial", 11, "bold"), command=self.on_confirm).pack(fill="x", padx=10, pady=5)
         ctk.CTkButton(btn_act, text="CANCEL", fg_color="#333", height=30, command=self.on_cancel).pack(fill="x", padx=10, pady=5)
     
+    def _add_stat(self, parent, label, value, is_path=False):
+        """Helper pour afficher une ligne d'information propre"""
+        frame = ctk.CTkFrame(parent, fg_color="transparent")
+        frame.pack(fill="x", pady=2)
+        
+        if is_path:
+            # Pour le chemin : Label en haut, Valeur en bas (car trop long)
+            ctk.CTkLabel(frame, text=label, font=("Arial", 10, "bold"), anchor="w").pack(side="top", fill="x")
+            val_label = ctk.CTkLabel(
+                frame, 
+                text=value, 
+                font=("Consolas", 9), 
+                text_color="#3498db",
+                anchor="w", 
+                justify="left",
+                wraplength=190
+            )
+            val_label.pack(side="top", fill="x", padx=5)
+        else:
+            # Pour les autres : Label à gauche, Valeur à droite sur la même ligne
+            ctk.CTkLabel(frame, text=label, font=("Arial", 10, "bold"), anchor="w").pack(side="left")
+            ctk.CTkLabel(
+                frame, 
+                text=value, 
+                font=("Consolas", 11), 
+                text_color="#ecf0f1",
+                anchor="e"
+            ) .pack(side="right", fill="x", expand=True)
+
     def _build_right_panel(self):
         self.right_panel = ctk.CTkFrame(self, fg_color="#111", corner_radius=0)
         self.right_panel.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
@@ -578,16 +610,10 @@ class SimulationView(ctk.CTkFrame):
       self.sim_speed = multiplier # On applique la vitesse en direct si c'est un slider
       self.last_frame_time = time.time() # Fluidité immédiate
 
-      # Ton calcul de durée réelle de la simulation (ex: 10min à 2x = 5min devant l'écran)
+      # calcul de durée réelle de la simulation (ex: 10min à 2x = 5min devant l'écran)
       sim_duration_sec = self.total_sim_seconds / max(0.1, multiplier)
       duration_str = self._format_seconds_to_hhmmss(sim_duration_sec)
       
-      # self.speed_title_label.configure(
-      #    text=f"Speed: {multiplier:.1f}x (Real duration: {duration_str})"
-      # )
-
-
-
 
     def toggle_pause(self):
         self.sim_running = not self.sim_running
@@ -807,7 +833,7 @@ class SimulationView(ctk.CTkFrame):
                 
         except Exception as e:
             print(f"GCode selection error: {e}")
-            
+
     def skip_to_end(self):
         # Sécurité : si la fenêtre est fermée, on sort
         if not self.winfo_exists():
@@ -1171,28 +1197,41 @@ class SimulationView(ctk.CTkFrame):
         return f"{size/1024:.0f} KB" if size < 1048576 else f"{size/1048576:.2f} MB"
 
     def on_confirm(self):
-        """Action déclenchée par le bouton 'Confirm' (Save G-Code)"""
+        """Action déclenchée par le bouton 'Confirm' (Save G-Code + Stats + Thumbnail via Utils)"""
         self.stop_processes()
         
-        # 1. Préparation du chemin de sortie
+        # 1. Préparation du chemin de sortie du G-Code
         output_dir = self.payload['metadata'].get('output_dir', '')
         file_name = self.payload['metadata'].get('file_name', 'output.nc')
         full_path = os.path.join(output_dir, file_name)
 
-        # 2. Sauvegarde du fichier
+        # 2. Sauvegarde du fichier et mise à jour des données
         try:
-            # On utilise self.final_gcode qui a été généré durant l'init de la simulation
             if hasattr(self, 'final_gcode') and self.final_gcode:
+                # --- A. Sauvegarde du G-Code ---
                 with open(full_path, "w") as f:
                     f.write(self.final_gcode)
+
+                # --- B. Appel de la fonction centralisée dans utils.py ---
+                matrix = self.payload.get('matrix') 
+                if matrix is not None:
+                    # On appelle directement la fonction importée de utils
+                    from core.utils import save_dashboard_data
+                    save_dashboard_data(
+                        config_manager=self.controller.config_manager,
+                        matrix=matrix,
+                        gcode_content=self.final_gcode,
+                        estimated_time=getattr(self, 'total_sim_seconds', 0)
+                    )
+
                 messagebox.showinfo("Success", f"G-Code saved to:\n{full_path}", parent=self.controller)
+                
+                # 3. Retour à la vue précédente
+                self._navigate_back()
             else:
                 messagebox.showerror("Error", "No G-Code data to save.", parent=self.controller)
         except Exception as e:
             messagebox.showerror("Error", f"Save failed: {e}", parent=self.controller)
-
-        # 3. Retour à la vue précédente
-        self._navigate_back()
 
     def on_cancel(self):
         self.stop_processes()

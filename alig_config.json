@@ -9,7 +9,7 @@
         "custom_header": "",
         "custom_footer": "M334",
         "theme": "Dark",
-        "language": "English"
+        "language": "Fran\u00e7ais"
     },
     "raster_settings": {
         "width": 30.0,
@@ -17,14 +17,14 @@
         "dpi": 254,
         "custom_x": 0.0,
         "custom_y": 0.0,
-        "contrast": 0.0,
-        "gamma": 1.0,
-        "thermal": 1.5,
+        "contrast": 0.16,
+        "gamma": 2.08,
+        "thermal": 1.68,
         "feedrate": 3000,
         "premove": 10.0,
         "max_p": 40.0,
         "min_p": 10.0,
-        "m67_delay": 11.5,
+        "m67_delay": 0.0,
         "gray_steps": 256,
         "m67_e_num": 0,
         "ctrl_max": 100,
@@ -46,5 +46,11 @@
     "window_settings": {
         "is_maximized": true,
         "geometry": "1300x900+50+50"
+    },
+    "stats": {
+        "total_lines": 776559,
+        "total_gcodes": 12,
+        "total_time_seconds": 1453.8892280006567,
+        "last_project_time": 241.28999200018944
     }
 }

@@ -52,8 +52,6 @@ class RasterView(ctk.CTkFrame):
         self.load_settings() 
         self.update_preview()
 
-    def open_support(self):
-        webbrowser.open("https://buymeacoffee.com/momo830")
 
     def on_closing(self):
         self.save_settings()
@@ -62,7 +60,8 @@ class RasterView(ctk.CTkFrame):
         sys.exit()
 
     def setup_ui(self):
-        self.grid_columnconfigure(0, minsize=420)
+
+        self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
@@ -70,52 +69,65 @@ class RasterView(ctk.CTkFrame):
         self.sidebar = ctk.CTkFrame(self, width=380)
         self.sidebar.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         
-        # --- EN-TÊTE FICHIERS ---
+        self.sidebar.grid_rowconfigure(0, weight=0)  # File frame
+        self.sidebar.grid_rowconfigure(1, weight=0)  # Profile frame
+        self.sidebar.grid_rowconfigure(2, weight=1)  # TABVIEW (PREND TOUT)
+        self.sidebar.grid_rowconfigure(3, weight=0)  # GENERATE
+        self.sidebar.grid_rowconfigure(4, weight=0)  # LINKS
+        self.sidebar.grid_columnconfigure(0, weight=1)
+
         file_frame = ctk.CTkFrame(self.sidebar, fg_color="#333333")
-        file_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.btn_input = ctk.CTkButton(file_frame, text="SELECT IMAGE", height=32, command=self.select_input)
+        file_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
+
+        self.btn_input = ctk.CTkButton(
+            file_frame,
+            text="SELECT IMAGE",
+            height=32,
+            command=self.select_input
+        )
         self.btn_input.pack(fill="x", padx=5, pady=5)
-        self.btn_output = ctk.CTkButton(file_frame, text="SELECT OUTPUT DIRECTORY", height=32, command=self.select_output)
+
+        self.btn_output = ctk.CTkButton(
+            file_frame,
+            text="SELECT OUTPUT DIRECTORY",
+            height=32,
+            command=self.select_output
+        )
         self.btn_output.pack(fill="x", padx=5, pady=(0, 5))
 
-        profile_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        profile_frame.pack(fill="x", padx=10, pady=5)
 
+        profile_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        profile_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
         self.btn_load_prof = ctk.CTkButton(profile_frame, text="IMPORT PROFILE", width=140, height=28, fg_color="#444444", command=self.load_profile_from)
         self.btn_load_prof.pack(side="left", expand=True, padx=(0, 2))
 
         self.btn_save_prof = ctk.CTkButton(profile_frame, text="EXPORT PROFILE", width=140, height=28, fg_color="#444444", command=self.export_profile)
         self.btn_save_prof.pack(side="right", expand=True, padx=(2, 0))
-
-        # --- ONGLETS ---
+        # --- ONGLETS  ---
         self.tabview = ctk.CTkTabview(self.sidebar)
-        self.tabview.pack(fill="both", expand=True, padx=10, pady=5)
-        
+        self.tabview.grid(row=2, column=0, sticky="nsew", padx=(10, 10), pady=5)
+
+
+
+        # --- PIED DE PAGE SIDEBAR (A FAIRE EN PREMIER POUR LE BAS) ---
+        self.btn_gen = ctk.CTkButton(
+            self.sidebar, 
+            text="GENERATE",
+            fg_color="#1f538d",
+            hover_color="#2a6dbd",
+            height=50,
+            font=("Arial", 13, "bold"),
+            command=self.generate_gcode
+        )
+        self.btn_gen.grid(row=3, column=0, sticky="ew", padx=20, pady=(5,10))
+
+        # --- 4. CONFIGURATION DU CONTENU ---
         self.tabview.add("Geometry")
         self.tabview.add("Image")
         self.tabview.add("Laser")
         self.tabview.add("G-Code") 
 
-
-        # Configuration des onglets (Geometry, Image, Laser...)
-        # Note: On suppose que create_input_pair, etc. gèrent l'ajout aux dictionnaires controls
-        self._setup_tabs_content()
-
-        # --- PIED DE PAGE SIDEBAR ---
-        self.btn_gen = ctk.CTkButton(self.sidebar, text="GENERATE", fg_color="#1f538d", hover_color="#2a6dbd", height=50, font=("Arial", 13, "bold"), command=self.generate_gcode)
-        self.btn_gen.pack(pady=10, padx=20, fill="x")
-
-        links_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        links_frame.pack(fill="x", pady=(5, 5))
-
-        self.btn_support = ctk.CTkButton(links_frame, text="☕ Support the project", font=("Arial", 10, "bold"), text_color="#FFDD00", fg_color="transparent", hover_color="#2B2B2B", cursor="hand2", width=80, command=self.open_support)
-        self.btn_support.pack(side="left", expand=True)
-
-        self.btn_github = ctk.CTkButton(links_frame, text="🌐 GitHub", font=("Arial", 10), text_color="#3a9ad9", fg_color="transparent", hover_color="#2B2B2B", cursor="hand2", width=80, command=lambda: webbrowser.open("https://github.com/MoMo830/ALIG"))
-        self.btn_github.pack(side="left", expand=True)
-
-        ctk.CTkLabel(self.sidebar, text="Developed by Alexandre 'MoMo'", font=("Arial", 9), text_color="#666666").pack(pady=(5, 10))
+        self._setup_tabs_content()  
 
         # --- VIEWPORT (ZONE DE DROITE) ---
         self.view_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -178,8 +190,57 @@ class RasterView(ctk.CTkFrame):
     def _setup_tabs_content(self):
         """Organise le contenu des onglets de la sidebar"""
         
+        # Helper pour créer l'onglet scrollable proprement
+        def prepare_tab(name):
+            tab = self.tabview.tab(name)
+            
+            # On force le padding du tab lui-même à 0 pour gagner de la place
+            tab.grid_columnconfigure(0, weight=1)
+            tab.grid_rowconfigure(0, weight=1)
+
+            scroll = ctk.CTkScrollableFrame(
+                tab,
+                fg_color="transparent",
+                scrollbar_button_color="#444444",
+                scrollbar_button_hover_color="#555555"
+            )
+            # On pack en fill both pour occuper tout l'onglet
+            scroll.pack(fill="both", expand=True)
+
+            # --- LA SOLUTION AU DÉBORDEMENT ---
+            # On force la largeur du contenu interne à suivre le conteneur
+            # On configure la colonne 0 du frame INTERNE du scroll
+            scroll.grid_columnconfigure(0, weight=1)
+
+            # Masquer la scrollbar par défaut
+            scroll._scrollbar.grid_remove()
+
+            def update_scrollbar_visibility(event=None):
+                # 1. On force la largeur du contenu (votre code actuel)
+                canvas_width = scroll._parent_canvas.winfo_width()
+                scroll._parent_canvas.itemconfig(scroll._parent_canvas.find_withtag("all")[0], width=canvas_width)
+
+                # 2. FORCE LA MISE À JOUR DE LA ZONE DE DÉFILEMENT
+                # Sans cette ligne, la scrollbar croit que le contenu fait 0px de haut
+                scroll._parent_canvas.configure(scrollregion=scroll._parent_canvas.bbox("all"))
+
+                canvas = scroll._parent_canvas
+                if canvas.bbox("all"):
+                    content_height = canvas.bbox("all")[3]
+                    visible_height = canvas.winfo_height()
+
+                    if content_height > visible_height:
+                        scroll._scrollbar.grid()
+                    else:
+                        scroll._scrollbar.grid_remove()
+
+            # On lie l'événement de redimensionnement
+            scroll.bind("<Configure>", update_scrollbar_visibility)
+            return scroll
+
+
         # --- TAB 1: GEOMETRY ---
-        t_geo = self.tabview.tab("Geometry")
+        t_geo = prepare_tab("Geometry")
         self.create_input_pair(t_geo, "Target Width (mm)", 5, 400, 30.0, "width")
         
         force_w_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
@@ -199,7 +260,7 @@ class RasterView(ctk.CTkFrame):
         self.create_simple_input(self.custom_offset_frame, "Custom Offset Y (mm)", 0.0, "custom_y")
 
                 # --- TAB 2: IMAGE ---
-        t_img = self.tabview.tab("Image")
+        t_img = prepare_tab("Image")
         self.create_input_pair(t_img, "Contrast (-1.0 to 1.0)", -1.0, 1.0, 0.0, "contrast")
         self.create_input_pair(t_img, "Gamma Correction", 0.1, 6.0, 1.0, "gamma")
         self.create_input_pair(t_img, "Thermal Correction", 0.1, 3.0, 1.5, "thermal")
@@ -212,7 +273,7 @@ class RasterView(ctk.CTkFrame):
         self.switch_invert.pack(side="right")
 
         # --- TAB 3: LASER ---
-        t_laser = self.tabview.tab("Laser")
+        t_laser = prepare_tab("Laser")
         self.create_input_pair(t_laser, "Feedrate (F)", 500, 20000, 3000, "feedrate", is_int=True)
         self.create_input_pair(t_laser, "Overscan (mm)", 0, 50, 10.0, "premove")
         
@@ -231,7 +292,7 @@ class RasterView(ctk.CTkFrame):
         self.create_input_pair(t_laser, "Grayscale Steps", 2, 256, 256, "gray_steps", is_int=True)
 
         # --- TAB 4: G-CODE ---
-        t_gc = self.tabview.tab("G-Code")
+        t_gc = prepare_tab("G-Code")
         
         # Initialisation des variables de contrôle
         self.origin_pointer_var = tk.BooleanVar(value=False)
@@ -262,7 +323,7 @@ class RasterView(ctk.CTkFrame):
         ctk.CTkLabel(h_label_frame, text="Header G-Code", font=("Arial", 11, "bold")).pack(side="left")
         ctk.CTkLabel(h_label_frame, text=" (at start)", font=("Arial", 10, "italic"), text_color="#888888").pack(side="left")
         
-        self.txt_header = ctk.CTkTextbox(t_gc, font=("Consolas", 11), height=60, border_width=1, border_color="#444444")
+        self.txt_header = ctk.CTkTextbox(t_gc, font=("Consolas", 11), height=40, border_width=1, border_color="#444444")
         self.txt_header.pack(fill="x", padx=10, pady=(2, 5))
 
         # Footer
@@ -271,7 +332,7 @@ class RasterView(ctk.CTkFrame):
         ctk.CTkLabel(f_label_frame, text="Footer G-Code", font=("Arial", 11, "bold")).pack(side="left")
         ctk.CTkLabel(f_label_frame, text=" (before M30)", font=("Arial", 10, "italic"), text_color="#888888").pack(side="left")
         
-        self.txt_footer = ctk.CTkTextbox(t_gc, font=("Consolas", 11), height=60, border_width=1, border_color="#444444")
+        self.txt_footer = ctk.CTkTextbox(t_gc, font=("Consolas", 11), height=40, border_width=1, border_color="#444444")
         self.txt_footer.pack(fill="x", padx=10, pady=(2, 5))
 
         # --- SECTION FRAMING ---
@@ -325,6 +386,27 @@ class RasterView(ctk.CTkFrame):
         # Appel initial pour valider l'état
         self.toggle_framing_options()
 
+    def create_dynamic_scroll(parent):
+        # On crée le scrollable frame
+        frame = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        
+        # On accède à la scrollbar interne (canvas.v_scrollbar chez CTk)
+        # On configure pour que la scrollbar ne s'affiche que si nécessaire
+        # Note : Cela dépend de la version de CTk, mais voici l'astuce universelle :
+        frame._scrollbar.configure(width=0) # Cache par défaut
+        
+        def check_scrollbar():
+            # Si la hauteur du contenu > hauteur affichée
+            if frame._parent_canvas.bbox("all")[3] > frame._parent_canvas.winfo_height():
+                frame._scrollbar.configure(width=16) # Affiche
+            else:
+                frame._scrollbar.configure(width=0) # Cache
+            frame.after(100, check_scrollbar)
+
+        # Lancer la surveillance
+        frame.after(500, check_scrollbar)
+        return frame
+
         
     def delayed_update(self, delay=50):
         """ Attend 'delay' ms avant d'exécuter update_preview """
@@ -335,15 +417,16 @@ class RasterView(ctk.CTkFrame):
         self.after_id = self.after(delay, self.update_preview)
 
     def create_input_pair(self, parent, label_text, start, end, default, key, is_int=False, precision=2, help_text=None):
+        # Changement : on réduit le padx à droite pour laisser de la place à la scrollbar
         frame = ctk.CTkFrame(parent, fg_color="transparent")
-        frame.pack(fill="x", pady=2, padx=10)
+        frame.pack(fill="x", pady=2, padx=(10, 15)) # (Gauche, Droite)
         
-        # On stocke le label dans une variable 'lbl'
         lbl = ctk.CTkLabel(frame, text=label_text, font=("Arial", 11))
         lbl.pack(anchor="w")
         
         sub_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        sub_frame.pack(fill="x")
+        sub_frame.pack(fill="x", expand=True)
+
         
         steps = (end - start) if is_int else 200
         
@@ -380,13 +463,12 @@ class RasterView(ctk.CTkFrame):
 
     def create_simple_input(self, parent, label_text, default, key, precision=2, help_text=None, compact=False):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
-        # Si compact, on ne prend pas toute la largeur
-        frame.pack(fill="x" if not compact else "none", side="left" if compact else "top", pady=2, padx=10)
+        # Changement : Uniformisation des marges
+        frame.pack(fill="x" if not compact else "none", side="left" if compact else "top", pady=2, padx=(10, 15))
         
         lbl = ctk.CTkLabel(frame, text=label_text, font=("Arial", 11))
         lbl.pack(side="left")
         
-        # On ajuste la largeur si c'est compact
         width = 60 if compact else 80
         entry = ctk.CTkEntry(frame, width=width, height=22, font=("Arial", 10))
         
@@ -654,8 +736,8 @@ class RasterView(ctk.CTkFrame):
                                             extent=[offX, offX + real_w, offY, offY + real_h], 
                                             aspect='equal', vmin=v_min, vmax=v_max, zorder=0)
                 self.cbar = self.fig_img.colorbar(self.img_plot, cax=self.ax_cbar) 
-                self.cbar.set_label("Power Intensity (%)", color='#888888', fontsize=9, labelpad=10)
-                self.cbar.ax.tick_params(labelcolor='#888888', labelsize=8)
+                self.cbar.set_label("Power Intensity (%)", color='#888888', fontsize=16, labelpad=10)
+                self.cbar.ax.tick_params(labelcolor='#888888', labelsize=12)
                 self.cbar.outline.set_visible(False)
             else:
                 self.img_plot.set_data(matrix)
@@ -663,7 +745,7 @@ class RasterView(ctk.CTkFrame):
                 self.img_plot.set_clim(v_min, v_max)
 
             # --- 5. GRILLE ET ESTHÉTIQUE IMAGE ---
-            self.ax_img.tick_params(axis='both', colors='#888888', labelsize=8)
+            self.ax_img.tick_params(axis='both', colors='#888888', labelsize=12)
             self.ax_img.grid(True, color='#444444', linestyle=':', linewidth=0.5, alpha=0.6, zorder=10)
             
             self.ax_img.set_xlim(offX - premove - 2, offX + real_w + premove + 2)
@@ -672,7 +754,7 @@ class RasterView(ctk.CTkFrame):
             if hasattr(self, 'origin_dot') and self.origin_dot:
                 for line in self.origin_dot: line.remove()
             self.origin_dot = self.ax_img.plot(0, 0, 'ro', markersize=6, zorder=20)
-            self.ax_img.set_title("PATH PREVIEW", color='white', fontsize=10, fontweight='bold')
+            self.ax_img.set_title("PATH PREVIEW", color='white', fontsize=20, fontweight='bold')
 
             # --- 6. HISTOGRAMME (À DROITE) ---
             self.ax_hist.clear() 
@@ -690,10 +772,10 @@ class RasterView(ctk.CTkFrame):
                 self.ax_hist.axvline(v_min, color='#ffcc00', linestyle='--', linewidth=1.5, label="Min")
                 self.ax_hist.axvline(v_max, color='#ff3333', linestyle='--', linewidth=1.5, label="Max")
 
-            self.ax_hist.set_title("POWER DISTRIBUTION", color='white', fontsize=10, fontweight='bold', pad=10)
-            self.ax_hist.set_xlabel("Laser Power Level", color='#aaaaaa', fontsize=8)
-            self.ax_hist.set_ylabel("Pixel Count", color='#aaaaaa', fontsize=8)
-            self.ax_hist.tick_params(colors='#888888', labelsize=8)
+            self.ax_hist.set_title("POWER DISTRIBUTION", color='white', fontsize=20, fontweight='bold', pad=10)
+            self.ax_hist.set_xlabel("Laser Power Level", color='#aaaaaa', fontsize=14)
+            self.ax_hist.set_ylabel("Pixel Count", color='#aaaaaa', fontsize=14)
+            self.ax_hist.tick_params(colors='#888888', labelsize=14)
             
             for spine in self.ax_hist.spines.values():
                 spine.set_edgecolor('#333333')
@@ -714,12 +796,12 @@ class RasterView(ctk.CTkFrame):
 
             # Texte aligné à gauche
             self.ax_info.text(0.1, 0.45, info_text, color='#aaaaaa', 
-                             fontfamily='monospace', fontsize=8.5, 
+                             fontfamily='monospace', fontsize=14, 
                              ha='left', va='center', linespacing=1.8, 
                              transform=self.ax_info.transAxes)
             
             # Titre JOB STATS centré
-            self.ax_info.set_title("JOB STATS", color='white', fontsize=10, 
+            self.ax_info.set_title("JOB STATS", color='white', fontsize=20, 
                                  fontweight='bold', loc='center', pad=10)
 
             # --- 8. FINALISATION ---

@@ -68,7 +68,7 @@ class CalibrationView(ctk.CTkFrame):
         img.save(temp_path)
         
         # On bascule vers RasterView avec l'image chargée
-        self.controller.show_raster_mode(image_to_load=temp_path)
+        self.controller.show_raster_mode(image_to_load=temp_path,reset_filters=True)
 
     def run_power_test(self):
         """ Génère une grille de dégradé et l'envoie vers RasterView """
