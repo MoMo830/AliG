@@ -38,9 +38,9 @@ class DashboardView(ctk.CTkFrame):
         self.create_mode_card(
             row=0, col=0,
             title="IMAGE RASTERING",
-            description="Engrave photos and gradients point by point.\nOptimized for Mach4 (M67/M68).",
+            description="Grayscale Photo Engraving.",
             callback=self.controller.show_raster_mode,
-            icon_char="📷" # Tu pourras remplacer par une vraie image PIL plus tard
+            icon_char="📷" 
         )
 
         self.create_mode_card(
@@ -54,7 +54,7 @@ class DashboardView(ctk.CTkFrame):
         self.create_mode_card(
             row=2, col=0,
             title="VECTOR INFILL",
-            description="Fill vector paths and shapes for cutting.",
+            description="Fill vector paths.",
             callback=None,
             state="disabled",
             icon_char="📐"
@@ -122,27 +122,33 @@ class DashboardView(ctk.CTkFrame):
 
         # --- LOGIQUE D'INTERACTION ---
         if state == "normal" and callback is not None:
-            # Liste des widgets qui doivent réagir au clic et au curseur
             clickable_widgets = [card, content_container, icon_lbl, t_lbl, d_lbl]
             
-            # Application du curseur "main"
             for widget in clickable_widgets:
                 widget.configure(cursor="hand2")
-                
+            
             # Fonctions de survol
             def on_enter(event):
                 card.configure(fg_color=hover_color, border_color=accent_color)
             
             def on_leave(event):
+                # Correction cruciale : on vérifie si la souris est réellement sortie de la zone de la carte
+                # ou si elle est juste passée sur un enfant.
+                x, y = card.winfo_pointerxy()
+                widget_under_mouse = card.winfo_containing(x, y)
+                
+                # Si le widget sous la souris est la carte elle-même ou un de ses enfants, on ne quitte pas
+                if widget_under_mouse in clickable_widgets:
+                    return
+                
                 card.configure(fg_color=base_color, border_color=border_color)
 
-            # Liaison des événements de survol au cadre principal
-            card.bind("<Enter>", on_enter)
-            card.bind("<Leave>", on_leave)
-            
-            # Liaison du clic à chaque élément
+            # Liaison des événements de survol à TOUS les widgets de la carte
+            # Comme ça, passer de l'un à l'autre ne déclenche pas de "Leave" non géré
             for widget in clickable_widgets:
-                widget.bind("<Button-1>", lambda event: callback())
+                widget.bind("<Enter>", on_enter)
+                widget.bind("<Leave>", on_leave)
+                widget.bind("<Button-1>", lambda event, cb=callback: cb())
         
         else:
             # État désactivé (Coming Soon)

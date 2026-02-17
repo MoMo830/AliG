@@ -2,30 +2,20 @@ import tkinter as tk
 import customtkinter as ctk
 import os
 from tkinter import messagebox
-# Importez vos utilitaires (ajustez le chemin selon votre structure)
-from core.config_manager import save_json_file, load_json_file
-from core.utils import get_app_paths
 
 class SettingsView(ctk.CTkFrame):
-    def __init__(self, parent, controller):
+    def __init__(self, parent, app):
+        # On appelle le constructeur parent
         super().__init__(parent, fg_color="transparent")
-        self.controller = controller
+        
+        # Initialisation des références
+        self.app = app  # Stockage de l'instance LaserGeneratorApp
         self.controls = {}
         
-        # --- GESTION DES CHEMINS ---
-        self.base_path, self.application_path = get_app_paths()
-        self.config_file = os.path.join(self.application_path, "alig_config.json")
-        
-        # --- TITRE ET BOUTON RETOUR ---
+        # --- TITRE ---
         self.top_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.top_frame.pack(fill="x", padx=40, pady=(30, 0))
         
-        self.btn_back = ctk.CTkButton(
-            self.top_frame, text="← Dashboard", width=100,
-            command=self.controller.show_dashboard 
-        )
-        self.btn_back.pack(side="left")
-
         self.header_label = ctk.CTkLabel(
             self.top_frame, text="MACHINE CONFIGURATION", 
             font=("Arial", 24, "bold"), text_color=["#3B8ED0", "#1F6AA5"]
@@ -36,9 +26,10 @@ class SettingsView(ctk.CTkFrame):
         self.main_container = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.main_container.pack(expand=True, fill="both", padx=40, pady=20)
 
+        # Construction de l'interface
         self.setup_settings_ui()
         
-        # --- CHARGEMENT DES DONNÉES ---
+        # --- CHARGEMENT DES DONNÉES VIA LE MANAGER ---
         self.load_settings()
 
     def setup_settings_ui(self):
@@ -69,7 +60,7 @@ class SettingsView(ctk.CTkFrame):
         )
         self.btn_save.pack(pady=(0, 30))
 
-    # --- MÉTHODES UTILITAIRES ---
+    # --- MÉTHODES UTILITAIRES UI ---
 
     def create_section(self, title):
         self.current_sec = ctk.CTkFrame(self.main_container, fg_color=["#EBEBEB", "#2B2B2B"], border_width=1, border_color=["#DCE4EE", "#3E454A"])
@@ -129,23 +120,24 @@ class SettingsView(ctk.CTkFrame):
             self.controls[key]["slider"].set(val)
         except: pass
 
-    # --- LOGIQUE DE DONNÉES ---
+    # --- LOGIQUE DE DONNÉES (Utilisant le Manager centralisé) ---
 
     def load_settings(self):
-        """Charge les réglages machine depuis le fichier config."""
-        data, err = load_json_file(self.config_file)
+        """Charge les réglages machine depuis le gestionnaire de config via self.app."""
+        data = self.app.config_manager.get_section("machine_settings")
+        
         if data:
-            # Dropdowns
+            # 1. Dropdowns
             if "cmd_mode" in data: self.cmd_mode.set(data["cmd_mode"])
             if "firing_mode" in data: self.firing_mode.set(data["firing_mode"])
             
-            # Simple Inputs
+            # 2. Entrées simples (Nombres entiers)
             for key in ["m67_e_num", "ctrl_max"]:
                 if key in data and key in self.controls:
                     self.controls[key]["entry"].delete(0, tk.END)
                     self.controls[key]["entry"].insert(0, str(data[key]))
             
-            # Sliders/Entries
+            # 3. Sliders + Entrées (Flottants)
             for key in ["m67_delay", "premove"]:
                 if key in data and key in self.controls:
                     val = float(data[key])
@@ -153,7 +145,7 @@ class SettingsView(ctk.CTkFrame):
                     self.controls[key]["entry"].delete(0, tk.END)
                     self.controls[key]["entry"].insert(0, f"{val:.2f}")
 
-            # Textboxes
+            # 4. Blocs de texte (G-Code)
             if "custom_header" in data:
                 self.txt_header.delete("1.0", tk.END)
                 self.txt_header.insert("1.0", data["custom_header"])
@@ -162,13 +154,9 @@ class SettingsView(ctk.CTkFrame):
                 self.txt_footer.insert("1.0", data["custom_footer"])
 
     def save_all_settings(self):
-        """Récupère les données et fusionne avec le fichier JSON global."""
-        # On charge l'existant pour ne pas écraser les paramètres Raster
-        full_data, err = load_json_file(self.config_file)
-        if full_data is None: full_data = {}
-
+        """Récupère les données de l'UI et demande au manager de les sauvegarder."""
         try:
-            full_data.update({
+            machine_data = {
                 "cmd_mode": self.cmd_mode.get(),
                 "firing_mode": self.firing_mode.get(),
                 "m67_e_num": int(self.controls["m67_e_num"]["entry"].get()),
@@ -177,12 +165,16 @@ class SettingsView(ctk.CTkFrame):
                 "premove": float(self.controls["premove"]["slider"].get()),
                 "custom_header": self.txt_header.get("1.0", "end-1c"),
                 "custom_footer": self.txt_footer.get("1.0", "end-1c"),
-            })
+            }
             
-            success, err = save_json_file(self.config_file, full_data)
-            if success:
+            # Mise à jour de la section dans le manager
+            self.app.config_manager.set_section("machine_settings", machine_data)
+            
+            # Sauvegarde physique sur le disque
+            if self.app.config_manager.save():
                 messagebox.showinfo("Success", "Machine configuration saved successfully!")
             else:
-                messagebox.showerror("Error", f"Failed to save: {err}")
+                messagebox.showerror("Error", "Failed to write config file.")
+                
         except ValueError:
             messagebox.showerror("Input Error", "Please verify that all numeric fields contain valid numbers.")

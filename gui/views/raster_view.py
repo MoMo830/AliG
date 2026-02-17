@@ -31,10 +31,10 @@ from engine.gcode_engine import GCodeEngine
 
 
 class RasterView(ctk.CTkFrame):
-    def __init__(self, parent, controller):
+    def __init__(self, parent, app):
         super().__init__(parent)
-        self.controller = controller
-        self.version = self.controller.version
+        self.app = app
+        self.version = self.app.version
         
         self.after_id = None
 
@@ -736,6 +736,7 @@ class RasterView(ctk.CTkFrame):
 
 
     def generate_gcode(self):
+        self.save_settings() #Sauvegarde paramètres
         # --- 0. CAPTURE SÉCURISÉE DES WIDGETS ---
         try:
             current_cmd_mode = self.cmd_mode.get()
@@ -799,8 +800,7 @@ class RasterView(ctk.CTkFrame):
         }
 
         # --- 3. LANCEMENT DE LA VUE SIMULATION ---
-        # Au lieu de sim_win = SimulationWindow(...), on appelle le controller
-        self.controller.show_simulation(
+        self.app.show_simulation(
             self.engine, 
             payload, 
             return_view="raster"
@@ -864,16 +864,24 @@ class RasterView(ctk.CTkFrame):
         return data
 
     def save_settings(self):
-        """Sauvegarde automatique au dossier de l'application."""
+        """Sauvegarde automatique via le gestionnaire de configuration global."""
+        # 1. On récupère toutes les données de l'interface
         data = self.get_all_settings_data()
-        success, err = save_json_file(self.config_file, data)
-        if not success:
-            print(f"Auto-save error: {err}")
+        
+        # 2. On met à jour la section dédiée dans le manager central
+        self.app.config_manager.set_section("raster_settings", data)
+        
+        # 3. On demande au manager de sauvegarder physiquement le fichier
+        if not self.app.config_manager.save():
+            print("Auto-save error: Failed to write global config file.")
             
     def load_settings(self):
-        """Chargement automatique au démarrage."""
-        data, err = load_json_file(self.config_file)
+        """Chargement automatique depuis le manager centralisé au démarrage."""
+        # On récupère la section "raster_settings" depuis le manager
+        data = self.app.config_manager.get_section("raster_settings")
+        
         if data:
+            # On applique les données à l'interface
             self.apply_settings_data(data)
             
 

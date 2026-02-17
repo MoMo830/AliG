@@ -71,6 +71,20 @@ def _set_icon_safe(window_instance, path):
     except Exception as e:
         print(f"Erreur application icône : {e}")
 
+def setup_app_id():
+    """
+    Force Windows à reconnaître l'application comme une entité distincte de Python.
+    Indispensable pour que l'icône de la barre des tâches corresponde à l'icône de la fenêtre.
+    """
+    if sys.platform.startswith('win'):
+        try:
+            import ctypes
+            # Identifiant unique : format 'editeur.logiciel.version'
+            myappid = 'alig_project.engraver_v1.0' 
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        except Exception as e:
+            print(f"Erreur d'initialisation de l'AppID Windows : {e}")
+
 def bind_minimize_sync(window, parent):
     """Synchronise la réduction et la restauration des deux fenêtres."""
     

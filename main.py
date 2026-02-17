@@ -18,6 +18,8 @@ import json
 import os
 import customtkinter as ctk
 from gui.main_window import LaserGeneratorApp
+from utils.gui_utils import setup_app_id
+from utils.config_manager import ConfigManager
 
 def load_user_theme():
     config_path = "alig_config.json" # Adaptez selon votre gestion de fichiers
@@ -28,10 +30,12 @@ def load_user_theme():
     return "Dark"
 
 def main():
+    setup_app_id()
     theme = load_user_theme()
     ctk.set_appearance_mode(theme) 
-    
-    app = LaserGeneratorApp()
+
+    config_manager = ConfigManager("alig_config.json")    
+    app = LaserGeneratorApp(config_manager=config_manager)
     app.mainloop()
 
 if __name__ == "__main__":
