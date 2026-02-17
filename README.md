@@ -79,13 +79,9 @@ If you just want to use the software without installing Python, follow these ste
 
 </details>
 
-## Known issues :
-* On low resolution screens or high Windows scaling settings (150%+), some UI elements may be cut off or overlap.
 
 ## Roadmap :
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
-* **UI/UX Overhaul:** Rationalizing the interface to move away from "slider-heavy" menus towards a more intuitive workflow.
-* **True G-code Simulation:** Change the simulation architecture to a G-code-parsing backend for 100% hardware-software fidelity.
 * Option to split big Gcode files?
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
 * **Variable Raster Direction:** Toggle between Horizontal (X-axis) and Vertical (Y-axis) engraving. This allows optimizing for machine rigidity or following wood grain patterns.
