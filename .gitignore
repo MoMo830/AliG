@@ -1,0 +1,20 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# --- Build / Distribution ---
+dist/
+build/
+*.spec
+*.exe
+
+# --- IDE (VS Code / PyCharm) ---
+.vscode/
+.idea/
+
+# --- Local Config / Logs ---
+*.log
+alig_config.json
