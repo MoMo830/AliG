@@ -8,22 +8,45 @@ class ConfigManager:
 
     def load_all(self):
         if os.path.exists(self.file_path):
-            with open(self.file_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {} # Retourne un dico vide si le fichier n'existe pas
+            try:
+                with open(self.file_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Erreur lecture config : {e}")
+        return {}
+
+    # --- NOUVELLES MÉTHODES DE VALIDATION ---
+
+    @staticmethod
+    def is_valid_file(path):
+        """Vérifie si le chemin est un fichier existant et non un dossier."""
+        return bool(path and isinstance(path, str) and os.path.isfile(path))
+
+    @staticmethod
+    def validate_image_path(path):
+        """
+        Vérifie si le chemin est un fichier image valide.
+        Retourne le chemin si OK, sinon une chaîne vide.
+        """
+        if not ConfigManager.is_valid_file(path):
+            return ""
+            
+        extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.webp']
+        ext = os.path.splitext(path)[1].lower()
+        
+        return path if ext in extensions else ""
+
+    # ---------------------------------------
 
     def get_section(self, section_name):
-        """Retourne une sous-section (ex: 'machine_settings' ou 'raster_mode')"""
         return self.full_config.get(section_name, {})
 
     def set_section(self, section_name, data):
-        """Met à jour une section sans toucher aux autres"""
         if section_name not in self.full_config:
             self.full_config[section_name] = {}
         self.full_config[section_name].update(data)
 
     def save(self):
-        """Écrit tout le dictionnaire dans le fichier JSON unique"""
         try:
             with open(self.file_path, 'w', encoding='utf-8') as f:
                 json.dump(self.full_config, f, indent=4)

@@ -951,9 +951,12 @@ class RasterView(ctk.CTkFrame):
         # 3. ÉTATS DES WIDGETS ET COULEURS (Les cas particuliers)
         
         # Gestion de l'image d'entrée
-        self.input_image_path = data.get("input_path", "")
-        if self.input_image_path and os.path.exists(self.input_image_path):
-            self._update_button_style(self.btn_input, os.path.basename(self.input_image_path).upper(), True)
+        raw_path = data.get("input_path", "")
+        self.input_image_path = self.app.config_manager.validate_image_path(raw_path)
+
+        if self.input_image_path:
+            file_name = os.path.basename(self.input_image_path).upper()
+            self._update_button_style(self.btn_input, file_name, True)
         else:
             self._update_button_style(self.btn_input, "SELECT IMAGE", False)
 
