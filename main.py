@@ -21,20 +21,18 @@ from gui.main_window import LaserGeneratorApp
 from utils.gui_utils import setup_app_id
 from utils.config_manager import ConfigManager
 
-def load_user_theme():
-    config_path = "alig_config.json" # Adaptez selon votre gestion de fichiers
-    if os.path.exists(config_path):
-        with open(config_path, "r") as f:
-            data = json.load(f)
-            return data.get("theme", "Dark") # "Dark" par défaut
-    return "Dark"
 
 def main():
     setup_app_id()
-    theme = load_user_theme()
-    ctk.set_appearance_mode(theme) 
+    
+    config_manager = ConfigManager("alig_config.json")
+    
+    theme = config_manager.get_item("machine_settings", "theme", "System")
+    ctk.set_appearance_mode(theme)
+    
+    # On définit le thème de couleur (Blue, Green, etc. - optionnel)
+    ctk.set_default_color_theme("blue")
 
-    config_manager = ConfigManager("alig_config.json")    
     app = LaserGeneratorApp(config_manager=config_manager)
     app.mainloop()
 

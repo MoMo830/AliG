@@ -7,7 +7,9 @@
         "m67_delay": 11.5,
         "premove": 10.0,
         "custom_header": "",
-        "custom_footer": "M334"
+        "custom_footer": "M334",
+        "theme": "Dark",
+        "language": "English"
     },
     "raster_settings": {
         "width": 30.0,
@@ -33,8 +35,8 @@
         "origin_mode": "Lower-Left",
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
-        "include_frame": false,
-        "include_pointer": false,
+        "include_frame": true,
+        "include_pointer": true,
         "frame_power": "0",
         "custom_pause_cmd": "M0",
         "framing_ratio": "20%",
@@ -42,6 +44,7 @@
         "invert_relief": false
     },
     "window_settings": {
-        "is_maximized": true
+        "is_maximized": true,
+        "geometry": "1300x900+50+50"
     }
 }

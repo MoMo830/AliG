@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from core.translations import TRANSLATIONS
 
 class DashboardView(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -6,6 +7,9 @@ class DashboardView(ctk.CTkFrame):
         # controller = l'instance de LaserGeneratorApp
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
+
+        lang = self.controller.config_manager.get_item("machine_settings", "language", "English")
+        self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"])["dashboard"]
 
         # --- EN-TÊTE (Header) ---
         self.header_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -37,16 +41,16 @@ class DashboardView(ctk.CTkFrame):
         # 1. CARTE RASTER (Le mode actuel)
         self.create_mode_card(
             row=0, col=0,
-            title="IMAGE RASTERING",
-            description="Grayscale Photo Engraving.",
+            title=self.texts["raster_title"],
+            description=self.texts["raster_desc"],
             callback=self.controller.show_raster_mode,
             icon_char="📷" 
         )
 
         self.create_mode_card(
             row=1, col=0,
-            title="GCODE CHECK",
-            description="Use the Gcode parser to check any 2D GcodeFile.\n(Coming Soon)",
+            title=self.texts["parser_title"],
+            description=self.texts["parser_desc"],
             callback=None,
             state="disabled",
             icon_char="📐"
@@ -61,15 +65,15 @@ class DashboardView(ctk.CTkFrame):
         )
         self.create_mode_card(
             row=0, col=1, # Par exemple sur la deuxième ligne
-            title="CALIBRATION",
-            description="Run tests for latency, speed and power to optimize your machine settings.",
-            callback=self.controller.show_calibration_mode, # <--- Sans les guillemets !
+            title=self.texts["calibration_title"],
+            description=self.texts["calibration_desc"],
+            callback=self.controller.show_calibration_mode,
             icon_char="🔧"
         )
         self.create_mode_card(
             row=1, col=1,
-            title="MACHINE SETTINGS",
-            description="Configure G-Code commands, hardware offsets, and global laser limits.",
+            title=self.texts["settings_title"],
+            description=self.texts["settings_desc"],
             callback=self.controller.show_settings_mode,
             icon_char="⚙️"
         )
@@ -143,12 +147,16 @@ class DashboardView(ctk.CTkFrame):
                 
                 card.configure(fg_color=base_color, border_color=border_color)
 
+            def handle_click(event):
+                if callback:
+                    callback()
             # Liaison des événements de survol à TOUS les widgets de la carte
             # Comme ça, passer de l'un à l'autre ne déclenche pas de "Leave" non géré
             for widget in clickable_widgets:
                 widget.bind("<Enter>", on_enter)
                 widget.bind("<Leave>", on_leave)
-                widget.bind("<Button-1>", lambda event, cb=callback: cb())
+                widget.bind("<Button-1>", handle_click)
+
         
         else:
             # État désactivé (Coming Soon)

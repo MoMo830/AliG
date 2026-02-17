@@ -27,17 +27,18 @@ class SimulationView(ctk.CTkFrame):
         # 1. Stockage
         self.engine = engine
         self.payload = payload
-        self.stats = payload['metadata']
+        #self.stats = payload['metadata']
         self.matrix = payload['matrix']
-        self.premove = payload['params']['premove']
-        self.ctrl_max = float(self.payload['params'].get('ctrl_max', 255))
+        #self.premove = payload['params']['premove']
+
+        self.ctrl_max = float(self.payload.get('params', {}).get('ctrl_max', 255))  
         
         self.confirmed = False
         self.final_gcode = ""
         self.framing_gcode = ""
 
         # --- INITIALISATION DU PARSER ---
-        self.parser = GCodeParser(self.stats)
+        self.parser = GCodeParser(self.payload)
 
         # 2. États
         self.sim_running = False
@@ -65,7 +66,7 @@ class SimulationView(ctk.CTkFrame):
         self.grid_rowconfigure(0, weight=1)
 
         # 4. Construction des panneaux
-        self._build_left_panel(self.stats)
+        self._build_left_panel(self.payload)
         self._build_right_panel()
 
 
@@ -257,7 +258,7 @@ class SimulationView(ctk.CTkFrame):
 
 
 
-    def _build_left_panel(self, stats):
+    def _build_left_panel(self, payload):
         self.left_panel = ctk.CTkFrame(self, corner_radius=0, width=200)
         self.left_panel.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
         self.left_panel.grid_propagate(False) 
@@ -274,7 +275,7 @@ class SimulationView(ctk.CTkFrame):
             "pixel_size_x", "pixel_size_y"
         ]
         
-        for label, val in stats.items():
+        for label, val in payload.items():
             if label not in excluded:
                 row = ctk.CTkFrame(info_scroll, fg_color="transparent")
                 row.pack(fill="x", pady=2)
@@ -283,7 +284,7 @@ class SimulationView(ctk.CTkFrame):
                 ctk.CTkLabel(row, text=str(val), font=("Arial", 10), anchor="e", wraplength=100).pack(side="right", fill="x", expand=True)
 
         # Temps formaté
-        t_sec = stats.get("est_sec", 0)
+        t_sec = payload.get("est_sec", 0)
         time_str = f"{int(t_sec // 60)}:{int(t_sec % 60):02d}"
 
         time_frame = ctk.CTkFrame(info_scroll, fg_color="transparent")
@@ -292,7 +293,7 @@ class SimulationView(ctk.CTkFrame):
         ctk.CTkLabel(time_frame, text=time_str, font=("Arial", 10), anchor="e").pack(side="right", fill="x", expand=True)
 
         # Échelle de Puissance
-        p_min, p_max = float(stats.get("min_power", 0)), float(stats.get("max_power", 100))
+        p_min, p_max = float(payload.get("min_power", 0)), float(payload.get("max_power", 100))
         power_scale_frame = ctk.CTkFrame(info_scroll, fg_color="transparent")
         power_scale_frame.pack(fill="x", pady=10, padx=5)
         ctk.CTkLabel(power_scale_frame, text="Power Range (0-100%)", font=("Arial", 10, "bold")).pack(anchor="w")
@@ -320,7 +321,7 @@ class SimulationView(ctk.CTkFrame):
         fname_frame = ctk.CTkFrame(info_scroll, fg_color="transparent")
         fname_frame.pack(fill="x", pady=2)
         ctk.CTkLabel(fname_frame, text="File:", font=("Arial", 10, "bold"), width=40, anchor="w").pack(side="left")
-        ctk.CTkLabel(fname_frame, text=stats.get("file_name", "N/A"), font=("Arial", 10), anchor="e", wraplength=120).pack(side="right", fill="x", expand=True)
+        ctk.CTkLabel(fname_frame, text=payload.get("file_name", "N/A"), font=("Arial", 10), anchor="e", wraplength=120).pack(side="right", fill="x", expand=True)
 
         #Gcode visualizer
         ctk.CTkLabel(self.left_panel, text="LIVE G-CODE", font=("Arial", 11, "bold")).pack(pady=(10, 0))
@@ -340,12 +341,22 @@ class SimulationView(ctk.CTkFrame):
         ctk.CTkLabel(self.options_group_frame, text="Active Options", font=("Arial", 11, "bold")).pack(pady=(8, 2))
         badge_cont = ctk.CTkFrame(self.options_group_frame, fg_color="transparent")
         badge_cont.pack(fill="x", padx=10, pady=(0, 10))
-        
-        for key, text in [("is_pointing", "POINTING"), ("is_framing", "FRAMING")]:
-            active = stats.get(key, False)
-            color, bg = ("#ff9f43", "#3d2b1f") if active else ("#666666", "#282828")
-            ctk.CTkLabel(badge_cont, text=text, font=("Arial", 9, "bold"), text_color=color, fg_color=bg, corner_radius=5).pack(side="left", expand=True, fill="x", padx=2)
 
+        for key, text in [("is_pointing", "POINTING"), ("is_framing", "FRAMING")]:
+            # --- MODIFICATION ICI ---
+            # On va chercher dans le sous-dictionnaire 'framing'
+            # Si 'framing' n'existe pas, on prend un dictionnaire vide {} par sécurité
+            active = payload.get('framing', {}).get(key, False)
+            
+            color, bg = ("#ff9f43", "#3d2b1f") if active else ("#666666", "#282828")
+            ctk.CTkLabel(
+                badge_cont, 
+                text=text, 
+                font=("Arial", 9, "bold"), 
+                text_color=color, 
+                fg_color=bg, 
+                corner_radius=5
+            ).pack(side="left", expand=True, fill="x", padx=2)
         # Actions (Générer / Annuler)
         btn_act = ctk.CTkFrame(self.left_panel, fg_color="transparent")
         btn_act.pack(fill="x", side="bottom", pady=15)
@@ -640,10 +651,13 @@ class SimulationView(ctk.CTkFrame):
 
 
     def animate_loop(self):
+        # 1. Sécurité immédiate : on vérifie si le widget existe encore
         if not self.winfo_exists():
             return
+
+        # 2. Si on a demandé l'arrêt ou si c'est fini
         if not self.sim_running or self.current_point_idx >= len(self.points_list):
-            if self.current_point_idx >= len(self.points_list):
+            if self.sim_running and self.current_point_idx >= len(self.points_list):
                 self.skip_to_end()
             return
 
@@ -691,8 +705,13 @@ class SimulationView(ctk.CTkFrame):
             # On met à jour l'affichage une seule fois pour tout le batch
             self.sync_sim_to_index(target_idx)
 
-        # Prochaine frame
-        self.animation_job = self.after(16, self.animate_loop)
+        try:
+            if self.winfo_exists() and self.sim_running:
+                self.animation_job = self.after(16, self.animate_loop)
+        except:
+            # Si l'app est fermée pile à ce moment, on ignore l'erreur proprement
+            self.sim_running = False
+            self.animation_job = None
 
     def sync_sim_to_index(self, target_idx):
         """Met à jour l'UI, le temps et le laser pour un index donné."""
@@ -788,20 +807,32 @@ class SimulationView(ctk.CTkFrame):
                 
         except Exception as e:
             print(f"GCode selection error: {e}")
+            
     def skip_to_end(self):
+        # Sécurité : si la fenêtre est fermée, on sort
+        if not self.winfo_exists():
+            return
+
         self.sim_running = False
         if self.animation_job: 
-            self.after_cancel(self.animation_job)
+            try:
+                self.after_cancel(self.animation_job)
+            except:
+                pass
         self.animation_job = None
         
+        # --- RÉCUPÉRATION DES DIMENSIONS ---
+        # Au lieu de self.rect_h qui n'existe pas, on prend la taille de l'image actuelle
+        h, w = self.display_data.shape
+        
         # 1. Utiliser une feuille BLANCHE (255)
-        final_view = np.full((self.rect_h, self.rect_w), 255, dtype=np.uint8)
+        import numpy as np
+        final_view = np.full((h, w), 255, dtype=np.uint8)
         
         if len(self.points_list) > 0:
             temp_prev_coords = None 
             
             for i in range(len(self.points_list)):
-                # MODIFICATION : On déballe les 4 valeurs (x, y, pwr, line)
                 mx, my, pwr, _ = self.points_list[i]
                 
                 if pwr > 0:
@@ -810,43 +841,40 @@ class SimulationView(ctk.CTkFrame):
                     if temp_prev_coords:
                         old_x, old_y = temp_prev_coords
                         self._draw_line_on_matrix(
-                            final_view,
-                            old_x, old_y,
-                            ix, iy,
-                            pwr,
+                            final_view, old_x, old_y,
+                            ix, iy, pwr,
                             thickness=self.laser_width_px
                         )
                     else:
-                        # Premier point allumé isolé
-                        ratio = max(0.0, min(1.0, float(pwr) / self.ctrl_max))
-                        color = int(255 * (1.0 - ratio))
                         # Sécurité pour ne pas dessiner hors matrice
-                        if 0 <= iy < self.rect_h and 0 <= ix < self.rect_w:
+                        if 0 <= iy < h and 0 <= ix < w:
+                            ratio = max(0.0, min(1.0, float(pwr) / self.ctrl_max))
+                            color = int(255 * (1.0 - ratio))
                             final_view[iy, ix] = color
                         
                     temp_prev_coords = (ix, iy)
                 else:
-                    # Laser éteint : on coupe la continuité du trait
                     temp_prev_coords = None
 
         self.display_data = final_view
         self.current_point_idx = len(self.points_list)
         
-        # Mise à jour UI
-        t_str = self._format_seconds_to_hhmmss(self.total_sim_seconds)
-        self.time_label.configure(text=f"Time: {t_str} / {t_str}")
-        self.progress_bar.set(1.0)
-        self.progress_label.configure(text="Progress: 100%")
-        
-        if self.points_list:
-            # Positionner le laser bleu sur le DERNIER point (index -1)
-            last_mx, last_my, _, last_line = self.points_list[-1]
-            self.curr_x, self.curr_y = self.machine_to_screen(last_mx, last_my)
-            # Optionnel : Surligner la dernière ligne du G-code
-            self.update_gcode_highlight(len(self.points_list) - 1)
+        # Mise à jour UI (on vérifie l'existence des widgets avant)
+        try:
+            t_str = self._format_seconds_to_hhmmss(self.total_sim_seconds)
+            self.time_label.configure(text=f"Time: {t_str} / {t_str}")
+            self.progress_bar.set(1.0)
+            self.progress_label.configure(text="Progress: 100%")
             
-        self.update_graphics()
-        self.btn_play_pause.configure(text="▶", fg_color="#27ae60")
+            if self.points_list:
+                last_mx, last_my, _, last_line = self.points_list[-1]
+                self.curr_x, self.curr_y = self.machine_to_screen(last_mx, last_my)
+                self.update_gcode_highlight(len(self.points_list) - 1)
+                
+            self.update_graphics()
+            self.btn_play_pause.configure(text="▶", fg_color="#27ae60")
+        except:
+            pass # L'UI est peut-être déjà en train de se fermer
 
     def _draw_line_on_matrix(self, matrix, x0, y0, x1, y1, pwr, thickness=1):
         #print(f"DEBUG DRAW: pwr_brute={pwr}, ctrl_max={self.ctrl_max}")
@@ -949,16 +977,16 @@ class SimulationView(ctk.CTkFrame):
 
     
 
-    def draw_simulation(self, stats):
+    def draw_simulation(self, payload):
         try:
             #self.update_idletasks()
 
-            w_mm = max(1, stats.get("real_w", 100))
-            h_mm = max(1, stats.get("real_h", 100))
+            w_mm = max(1, payload.get("real_w", 100))
+            h_mm = max(1, payload.get("real_h", 100))
 
             # --- 1. MATRICE IMAGE DE RÉFÉRENCE (Pour la loupe) ---
-            p_min = float(stats.get("min_power", 0))
-            p_max = float(stats.get("max_power", 100))
+            p_min = float(payload.get("min_power", 0))
+            p_max = float(payload.get("max_power", 100))
 
             # On crée un rendu visuel de la matrice originale
             render = np.clip(
@@ -1134,7 +1162,7 @@ class SimulationView(ctk.CTkFrame):
     def estimate_file_size(self, matrix):
         if matrix is None: return "0 KB"
         h, w = matrix.shape
-        use_s = self.stats.get("use_s_mode", False)
+        use_s = self.payload.get("use_s_mode", False)
         b_per_l = 22 if use_s else 28
         n_lines = 15 + (h * 2) # Header + G0/S0 par ligne
         for y in range(h):

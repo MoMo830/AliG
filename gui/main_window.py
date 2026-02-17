@@ -2,6 +2,7 @@
 import os
 import customtkinter as ctk
 from tkinter import messagebox
+from core.translations import TRANSLATIONS
 
 class LaserGeneratorApp(ctk.CTk):
     def __init__(self, config_manager):
@@ -59,17 +60,26 @@ class LaserGeneratorApp(ctk.CTk):
             self.after(100, lambda: self.state('zoomed'))
 
     def save_window_config(self):
-        """Récupère l'état actuel et le transmet au manager pour sauvegarde."""
-        is_zoomed = (self.state() == "zoomed")
-        
-        window_data = {"is_maximized": is_zoomed}
-        
-        # On ne stocke la géométrie précise que si on n'est pas en plein écran
-        if not is_zoomed and self.state() == "normal":
-            window_data["geometry"] = self.geometry()
+            """Récupère l'état actuel et le transmet au manager pour sauvegarde."""
+            # On vérifie l'état 'zoomed' (Windows) ou l'attribut zoomed
+            is_zoomed = self.state() == "zoomed"
+            
+            window_data = {"is_maximized": is_zoomed}
+            
+            if is_zoomed:
+                # SI AGRANDI : On ne veut pas sauvegarder la géométrie plein écran.
+                # On essaie de récupérer la dernière taille "normale" connue.
+                # 'wm_geometry' sans arguments renvoie la géométrie actuelle,
+                # mais beaucoup de managers de fenêtres stockent la géométrie pre-zoom.
+                # Si ton config_manager a déjà une géométrie, on la garde.
+                old_geom = self.config_manager.get_item("window_settings", "geometry", "1300x900+50+50")
+                window_data["geometry"] = old_geom
+            else:
+                # SI NORMAL : On sauvegarde la géométrie actuelle
+                window_data["geometry"] = self.geometry()
 
-        self.config_manager.set_section("window_settings", window_data)
-        self.config_manager.save()
+            self.config_manager.set_section("window_settings", window_data)
+            self.config_manager.save()
 
     def _validate_geometry(self, geom_string):
         """Empêche la fenêtre de s'ouvrir hors des limites de l'écran."""
@@ -126,7 +136,14 @@ class LaserGeneratorApp(ctk.CTk):
 
     def show_settings_mode(self):
         self._clear_container()
-        self.view_title.configure(text="Machine Settings")
+        
+        # Récupérer la langue actuelle
+        lang = self.config_manager.get_item("machine_settings", "language", "English")
+        # Aller chercher le titre traduit (celui que nous avons mis dans core/translations.py)
+        title_text = TRANSLATIONS.get(lang, TRANSLATIONS["English"])["settings"]["title"]
+        
+        self.view_title.configure(text=title_text)
+        
         from gui.views.settings_view import SettingsView 
         self.current_view = SettingsView(self.container, self)
         self.current_view.pack(expand=True, fill="both")
@@ -152,16 +169,16 @@ class LaserGeneratorApp(ctk.CTk):
         self.top_bar = ctk.CTkFrame(self, height=50, corner_radius=0)
         self.top_bar.pack(side="top", fill="x")
 
-        # Label Logo
-        self.logo_label = ctk.CTkLabel(
-            self.top_bar, text="A.L.I.G.", 
-            font=("Arial", 18, "bold"), text_color="#e67e22"
-        )
-        self.logo_label.pack(side="left", padx=20)
+        # # Label Logo
+        # self.logo_label = ctk.CTkLabel(
+        #     self.top_bar, text="A.L.I.G.", 
+        #     font=("Arial", 18, "bold"), text_color="#e67e22"
+        # )
+        # self.logo_label.pack(side="left", padx=20)
 
         # Bouton Home
         self.home_btn = ctk.CTkButton(
-            self.top_bar, text="🏠", width=40, fg_color="transparent", 
+            self.top_bar, text="🏠", width=50, fg_color="transparent", 
             hover_color=["#DCDCDC", "#323232"], command=self.show_dashboard
         )
         self.home_btn.pack(side="left", padx=5)
@@ -177,19 +194,24 @@ class LaserGeneratorApp(ctk.CTk):
         )
         self.settings_btn.pack(side="right", padx=10)
 
-    # --- Cycle de vie ---
 
     def on_closing(self):
-        """Gère la fermeture propre de l'application."""
+        """Gère la fermeture propre."""
         try:
-            # Sauvegarde de la fenêtre
+            # 1. SAUVEGARDER D'ABORD (pendant que la fenêtre est encore active)
             self.save_window_config()
             
-            # Nettoyage des vues (timers, ports série ouverts, etc.)
+            # 2. Ensuite on cache et on nettoie
+            self.withdraw()
             self._clear_container()
             
             self.quit()
-            self.destroy()
+            self.after(100, self.destroy)
         except Exception as e:
             print(f"Error during closing: {e}")
             self.destroy()
+
+    def _final_destroy(self):
+        """Action finale de destruction."""
+        self.quit()
+        self.destroy()

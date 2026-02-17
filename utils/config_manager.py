@@ -15,26 +15,18 @@ class ConfigManager:
                 print(f"Erreur lecture config : {e}")
         return {}
 
-    # --- NOUVELLES MÉTHODES DE VALIDATION ---
+    # --- NOUVELLES MÉTHODES RÉCLAMÉES ---
 
-    @staticmethod
-    def is_valid_file(path):
-        """Vérifie si le chemin est un fichier existant et non un dossier."""
-        return bool(path and isinstance(path, str) and os.path.isfile(path))
+    def get_item(self, section, key, default=None):
+        """Récupère une valeur précise dans une section."""
+        section_data = self.get_section(section)
+        return section_data.get(key, default)
 
-    @staticmethod
-    def validate_image_path(path):
-        """
-        Vérifie si le chemin est un fichier image valide.
-        Retourne le chemin si OK, sinon une chaîne vide.
-        """
-        if not ConfigManager.is_valid_file(path):
-            return ""
-            
-        extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.webp']
-        ext = os.path.splitext(path)[1].lower()
-        
-        return path if ext in extensions else ""
+    def set_item(self, section, key, value):
+        """Définit une valeur unique dans une section sans écraser le reste."""
+        if section not in self.full_config:
+            self.full_config[section] = {}
+        self.full_config[section][key] = value
 
     # ---------------------------------------
 
@@ -44,6 +36,7 @@ class ConfigManager:
     def set_section(self, section_name, data):
         if section_name not in self.full_config:
             self.full_config[section_name] = {}
+        # On utilise update pour fusionner les dictionnaires existants
         self.full_config[section_name].update(data)
 
     def save(self):
@@ -54,3 +47,16 @@ class ConfigManager:
         except Exception as e:
             print(f"Erreur sauvegarde : {e}")
             return False
+
+    # --- MÉTHODES DE VALIDATION ---
+    @staticmethod
+    def is_valid_file(path):
+        return bool(path and isinstance(path, str) and os.path.isfile(path))
+
+    @staticmethod
+    def validate_image_path(path):
+        if not ConfigManager.is_valid_file(path):
+            return ""
+        extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.webp']
+        ext = os.path.splitext(path)[1].lower()
+        return path if ext in extensions else ""
