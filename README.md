@@ -41,8 +41,7 @@ If you just want to use the software without installing Python, follow these ste
 5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
 
 ## Last version change 
-### (18/02/2026)
-* **v0.9781b** :
+### (18/02/2026) **v0.9781b** :
 - **Real G-Code Parser Simulation**: Re-engineered the simulation engine to process actual G-Code commands for 100% fidelity between preview and final laser output.
 - **Interactive Dashboard**: Added a new landing page featuring usage statistics (total lines, G-Code generated).
 - **Project Thumbnails**: Implemented automatic generation of visual previews for every processed G-Code, stored in an optimized thumbnail gallery.
@@ -155,7 +154,7 @@ This software is intended to be used on a CNC machine. I developped it as a desi
 * **Z-Axis & Focus:** Please note that **A.L.I.G. does not command any Z-axis movement.** * You **must** manually set your laser focus and your Z-zero position prior to starting the job. 
     * Ensure your laser is at the optimal height for your material, as the generated G-code only manages X, Y, and Q/S (power) parameters.
       
-* **PWM Frequency:** Depending on your motion controller and laser driver, you should experiment to find the optimal PWM frequency. For instance, I originally used 20 kHz but struggled to achieve a full range of grayscale. Lowering the frequency to **5000 Hz** significantly improved the laser's response and the subtlety of the gradients.
+
 
 * **Dedicated Mach4 Profile:** It is highly recommended to create a **separate profile** in Mach4 specifically for laser engraving. 
     * This prevents laser settings (like PWM mapping and Spindle-to-None configuration) from interfering with your standard milling/routing setups.

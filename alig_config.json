@@ -8,7 +8,7 @@
         "premove": 10.0,
         "custom_header": "",
         "custom_footer": "M334",
-        "theme": "Dark",
+        "theme": "System",
         "language": "Fran\u00e7ais"
     },
     "raster_settings": {
@@ -28,7 +28,7 @@
         "gray_steps": 256,
         "m67_e_num": 0,
         "ctrl_max": 100,
-        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/Original-image-512x512-pixels.png",
+        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/IMG_3901.jpg",
         "output_dir": "C:/Users/momof/SynologyDrive/Python/CNC",
         "custom_header": "",
         "custom_footer": "",
@@ -48,9 +48,9 @@
         "geometry": "1300x900+50+50"
     },
     "stats": {
-        "total_lines": 776559,
-        "total_gcodes": 12,
-        "total_time_seconds": 1453.8892280006567,
-        "last_project_time": 241.28999200018944
+        "total_lines": 909541,
+        "total_gcodes": 14,
+        "total_time_seconds": 2094.589368001104,
+        "last_project_time": 320.350070000281
     }
 }

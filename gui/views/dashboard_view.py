@@ -12,27 +12,17 @@ class DashboardView(ctk.CTkFrame):
         lang = self.controller.config_manager.get_item("machine_settings", "language", "English")
         self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"])["dashboard"]
 
-        # --- EN-TÊTE COMPACT ---
-        self.header_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.header_frame.pack(pady=(20, 15))
-
-        self.title_label = ctk.CTkLabel(
-            self.header_frame, 
-            text="A.L.I.G.", 
-            font=("Arial", 32, "bold"),
-            text_color=["#3B8ED0", "#1F6AA5"]
-        )
-        self.title_label.pack()
-
         # --- CONTENEUR PRINCIPAL (Grille 2 Colonnes) ---
+        # On utilise pack ici pour que le conteneur prenne TOUT l'espace de DashboardView
         self.main_grid = ctk.CTkFrame(self, fg_color="transparent")
-        self.main_grid.pack(expand=True, fill="both", padx=30, pady=10)
+        self.main_grid.pack(expand=True, fill="both", padx=30, pady=20)
         
         self.main_grid.grid_columnconfigure(0, weight=0)
         self.main_grid.grid_columnconfigure(1, weight=1)
         self.main_grid.grid_rowconfigure(0, weight=1)
 
         # --- COLONNE GAUCHE : MODES DÉFILANTS ---
+        # Elle prend maintenant toute la hauteur grâce à rowconfigure(0, weight=1)
         self.modes_container = ctk.CTkScrollableFrame(
             self.main_grid, 
             fg_color="transparent",
@@ -45,7 +35,8 @@ class DashboardView(ctk.CTkFrame):
 
         modes_list = [
             (self.texts["raster_title"], self.texts["raster_desc"], self.controller.show_raster_mode, "📷", "normal"),
-            ("VECTOR INFILL", "Fill vector paths with G-Code patterns.", None, "📐", "disabled"),
+            (self.texts["dithering_title"], self.texts["dithering_desc"], None, "🏁", "normal"),
+            (self.texts["infill_title"], self.texts["infill_title"], None, "📐", "disabled"),
             (self.texts["parser_title"], self.texts["parser_desc"], None, "📐", "disabled"),
             (self.texts["calibration_title"], self.texts["calibration_desc"], self.controller.show_calibration_mode, "🔧", "normal"),
             (self.texts["settings_title"], self.texts["settings_desc"], self.controller.show_settings_mode, "⚙️", "normal"),
@@ -54,31 +45,36 @@ class DashboardView(ctk.CTkFrame):
         for i, m in enumerate(modes_list):
             self.create_mode_card(i, 0, m[0], m[1], m[2], m[3], m[4])
 
-        # --- COLONNE DROITE : THUMBNAILS & STATS ---
+        # --- COLONNE DROITE : TITRE + THUMBNAILS + STATS ---
         self.right_column = ctk.CTkFrame(self.main_grid, fg_color="transparent")
         self.right_column.grid(row=0, column=1, sticky="nsew")
-        self.right_column.grid_rowconfigure(0, weight=1) 
-        self.right_column.grid_rowconfigure(1, weight=0) 
+        self.right_column.grid_rowconfigure(1, weight=1) # Le scroll_thumbs prend l'espace restant
+
+        # 0. TITRE A.L.I.G. (Déplacé ici)
+        self.title_label = ctk.CTkLabel(
+            self.right_column, 
+            text="A.L.I.G.", 
+            font=("Arial", 38, "bold"),
+            text_color=["#3B8ED0", "#1F6AA5"],
+            anchor="center"
+        )
+        self.title_label.pack(fill="x", pady=(0, 20))
 
         # 1. Thumbnails Dynamiques
-        self.thumb_label = ctk.CTkLabel(self.right_column, text=self.texts.get("history", "No projects yet"), font=("Arial", 14, "bold"), text_color="gray")
+        self.thumb_label = ctk.CTkLabel(self.right_column, text=self.texts.get("history", "History"), font=("Arial", 14, "bold"), text_color="gray")
         self.thumb_label.pack(anchor="w", pady=(0, 5))
         
         self.scroll_thumbs = ctk.CTkScrollableFrame(
             self.right_column, 
             fg_color=["#EBEBEB", "#202020"], 
             corner_radius=10,
-            orientation="vertical", # <--- On change ici
-            height=400 # Augmentez un peu la hauteur si nécessaire
+            orientation="vertical"
         )
         self.scroll_thumbs.pack(fill="both", expand=True, pady=(0, 20))
-        # On configure les 5 colonnes pour qu'elles soient égales
-        # for i in range(5):
-        #     self.scroll_thumbs.grid_columnconfigure(i, weight=1)
         
         self.load_thumbnails() 
 
-        # 2. Statistiques Réelles
+        # 2. Statistiques Réelles (En bas)
         self.create_stats_card()
 
 

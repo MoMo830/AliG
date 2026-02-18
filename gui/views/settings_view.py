@@ -122,10 +122,10 @@ class SettingsView(ctk.CTkFrame):
         self.right_col.grid(row=0, column=1, sticky="nsew")
 
         self.create_section(self.right_col, self.texts["sec_appearance"])
-        self.create_dropdown_pair(self.current_sec, self.texts["label_theme"], THEMES, "appearance_mode")
-        self.create_dropdown_pair(self.current_sec, self.texts["label_lang"], list(TRANSLATIONS.keys()), "app_language")
 
-    # (Mettre ici tes méthodes utilitaires : create_section, create_simple_input, etc.)
+        self.create_segmented_pair(self.current_sec, self.texts["label_theme"], THEMES, "appearance_mode")
+        self.create_segmented_pair(self.current_sec, self.texts["label_lang"], list(TRANSLATIONS.keys()), "app_language")
+
     def create_section(self, container, title):
         self.current_sec = ctk.CTkFrame(container, fg_color=["#EBEBEB", "#2B2B2B"], border_width=1, border_color=["#DCE4EE", "#3E454A"])
         self.current_sec.pack(fill="x", pady=10, padx=5)
@@ -173,6 +173,22 @@ class SettingsView(ctk.CTkFrame):
         entry.bind("<Return>", lambda e: self._update_slider(key))
         entry.bind("<FocusOut>", lambda e: self._update_slider(key))
         self.controls[key] = {"slider": slider, "entry": entry, "precision": 2}
+
+    def create_segmented_pair(self, parent, label_text, options, attr_name):
+        frame = ctk.CTkFrame(parent, fg_color="transparent")
+        frame.pack(fill="x", pady=5, padx=10)
+        
+        ctk.CTkLabel(frame, text=label_text, font=("Arial", 11)).pack(side="left")
+        
+        # Remplacement de l'OptionMenu par le SegmentedButton
+        seg_button = ctk.CTkSegmentedButton(
+            frame, 
+            values=options, 
+            width=180, # Légèrement plus large pour accommoder le texte
+            command=self.mark_as_changed
+        )
+        seg_button.pack(side="right")
+        setattr(self, attr_name, seg_button)
 
     def _update_entry(self, val, key):
         # Pas besoin de mark_as_changed ici si loading est géré dans mark_as_changed

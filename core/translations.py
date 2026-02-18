@@ -27,6 +27,10 @@ TRANSLATIONS = {
         "dashboard": {
             "raster_title": "IMAGE RASTERING",
             "raster_desc": "Grayscale Photo Engraving.",
+            "dithering_title": "DITHERING MODE",
+            "dithering_desc": "Converts grayscale into black and white patterns (1-bit). Best for glass or metal engraving.",
+            "infill_title": "VECTOR INFILL",
+            "infill_desc": "Fill vector paths with G-Code patterns.",
             "calibration_title": "CALIBRATION",
             "calibration_desc": "Run tests for latency, speed and power to optimize your machine settings.",
             "parser_title": "GCODE CHECK",
@@ -69,6 +73,10 @@ TRANSLATIONS = {
         "dashboard": {
             "raster_title": "GRAVURE RASTER",
             "raster_desc": "Gravure de photos en niveaux de gris.",
+            "dithering_title": "DITHERING (TRAMAGE)",
+            "dithering_desc": "Convertit les nuances de gris en points noirs (1-bit). Idéal pour les gravures sur verre ou métal.",
+            "infill_title": "REMPLISSAGE VECTORIEL",
+            "infill_desc": "Remplit les tracés vectoriels avec des motifs de G-Code (hachurage).",
             "calibration_title": "CALIBRAGE",
             "calibration_desc": "Réglage des décalages et de la puissance.",
             "parser_title": "Vérificateur de GCODE",
