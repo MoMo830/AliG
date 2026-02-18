@@ -7,6 +7,7 @@ import os
 import sys
 from PIL import Image
 import datetime
+import customtkinter as ctk
 
 def get_app_paths():
     """Détermine le chemin de base et le chemin d'exécution."""
@@ -81,3 +82,48 @@ def save_dashboard_data(config_manager, matrix, gcode_content, estimated_time=0)
         print(f"Error saving dashboard data: {e}")
         return None
         
+
+
+def ask_confirmation(parent, message, action_callback, danger_color="#8b0000"):
+    """
+    Crée une fenêtre de confirmation modale réutilisable.
+    :param parent: La vue ou fenêtre parente (self)
+    :param message: Le texte de la question
+    :param action_callback: La fonction à exécuter si confirmé
+    :param danger_color: La couleur du bouton de confirmation
+    """
+    dialog = ctk.CTkToplevel(parent)
+    dialog.title("Confirmation")
+    
+    # Dimensions et centrage par rapport au parent
+    width, height = 300, 160
+    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
+    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
+    dialog.geometry(f"{width}x{height}+{x}+{y}")
+    
+    dialog.attributes("-topmost", True)
+    dialog.grab_set()  # Bloque l'interaction avec la fenêtre principale
+    dialog.resizable(False, False)
+
+    # Contenu
+    lbl_title = ctk.CTkLabel(dialog, text=message, font=("Arial", 14, "bold"))
+    lbl_title.pack(pady=(20, 5))
+    
+    lbl_subtitle = ctk.CTkLabel(dialog, text="Cette action est irréversible.", font=("Arial", 11), text_color="gray")
+    lbl_subtitle.pack(pady=(0, 20))
+    
+    btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+    btn_frame.pack(pady=10)
+    
+    # Boutons
+    btn_cancel = ctk.CTkButton(
+        btn_frame, text="Annuler", width=100, fg_color="gray", 
+        command=dialog.destroy
+    )
+    btn_cancel.pack(side="left", padx=10)
+    
+    btn_confirm = ctk.CTkButton(
+        btn_frame, text="Confirmer", width=100, fg_color=danger_color,
+        command=lambda: [action_callback(), dialog.destroy()]
+    )
+    btn_confirm.pack(side="left", padx=10)

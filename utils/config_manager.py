@@ -34,10 +34,7 @@ class ConfigManager:
         return self.full_config.get(section_name, {})
 
     def set_section(self, section_name, data):
-        if section_name not in self.full_config:
-            self.full_config[section_name] = {}
-        # On utilise update pour fusionner les dictionnaires existants
-        self.full_config[section_name].update(data)
+        self.full_config[section_name] = data
 
     def save(self):
         try:
@@ -46,6 +43,18 @@ class ConfigManager:
             return True
         except Exception as e:
             print(f"Erreur sauvegarde : {e}")
+            return False
+        
+    def reset_all(self):
+        """Vide totalement la configuration en mémoire et sur le disque."""
+        self.full_config = {}  # On vide la mémoire (crucial pour arrêter l'héritage)
+        try:
+            if os.path.exists(self.file_path):
+                os.remove(self.file_path)
+            # On recrée immédiatement un fichier vide propre pour éviter les erreurs de lecture
+            return self.save()
+        except Exception as e:
+            print(f"Erreur lors du reset physique : {e}")
             return False
 
     # --- MÉTHODES DE VALIDATION ---
@@ -60,3 +69,4 @@ class ConfigManager:
         extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.webp']
         ext = os.path.splitext(path)[1].lower()
         return path if ext in extensions else ""
+    

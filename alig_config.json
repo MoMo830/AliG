@@ -1,42 +1,30 @@
 {
-    "machine_settings": {
-        "cmd_mode": "M67 (Analog)",
-        "firing_mode": "M3/M5",
-        "m67_e_num": 0,
-        "ctrl_max": 100,
-        "m67_delay": 11.5,
-        "premove": 10.0,
-        "custom_header": "",
-        "custom_footer": "M334",
-        "theme": "System",
-        "language": "Fran\u00e7ais"
-    },
     "raster_settings": {
         "width": 30.0,
         "line_step": 0.1307,
         "dpi": 254,
         "custom_x": 0.0,
         "custom_y": 0.0,
-        "contrast": 0.16,
-        "gamma": 2.08,
-        "thermal": 1.68,
+        "contrast": 0.0,
+        "gamma": 1.0,
+        "thermal": 1.5,
         "feedrate": 3000,
         "premove": 10.0,
         "max_p": 40.0,
         "min_p": 10.0,
-        "m67_delay": 0.0,
+        "m67_delay": 11.5,
         "gray_steps": 256,
         "m67_e_num": 0,
         "ctrl_max": 100,
-        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/IMG_3901.jpg",
+        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/Original-image-512x512-pixels.png",
         "output_dir": "C:/Users/momof/SynologyDrive/Python/CNC",
         "custom_header": "",
         "custom_footer": "",
         "origin_mode": "Lower-Left",
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
-        "include_frame": true,
-        "include_pointer": true,
+        "include_frame": false,
+        "include_pointer": false,
         "frame_power": "0",
         "custom_pause_cmd": "M0",
         "framing_ratio": "20%",
@@ -46,11 +34,5 @@
     "window_settings": {
         "is_maximized": true,
         "geometry": "1300x900+50+50"
-    },
-    "stats": {
-        "total_lines": 909541,
-        "total_gcodes": 14,
-        "total_time_seconds": 2094.589368001104,
-        "last_project_time": 320.350070000281
     }
 }

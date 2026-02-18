@@ -36,7 +36,7 @@ class DashboardView(ctk.CTkFrame):
         modes_list = [
             (self.texts["raster_title"], self.texts["raster_desc"], self.controller.show_raster_mode, "📷", "normal"),
             (self.texts["dithering_title"], self.texts["dithering_desc"], None, "🏁", "normal"),
-            (self.texts["infill_title"], self.texts["infill_title"], None, "📐", "disabled"),
+            (self.texts["infill_title"], self.texts["infill_desc"], None, "📐", "disabled"),
             (self.texts["parser_title"], self.texts["parser_desc"], None, "📐", "disabled"),
             (self.texts["calibration_title"], self.texts["calibration_desc"], self.controller.show_calibration_mode, "🔧", "normal"),
             (self.texts["settings_title"], self.texts["settings_desc"], self.controller.show_settings_mode, "⚙️", "normal"),
@@ -116,7 +116,7 @@ class DashboardView(ctk.CTkFrame):
         stats_frame = ctk.CTkFrame(self.right_column, corner_radius=15, border_width=1, border_color=["#DCE4EE", "#3E454A"])
         stats_frame.pack(side="bottom", fill="x", pady=10)
         
-        title = ctk.CTkLabel(stats_frame, text="📊 Machine Statistics", font=("Arial", 15, "bold"))
+        title = ctk.CTkLabel(stats_frame, text=self.texts["machine_stats"], font=("Arial", 15, "bold"))
         title.pack(pady=10)
 
         grid_inner = ctk.CTkFrame(stats_frame, fg_color="transparent")
@@ -139,9 +139,9 @@ class DashboardView(ctk.CTkFrame):
             time_str = "< 1m"
 
         # 3. Affichage avec formatage
-        self.add_stat_item(grid_inner, 0, "Lines Generated", f"{int(total_l):,}")
-        self.add_stat_item(grid_inner, 1, "G-Codes Saved", str(total_g))
-        self.add_stat_item(grid_inner, 2, "Total Engraving Time", time_str)
+        self.add_stat_item(grid_inner, 0, self.texts["lines_generated"], f"{int(total_l):,}")
+        self.add_stat_item(grid_inner, 1, self.texts["gcode_saved"], str(total_g))
+        self.add_stat_item(grid_inner, 2, self.texts["total_engraving_time"], time_str)
 
     def add_stat_item(self, parent, col, label, value):
         f = ctk.CTkFrame(parent, fg_color="transparent")

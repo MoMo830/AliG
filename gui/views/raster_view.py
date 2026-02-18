@@ -28,17 +28,27 @@ from core.engine import (
 from core.config_manager import save_json_file, load_json_file
 from core.utils import get_app_paths
 from engine.gcode_engine import GCodeEngine
+from core.translations import TRANSLATIONS
 
 
 class RasterView(ctk.CTkFrame):
     def __init__(self, parent, app):
         super().__init__(parent)
+
         self.app = app
+        lang = self.app.config_manager.get_item("machine_settings", "language")
+
+        # Sécurité : si lang est None, vide ou n'est pas dans TRANSLATIONS
+        if not lang or lang not in TRANSLATIONS:
+            lang = "English" 
+
+        self.common = TRANSLATIONS[lang]["common"]
         self.version = self.app.version
         
         self.after_id = None
 
         self.engine = GCodeEngine()
+
 
         # --- 1. GESTION DES CHEMINS  ---
         self.base_path, self.application_path = get_app_paths()
@@ -98,10 +108,10 @@ class RasterView(ctk.CTkFrame):
 
         profile_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         profile_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
-        self.btn_load_prof = ctk.CTkButton(profile_frame, text="IMPORT PROFILE", width=140, height=28, fg_color="#444444", command=self.load_profile_from)
+        self.btn_load_prof = ctk.CTkButton(profile_frame, text=self.common["import_profile"], width=140, height=28, fg_color="#444444", command=self.load_profile_from)
         self.btn_load_prof.pack(side="left", expand=True, padx=(0, 2))
 
-        self.btn_save_prof = ctk.CTkButton(profile_frame, text="EXPORT PROFILE", width=140, height=28, fg_color="#444444", command=self.export_profile)
+        self.btn_save_prof = ctk.CTkButton(profile_frame, text=self.common["export_profile"], width=140, height=28, fg_color="#444444", command=self.export_profile)
         self.btn_save_prof.pack(side="right", expand=True, padx=(2, 0))
         # --- ONGLETS  ---
         self.tabview = ctk.CTkTabview(self.sidebar)
@@ -112,7 +122,7 @@ class RasterView(ctk.CTkFrame):
         # --- PIED DE PAGE SIDEBAR (A FAIRE EN PREMIER POUR LE BAS) ---
         self.btn_gen = ctk.CTkButton(
             self.sidebar, 
-            text="GENERATE",
+            text=self.common["generate_gcode"],
             fg_color="#1f538d",
             hover_color="#2a6dbd",
             height=50,
@@ -122,10 +132,16 @@ class RasterView(ctk.CTkFrame):
         self.btn_gen.grid(row=3, column=0, sticky="ew", padx=20, pady=(5,10))
 
         # --- 4. CONFIGURATION DU CONTENU ---
-        self.tabview.add("Geometry")
-        self.tabview.add("Image")
-        self.tabview.add("Laser")
-        self.tabview.add("G-Code") 
+        self.tab_geom_name = self.common.get("geometry", "Geometry")
+        self.tab_img_name  = self.common.get("image", "Image")
+        self.tab_laser_name = self.common.get("laser", "Laser")
+        self.tab_gcode_name = self.common.get("gcode", "G-Code")
+
+        # 2. On ajoute les onglets (SANS le paramètre 'text=')
+        self.tabview.add(self.tab_geom_name)
+        self.tabview.add(self.tab_img_name)
+        self.tabview.add(self.tab_laser_name)
+        self.tabview.add(self.tab_gcode_name)
 
         self._setup_tabs_content()  
 
@@ -240,7 +256,7 @@ class RasterView(ctk.CTkFrame):
 
 
         # --- TAB 1: GEOMETRY ---
-        t_geo = prepare_tab("Geometry")
+        t_geo = prepare_tab(self.tab_geom_name)
         self.create_input_pair(t_geo, "Target Width (mm)", 5, 400, 30.0, "width")
         
         force_w_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
@@ -260,7 +276,8 @@ class RasterView(ctk.CTkFrame):
         self.create_simple_input(self.custom_offset_frame, "Custom Offset Y (mm)", 0.0, "custom_y")
 
                 # --- TAB 2: IMAGE ---
-        t_img = prepare_tab("Image")
+        t_img = prepare_tab(self.tab_img_name)
+
         self.create_input_pair(t_img, "Contrast (-1.0 to 1.0)", -1.0, 1.0, 0.0, "contrast")
         self.create_input_pair(t_img, "Gamma Correction", 0.1, 6.0, 1.0, "gamma")
         self.create_input_pair(t_img, "Thermal Correction", 0.1, 3.0, 1.5, "thermal")
@@ -273,7 +290,7 @@ class RasterView(ctk.CTkFrame):
         self.switch_invert.pack(side="right")
 
         # --- TAB 3: LASER ---
-        t_laser = prepare_tab("Laser")
+        t_laser = prepare_tab(self.tab_laser_name)
         self.create_input_pair(t_laser, "Feedrate (F)", 500, 20000, 3000, "feedrate", is_int=True)
         self.create_input_pair(t_laser, "Overscan (mm)", 0, 50, 10.0, "premove")
         
@@ -292,7 +309,7 @@ class RasterView(ctk.CTkFrame):
         self.create_input_pair(t_laser, "Grayscale Steps", 2, 256, 256, "gray_steps", is_int=True)
 
         # --- TAB 4: G-CODE ---
-        t_gc = prepare_tab("G-Code")
+        t_gc = prepare_tab(self.tab_gcode_name)
         
         # Initialisation des variables de contrôle
         self.origin_pointer_var = tk.BooleanVar(value=False)
@@ -636,6 +653,12 @@ class RasterView(ctk.CTkFrame):
 
 
     def process_logic(self):
+        if not self.input_image_path:
+            return None, 0, 0, 0, 0, 0
+        if not self.input_image_path or not os.path.isfile(self.input_image_path):
+            print(f"DEBUG: Chemin invalide détecté -> {self.input_image_path}")
+            # On retourne des valeurs vides pour que l'interface ne crash pas
+            return None, 0, 0, 0, 0, 0
         # 1. On prépare les réglages dans un dictionnaire
         settings = {
             "width": self.get_val(self.controls["width"]),

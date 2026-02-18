@@ -22,7 +22,9 @@ TRANSLATIONS = {
             "label_footer": "Global Footer G-Code",
             "btn_save": "SAVE SETTINGS", # Plus court pour le bouton en haut
             "msg_success": "Configuration saved successfully!",
-            "msg_error_num": "Please verify that all numeric fields contain valid numbers."
+            "msg_error_num": "Please verify that all numeric fields contain valid numbers.",
+            "enable_thumbnails": "Enable Thumbnails"
+
         },
         "dashboard": {
             "raster_title": "IMAGE RASTERING",
@@ -38,7 +40,11 @@ TRANSLATIONS = {
             "settings_title": "SETTINGS",
             "settings_desc": "Configure G-Code commands, hardware offsets, and global laser limits.",
             "no_history": "No recent generations found",
-            "history": "Recent Generations"
+            "history": "Recent Generations",
+            "machine_stats": "📊 Machine Statistics",
+            "lines_generated": "Lines Generated",
+            "gcode_saved": "G-Codes Saved",
+            "total_engraving_time": "Total Engraving Time"
         },
         "topbar": {
             "support": "☕ Support the project",
@@ -47,6 +53,16 @@ TRANSLATIONS = {
             "raster": "Raster engraving",
             "simulation": "G-Code Simulation",
             "calibration": "Machine Calibration"
+        },
+        "common": {
+            "import_profile": "IMPORT PROFILE",
+            "export_profile": "EXPORT PROFILE",
+            "geometry": "Geometry",
+            "image": "Image",
+            "laser": "Laser",
+            "Gcode": "G-code",
+            "target_width" :"Target Width (mm)",
+            "generate_gcode": "GENERATE"
         }
     },
     "Français": {
@@ -68,7 +84,9 @@ TRANSLATIONS = {
             "label_footer": "G-Code de fin global",
             "btn_save": "SAUVEGARDER", # Plus court
             "msg_success": "Configuration enregistrée avec succès !",
-            "msg_error_num": "Veuillez vérifier que les champs numériques sont valides."
+            "msg_error_num": "Veuillez vérifier que les champs numériques sont valides.",
+            "enable_thumbnails": "Autoriser la création de vignettes"
+
         },
         "dashboard": {
             "raster_title": "GRAVURE RASTER",
@@ -84,7 +102,11 @@ TRANSLATIONS = {
             "settings_title": "REGLAGES",
             "settings_desc": "Configurez les commandes G-Code, les décalages matériels et les limites globales du laser.",
             "no_history": "Aucune génération récente",
-            "history": "Générations récentes"
+            "history": "Générations récentes",
+            "machine_stats": "📊 Statistiques",
+            "lines_generated": "Lignes générées",
+            "gcode_saved": "G-Codes sauvegardés",
+            "total_engraving_time": "Temps total de gravure"
         },
         "topbar": {
             "support": "☕ Soutenir le projet",
@@ -93,6 +115,16 @@ TRANSLATIONS = {
             "raster": "Gravure en boustrophédon",
             "simulation": "Simulation de G-Code",
             "calibration": "Calibrage machine"
+        },
+        "common": {
+            "import_profile": "Import de profil",
+            "export_profile": "Export de profil",
+            "geometry": "Geometrie",
+            "image": "Image",
+            "laser": "Laser",
+            "Gcode": "G-code",
+            "target_width" :"Largeur cible (mm)",
+            "generate_gcode": "GENERER"
         }
     }
 }

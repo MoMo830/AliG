@@ -1,6 +1,11 @@
+import os
+import sys
+import shutil
 import tkinter as tk
 import customtkinter as ctk
 from core.translations import TRANSLATIONS, THEMES
+from core.utils import ask_confirmation
+
 
 class SettingsView(ctk.CTkFrame):
     def __init__(self, parent, app, just_saved=False):
@@ -18,6 +23,7 @@ class SettingsView(ctk.CTkFrame):
         self.color_saved = "#2d5a27"
         self.color_saved_hover = "#367a31"
         self.color_error = "#942121"
+        self.color_danger = "#8b0000"
 
         # 1. Charger la langue
         lang_code = self.app.config_manager.get_item("machine_settings", "language", "English")
@@ -94,8 +100,6 @@ class SettingsView(ctk.CTkFrame):
             )
 
     # --- MÉTHODES DE CONSTRUCTION ---
-    # (Tes méthodes create_section, create_simple_input, etc. restent identiques)
-    # Assure-toi juste qu'elles utilisent bien self.mark_as_changed
 
     def setup_settings_ui(self):
         # COLONNE GAUCHE
@@ -125,6 +129,41 @@ class SettingsView(ctk.CTkFrame):
 
         self.create_segmented_pair(self.current_sec, self.texts["label_theme"], THEMES, "appearance_mode")
         self.create_segmented_pair(self.current_sec, self.texts["label_lang"], list(TRANSLATIONS.keys()), "app_language")
+
+        self.sw_thumbnails = self.create_switch_pair(self.current_sec, self.texts["enable_thumbnails"], "enable_thumbnails")
+        self.sw_thumbnails.select() # On par défaut
+
+        # --- SECTION MAINTENANCE ---
+        self.create_section(self.right_col, "MAINTENANCE & DONNÉES")
+        
+        # Container pour les boutons d'action dans la section
+        action_frame = ctk.CTkFrame(self.current_sec, fg_color="transparent")
+        action_frame.pack(fill="x", padx=10, pady=10)
+
+        # Bouton Effacer Vignettes
+        self.btn_clear_data = ctk.CTkButton(
+            action_frame, 
+            text="Effacer les vignettes", 
+            fg_color="#444", 
+            hover_color=self.color_danger,
+            height=32,
+            command=lambda: ask_confirmation(self, "Effacer les vignettes ?", self.clear_thumbnails_and_stats)
+        )
+        self.btn_clear_data.pack(fill="x", pady=(0, 10))
+
+        # Bouton Reset Paramètres
+        self.btn_reset_all = ctk.CTkButton(
+            action_frame, 
+            text="Réinitialiser tous les paramètres", 
+            fg_color="transparent", 
+            border_width=1,
+            border_color=self.color_danger,
+            text_color=("gray10", "gray90"),
+            height=32,
+            command=lambda: ask_confirmation(self, "Réinitialiser tout ?", self.reset_settings)
+        )
+        self.btn_reset_all.pack(fill="x")
+   
 
     def create_section(self, container, title):
         self.current_sec = ctk.CTkFrame(container, fg_color=["#EBEBEB", "#2B2B2B"], border_width=1, border_color=["#DCE4EE", "#3E454A"])
@@ -174,6 +213,16 @@ class SettingsView(ctk.CTkFrame):
         entry.bind("<FocusOut>", lambda e: self._update_slider(key))
         self.controls[key] = {"slider": slider, "entry": entry, "precision": 2}
 
+    def create_switch_pair(self, parent, label_text, key):
+        frame = ctk.CTkFrame(parent, fg_color="transparent")
+        frame.pack(fill="x", pady=5, padx=10)
+        ctk.CTkLabel(frame, text=label_text, font=("Arial", 11)).pack(side="left")
+        
+        switch = ctk.CTkSwitch(frame, text="", command=self.mark_as_changed)
+        switch.pack(side="right")
+        self.controls[key] = {"switch": switch}
+        return switch
+
     def create_segmented_pair(self, parent, label_text, options, attr_name):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.pack(fill="x", pady=5, padx=10)
@@ -205,7 +254,55 @@ class SettingsView(ctk.CTkFrame):
         except: pass
 
     # --- LOGIQUE DE DONNÉES ---
-    
+    def clear_thumbnails_and_stats(self):
+        """Supprime les vignettes physiques et réinitialise les stats dans le JSON"""
+        
+        # 1. NETTOYAGE DES FICHIERS (Vignettes)
+        target_dir = os.path.join(os.getcwd(), "assets", "thumbnails") 
+        files_purged = 0
+        
+        if os.path.exists(target_dir):
+            try:
+                for filename in os.listdir(target_dir):
+                    if filename == ".gitkeep": continue
+                    file_path = os.path.join(target_dir, filename)
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                    files_purged += 1
+            except Exception as e:
+                print(f"Erreur fichiers: {e}")
+
+        # 2. NETTOYAGE DES STATISTIQUES (Dans alig_config)
+        try:
+            # On définit les valeurs à zéro
+            empty_stats = {
+                "total_lines": 0,
+                "total_gcodes": 0,
+                "total_time_seconds": 0.0,
+                "last_project_time": 0.0
+            }
+            # On met à jour la section dans le manager
+            self.app.config_manager.set_section("stats", empty_stats)
+            # On sauvegarde le fichier JSON immédiatement
+            self.app.config_manager.save()
+            
+            # Feedback visuel
+            self.btn_clear_data.configure(
+                text="Vignettes & Stats effacées !", 
+                fg_color=self.color_saved
+            )
+        except Exception as e:
+            print(f"Erreur lors de la remise à zéro des stats: {e}")
+            self.btn_clear_data.configure(text="Erreur Stats", fg_color=self.color_error)
+
+        # Retour à l'état initial après 2s
+        self.after(2000, lambda: self.btn_clear_data.configure(
+            text="Effacer Thumbnails & Stats", 
+            fg_color="#444"
+        ))
+
     def load_settings(self):
         data = self.app.config_manager.get_section("machine_settings")
         if not data: return
@@ -277,3 +374,19 @@ class SettingsView(ctk.CTkFrame):
         except Exception as e:
             print(f"Save error: {e}")
             self.btn_save.configure(fg_color=self.color_error)
+
+
+
+    def reset_settings(self):
+        """Appelle le manager pour tout effacer et recharge l'UI"""
+        if self.app.config_manager.reset_all():
+            self.btn_reset_all.configure(
+                text="Configuration réinitialisée !", 
+                fg_color=self.color_saved
+            )
+            # On recharge la vue après 1 seconde
+            # Comme full_config est vide, load_settings() ne trouvera rien
+            # et les widgets garderont leurs valeurs par défaut "usine".
+            self.after(1000, lambda: self.app.show_settings_mode())
+        else:
+            self.btn_reset_all.configure(text="Erreur Reset", fg_color=self.color_error)

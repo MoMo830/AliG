@@ -327,30 +327,31 @@ class SimulationView(ctk.CTkFrame):
         # ctk.CTkLabel(fname_frame, text=payload.get("file_name", "N/A"), font=("Arial", 10), anchor="e", wraplength=120).pack(side="right", fill="x", expand=True)
 
         #Gcode visualizer
-        ctk.CTkLabel(self.left_panel, text="LIVE G-CODE", font=("Arial", 11, "bold")).pack(pady=(10, 0))
-        self.gcode_view = ctk.CTkTextbox(
-            self.left_panel, 
-            height=200, 
-            font=("Consolas", 10), 
-            fg_color="#1a1a1a", 
-            text_color="#00ff00", 
-            state="disabled"
-        )
 
-        self.gcode_view.pack(fill="x", padx=10, pady=5)
-        # Groupe OPTIONS (Badges)
+        ctk.CTkLabel(self.left_panel, text="LIVE G-CODE", font=("Arial", 11, "bold")).pack(pady=(10, 0))
+
+        # --- BLOC BAS (Déclaré en premier avec side="bottom" pour réserver le bas) ---
+
+        # 1. Les boutons (Tout en bas)
+        btn_act = ctk.CTkFrame(self.left_panel, fg_color="transparent")
+        btn_act.pack(fill="x", side="bottom", pady=(0, 15)) 
+        
+        ctk.CTkButton(btn_act, text="CANCEL", fg_color="#333", height=30, 
+                      command=self.on_cancel).pack(fill="x", side="bottom", padx=10, pady=5)
+        
+        ctk.CTkButton(btn_act, text="EXPORT GCODE", fg_color="#27ae60", height=40, 
+                      font=("Arial", 11, "bold"), command=self.on_confirm).pack(fill="x", side="bottom", padx=10, pady=5)
+
+        # 2. Groupe OPTIONS (Juste au-dessus des boutons)
         self.options_group_frame = ctk.CTkFrame(self.left_panel, fg_color="#222222", border_width=1, border_color="#444444")
-        self.options_group_frame.pack(pady=10, padx=10, fill="x")
+        self.options_group_frame.pack(side="bottom", pady=10, padx=10, fill="x")
+        
         ctk.CTkLabel(self.options_group_frame, text="Active Options", font=("Arial", 11, "bold")).pack(pady=(8, 2))
         badge_cont = ctk.CTkFrame(self.options_group_frame, fg_color="transparent")
         badge_cont.pack(fill="x", padx=10, pady=(0, 10))
 
         for key, text in [("is_pointing", "POINTING"), ("is_framing", "FRAMING")]:
-            # --- MODIFICATION ICI ---
-            # On va chercher dans le sous-dictionnaire 'framing'
-            # Si 'framing' n'existe pas, on prend un dictionnaire vide {} par sécurité
             active = payload.get('framing', {}).get(key, False)
-            
             color, bg = ("#ff9f43", "#3d2b1f") if active else ("#666666", "#282828")
             ctk.CTkLabel(
                 badge_cont, 
@@ -360,12 +361,21 @@ class SimulationView(ctk.CTkFrame):
                 fg_color=bg, 
                 corner_radius=5
             ).pack(side="left", expand=True, fill="x", padx=2)
-        # Actions (Générer / Annuler)
-        btn_act = ctk.CTkFrame(self.left_panel, fg_color="transparent")
-        btn_act.pack(fill="x", side="bottom", pady=15)
-        ctk.CTkButton(btn_act, text="EXPORT GCODE", fg_color="#27ae60", height=40, font=("Arial", 11, "bold"), command=self.on_confirm).pack(fill="x", padx=10, pady=5)
-        ctk.CTkButton(btn_act, text="CANCEL", fg_color="#333", height=30, command=self.on_cancel).pack(fill="x", padx=10, pady=5)
-    
+
+        # --- BLOC CENTRAL (Prend tout l'espace restant) ---
+
+        self.gcode_view = ctk.CTkTextbox(
+            self.left_panel, 
+            font=("Consolas", 10), 
+            fg_color="#1a1a1a", 
+            text_color="#00ff00", 
+            state="disabled"
+        )
+
+        # On ajoute expand=True et fill="both"
+        # On retire height=200 car expand va maintenant gérer la taille dynamiquement
+        self.gcode_view.pack(expand=True, fill="both", padx=10, pady=5)
+
     def _add_stat(self, parent, label, value, is_path=False):
         """Helper pour afficher une ligne d'information propre"""
         frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -451,6 +461,7 @@ class SimulationView(ctk.CTkFrame):
         self.progress_bar = ctk.CTkProgressBar(self.progress_container, height=8, progress_color="#27ae60")
         self.progress_bar.set(0)
         self.progress_bar.pack(fill="x", pady=(0, 5))
+        self.progress_bar.bind("<Button-1>", self._on_progress_click)
 
         text_row = ctk.CTkFrame(self.progress_container, fg_color="transparent")
         text_row.pack(fill="x")
@@ -816,7 +827,7 @@ class SimulationView(ctk.CTkFrame):
             index = self.gcode_view.index(f"@{event.x},{event.y}")
             line_clicked = int(index.split('.')[0])
 
-            # Chercher le point correspondant (point_data[3] est le line_number)
+            # Chercher le point correspondant
             target_idx = None
             for i, p in enumerate(self.points_list):
                 if len(p) >= 4 and p[3] == line_clicked:
@@ -824,15 +835,82 @@ class SimulationView(ctk.CTkFrame):
                     break
             
             if target_idx is not None:
-                # ICI : Appelez la fonction qui déplace votre simulateur
-                # (Par exemple celle liée à votre slider : self._on_slider_move(target_idx))
-                self.sync_sim_to_index(target_idx)
-                
-                # On force le highlight et le centrage immédiat
+                # 1. On arrête l'animation pour éviter les sauts bizarres
+                self.sim_running = False
+                self.btn_play_pause.configure(text="▶", fg_color="#27ae60")
+
+                # 2. Synchronisation des index
+                self.current_point_idx = target_idx
+                self.accumulated_index = float(target_idx)
+
+                # 3. MISE À JOUR VISUELLE COMPLÈTE
+                self.sync_sim_to_index(target_idx) # Déplace le laser et le temps
+                self._redraw_up_to(target_idx)      # RE-DESSINE le trajet exact
                 self.update_gcode_highlight(target_idx)
                 
         except Exception as e:
             print(f"GCode selection error: {e}")
+
+    def _on_progress_click(self, event):
+        """Calcule la position du clic sur la barre et déplace la simulation."""
+        if not self.points_list:
+            return
+
+        # 1. Calculer le ratio du clic (x / largeur_totale)
+        bar_width = self.progress_bar.winfo_width()
+        click_x = event.x
+        
+        # Sécurité pour ne pas diviser par zéro ou sortir des bornes
+        ratio = max(0, min(click_x / bar_width, 1.0))
+        
+        # 2. Trouver l'index du point correspondant
+        target_idx = int(ratio * (len(self.points_list) - 1))
+        
+        # 3. Mettre à jour la simulation
+        # On arrête l'animation automatique pour éviter les conflits pendant le saut
+        was_running = self.sim_running
+        self.sim_running = False 
+        
+        # Synchronisation complète (Laser, Temps, G-Code)
+        self.current_point_idx = target_idx
+        self.accumulated_index = float(target_idx)
+        self.sync_sim_to_index(target_idx)
+        
+        # Si on veut que l'image se redessine jusqu'à ce point précis :
+        # Note : Redessiner depuis le début peut être lent si target_idx est grand.
+        # Une solution simple est d'appeler skip_to_end() mais seulement jusqu'à target_idx.
+        self._redraw_up_to(target_idx)
+
+        # 4. Reprendre si c'était en lecture
+        if was_running:
+            self.toggle_pause()
+
+    def _redraw_up_to(self, target_idx):
+        """Recalcule l'image tracée jusqu'à l'index donné."""
+        # On repart d'une feuille blanche
+        h, w = self.display_data.shape
+        self.display_data = np.full((h, w), 255, dtype=np.uint8)
+        self.prev_matrix_coords = None
+        
+        # On redessine tout le trajet jusqu'à l'index (uniquement les points avec puissance > 0)
+        for i in range(target_idx + 1):
+            mx, my, pwr, _ = self.points_list[i]
+            
+            # On ne dessine pas le framing
+            if i < self.framing_end_idx:
+                self.prev_matrix_coords = None
+                continue
+                
+            ix, iy = self.screen_index(mx, my)
+            if self.prev_matrix_coords is not None and pwr > 0:
+                old_ix, old_iy = self.prev_matrix_coords
+                self._draw_line_on_matrix(
+                    self.display_data, old_ix, old_iy,
+                    ix, iy, pwr, thickness=self.laser_width_px
+                )
+            self.prev_matrix_coords = (ix, iy)
+            
+        self.update_graphics()
 
     def skip_to_end(self):
         # Sécurité : si la fenêtre est fermée, on sort
