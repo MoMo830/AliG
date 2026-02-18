@@ -130,35 +130,11 @@ A.L.I.G. is a free project, developed during their spare time by a world-class t
 
 ---
 
-##  Infos, Tips & Tuning
-This software is intended to be used on a CNC machine. I developped it as a desire to expand the capabilities of my Workbee/Queenbee based CNC. 
 
-<p align="center">
-  <img src="Ressources/AMC.jpg" alt="AMC" width="50%">
-</p>
-
-* **Workflow Efficiency:** I used to work with **Auggie**, which is a functional solution, but I found it difficult to constantly switch **back and forth** between it and Mach4. A.L.I.G. allows for a more streamlined workflow within a single ecosystem.
-* **Speed and Responsiveness (Q vs S):** In Mach4, the standard `S` command (Spindle speed) is often processed too slowly for high-speed laser engraving, leading to stuttering or "blobs" in the image. A.L.I.G. uses the **`Q` parameter** (mapped to a PWM Analog Output) because it is processed instantly by the motion controller, ensuring synchronized power changes at high feed rates.
-
-
-* **Software version used:**
-   * MACH4 : build 6693
-   * Pokeys plugin : 9.17.0.5596
-* **Software Settings (Mach4/PoKeys):**
-    * In the PoKeys plugin settings (**Configure > Plugins > PoKeys > Miscellaneous**), ensure your PWM pin box is checked and set **Spindle Control** to "None".
-    * In the Mach4 Analog Output settings:
-        * Map **Analog Output 0** to your device name (**PoKeys_XXXXX**).
-        * Select the correct **PWM Duty** (corresponding to your hardware PWM pin).
-        * **Crucially:** Set both the **Numerator and Denominator to 1**, and leave the **Offset at 0**.
-
-* **Z-Axis & Focus:** Please note that **A.L.I.G. does not command any Z-axis movement.** * You **must** manually set your laser focus and your Z-zero position prior to starting the job. 
-    * Ensure your laser is at the optimal height for your material, as the generated G-code only manages X, Y, and Q/S (power) parameters.
       
 
 
-* **Dedicated Mach4 Profile:** It is highly recommended to create a **separate profile** in Mach4 specifically for laser engraving. 
-    * This prevents laser settings (like PWM mapping and Spindle-to-None configuration) from interfering with your standard milling/routing setups.
-    * It allows you to fine-tune your motor acceleration and velocity for laser work without affecting your heavy-duty milling parameters.
+
  
 
 
