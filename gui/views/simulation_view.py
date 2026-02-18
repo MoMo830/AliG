@@ -3,6 +3,8 @@
 A.L.I.G. Project - Simulation window
 ------------------------------------
 """
+#agrandir barre de gauche
+
 
 import customtkinter as ctk
 import numpy as np
@@ -13,6 +15,7 @@ import re
 from PIL import Image,ImageTk, ImageDraw
 from tkinter import messagebox
 import cv2
+import bisect
 
 from engine.gcode_parser import GCodeParser
 from core.utils import save_dashboard_data
@@ -46,9 +49,12 @@ class SimulationView(ctk.CTkFrame):
         self.points_list = [] 
         self.current_point_idx = 0
         self.last_mouse_coords = (0, 0)
-        self.last_frame_time = 0.0 
-        self.accumulated_index = 0.0
         self.sim_speed = 1.0 
+        # --- ÉTATS DE TEMPS POUR LA SIMULATION ---
+        self.current_sim_time = 0.0  # Temps écoulé dans la simulation (secondes)
+        self.total_sim_dur = 0.0     # Durée totale calculée dans _async_generation
+        self.last_frame_time = 0.0   # Timestamp système de la dernière frame affichée
+        self.framing_end_idx = 0
         
 
         self.framing_duration = 0.0 
@@ -58,6 +64,7 @@ class SimulationView(ctk.CTkFrame):
         self.loupe_zoom = 3.0    
         self.raw_sim_data = None    
         self.origin_mode = payload["metadata"].get("origin_mode", "Lower-Left")
+        self.full_metadata = {}
 
 
         # 3. Configuration UI
@@ -98,6 +105,7 @@ class SimulationView(ctk.CTkFrame):
 
     def _async_generation(self):
         try:
+            print("[DEBUG] Thread: Début de la génération complète...")
             # 1. PRÉPARATION DES PARAMÈTRES
             params = self.payload['params']
             g_steps = params.get('gray_steps')
@@ -106,7 +114,7 @@ class SimulationView(ctk.CTkFrame):
             self.payload['framing']['gray_steps'] = g_steps
             self.payload['framing']['use_s_mode'] = use_s_mode
 
-            # A. Génération du G-Code de Cadrage (indépendant pour référence)
+            # A. Génération du G-Code de Cadrage
             self.framing_gcode = self.engine.prepare_framing(
                 self.payload['framing'], 
                 (self.payload['metadata']['real_w'], self.payload['metadata']['real_h']), 
@@ -118,39 +126,60 @@ class SimulationView(ctk.CTkFrame):
             full_metadata['framing_code'] = self.framing_gcode
             full_metadata['gray_steps'] = g_steps
             full_metadata['use_s_mode'] = use_s_mode
+            self.full_metadata = full_metadata # Stockage pour _on_gen_done
 
-            # C. Génération du G-Code Final 
-            # Note : On suppose que build_final_gcode inclut déjà le framing_code au début
+            # C. Génération du G-Code Final (Framing + Image)
             self.final_gcode = self.engine.build_final_gcode(
                 self.payload['matrix'], self.payload['dims'],
                 self.payload['offsets'], params,
                 self.payload['text_blocks'], full_metadata
             )
 
-            # D. PARSING STRATÉGIQUE
-            # 1. On parse le framing seul uniquement pour connaître sa durée et son volume de points
+            # D. PARSING ET CALCUL DU TEMPS (Logique temporelle)
+            # 1. On parse pour avoir la liste de points brute
             f_points_tmp, f_dur = self.parser.parse(self.framing_gcode)
             framing_end_idx = len(f_points_tmp)
 
-            # 2. On parse le G-Code FINAL complet (qui contient Framing + Image)
-            all_points, total_dur = self.parser.parse(self.final_gcode)
+            all_points_raw, total_dur_estimated = self.parser.parse(self.final_gcode)
+            
+            # 2. INJECTION DES TIMESTAMPS (Crucial pour la nouvelle simulation)
+            # On recalcule le temps cumulé pour chaque point pour l'interpolation
+            points_with_time = []
+            cumulative_time = 0.0
+            
+            # On récupère la vitesse d'avance (feedrate) pour le calcul
+            # conversion mm/min -> mm/s
+            base_feed = params.get('feedrate', 3000) / 60.0 
 
-            # 2. PRÉPARATION DU RETOUR
-            # On envoie une structure propre : une seule liste de points et l'index de transition
+            for i in range(len(all_points_raw)):
+                p = list(all_points_raw[i]) # (x, y, pwr, line_idx)
+                if i > 0:
+                    prev = all_points_raw[i-1]
+                    # Distance entre les deux points
+                    dist = ((p[0]-prev[0])**2 + (p[1]-prev[1])**2)**0.5
+                    # Temps pour parcourir cette distance
+                    duration = dist / base_feed if base_feed > 0 else 0
+                    cumulative_time += duration
+                
+                # On ajoute le 5ème élément : le timestamp
+                points_with_time.append((p[0], p[1], p[2], p[3], cumulative_time))
+
+            # E. PRÉPARATION DU RETOUR
             self.raw_sim_data = {
-                'points_list': all_points,          # La séquence continue (sans rupture)
-                'framing_end_idx': framing_end_idx, # Pour savoir quand arrêter de dessiner
-                'f_dur': f_dur,                     # Pour l'affichage du temps
-                'i_dur': total_dur - f_dur,         # Durée de l'image seule
-                'total_dur': total_dur,
+                'points_list': points_with_time,
+                'framing_end_idx': framing_end_idx,
+                'f_dur': f_dur,
+                'total_dur': cumulative_time,
                 'full_metadata': full_metadata 
             }
 
-            self.after(0, self._on_gen_done)
+            print(f"[DEBUG] Génération réussie: {len(points_with_time)} points, {cumulative_time:.1f}s")
+            
             if self.winfo_exists():
                 self.after(0, self._on_gen_done)
             
         except Exception as e:
+            print(f"[DEBUG ERROR] Erreur thread: {e}")
             if self.winfo_exists():
                 error_msg = str(e)
                 self.after(0, lambda msg=error_msg: self._handle_gen_error(msg))
@@ -160,33 +189,38 @@ class SimulationView(ctk.CTkFrame):
         self.destroy()
 
     def _on_gen_done(self):
-        # On récupère les stats calculées
-        self.stats = self.raw_sim_data['full_metadata']
+        print("[DEBUG] UI: _on_gen_done reçu")
+        if not self.raw_sim_data:
+            print("[DEBUG ERROR] raw_sim_data est NULL")
+            return
+
+        self.points_list = self.raw_sim_data['points_list']
+        self.total_sim_seconds = self.raw_sim_data.get('total_dur', 0.0)
         
-        # On détruit la barre de chargement
+        # Injection du texte dans le widget
+        if hasattr(self, 'final_gcode') and self.final_gcode:
+            print("[DEBUG] UI: Remplissage du widget G-Code")
+            self.gcode_view.configure(state="normal")
+            self.gcode_view.delete("1.0", "end")
+            self.gcode_view.insert("1.0", self.final_gcode)
+            self.gcode_view.configure(state="disabled")
+        else:
+            print("[DEBUG WARNING] Aucun G-Code à afficher dans le widget")
+
         if hasattr(self, 'loading_frame'):
             self.loading_frame.destroy()
 
-        # CGcode text loading
-        self.gcode_view.configure(state="normal")
-        self.gcode_view.delete("1.0", "end")
-        self.gcode_view.insert("1.0", self.final_gcode)
-        self.gcode_view.configure(state="disabled")
-        # On lance l'affichage final
+        print("[DEBUG] UI: Lancement de _prepare_and_draw")
         self._prepare_and_draw()
 
 
     def _prepare_and_draw(self):
-        # 1. On force la mise à jour pour que le Canvas ait sa taille finale 
-        # définie par setup_toplevel_window
-        #self.update_idletasks()
-
-        # 2. On récupère la taille RÉELLE du canvas à cet instant précis
+        """Initialise les dimensions, la matrice de pixels et les objets du Canvas."""
+        # 1. On récupère la taille RÉELLE du canvas
         c_w = self.preview_canvas.winfo_width()
         c_h = self.preview_canvas.winfo_height()
 
-        # SÉCURITÉ : Si vraiment le canvas n'est pas encore rendu (winfo = 1)
-        # On ne dessine rien et on recommence un peu plus tard
+        # SÉCURITÉ : Si le canvas n'est pas encore rendu, on reporte
         if c_w <= 1:
             self.after(50, self._prepare_and_draw)
             return
@@ -196,14 +230,15 @@ class SimulationView(ctk.CTkFrame):
         if not self.points_list:
             return
 
-        # On récupère l'index de coupure et les durées pré-calculées
-        self.framing_end_idx = self.raw_sim_data['framing_end_idx']
-        self.framing_duration = self.raw_sim_data['f_dur']
-        self.total_sim_seconds = self.raw_sim_data['total_dur']
-        self.image_duration = self.raw_sim_data['i_dur']
+        # On récupère les infos essentielles via .get pour éviter les KeyError
+        self.framing_end_idx = self.raw_sim_data.get('framing_end_idx', 0)
+        self.total_sim_seconds = self.raw_sim_data.get('total_dur', 0.0)
+        self.total_sim_dur = self.total_sim_seconds 
+        
+        # Préparation des timestamps pour la recherche rapide (bisect)
+        self.timestamps = [p[4] for p in self.points_list]
 
         # --- 2. LIMITES MACHINE ---
-        # On calcule les limites sur la liste complète pour le centrage
         raw_x = [p[0] for p in self.points_list]
         raw_y = [p[1] for p in self.points_list]
 
@@ -222,40 +257,83 @@ class SimulationView(ctk.CTkFrame):
         self.total_px_h = self.total_mouvement_h * self.scale
         self.rect_w, self.rect_h = int(self.total_px_w), int(self.total_px_h)
 
+        # Centrage sur le canvas
         self.x0 = (c_w - self.total_px_w) / 2
         self.y0 = (c_h - self.total_px_h) / 2
 
-        # Épaisseur du laser
-        self.l_step = self.payload['dims'][2]
-        self.laser_width_px = max(1, int(self.l_step * self.scale))
-
-        # --- 4. CALCUL DU DÉBIT (PPS) ---
-        # Nombre de points pour chaque phase
-        n_pts_framing = self.framing_end_idx
-        n_pts_image = len(self.points_list) - n_pts_framing
-
-        self.pts_per_sec_framing = n_pts_framing / max(0.1, self.framing_duration)
-        self.pts_per_sec_image = n_pts_image / max(0.1, self.image_duration)
-
-        # --- 5. INITIALISATION GRAPHIQUE ---
-        self.draw_simulation(self.stats)
-
-        # Position initiale du laser
-        mx, my, _, _ = self.points_list[0]
-        sx, sy = self.machine_to_screen(mx, my)
-        self.curr_x, self.curr_y = sx, sy
+        # --- 4. CRÉATION DE LA MATRICE DE TRAVAIL ---
+        # On crée une matrice NumPy remplie de 255 (blanc) aux dimensions réelles de l'image
+        self.display_data = np.full((max(1, self.rect_h), max(1, self.rect_w)), 255, dtype=np.uint8)
         
-        # --- ANTI-FANTÔME ---
-        # On initialise avec None pour forcer le premier point de l'image 
-        # à se positionner sans tracer de ligne depuis le framing.
-        self.prev_matrix_coords = None 
-        self.current_point_idx = 0
-        self.accumulated_index = 0.0
+        # Épaisseur du laser scalée
+        l_step = self.payload.get('dims', [0, 0, 0.1])[2]
+        self.laser_width_px = max(1, int(l_step * self.scale))
 
-        # Mise à jour de l'UI
+        # --- 5. INITIALISATION DU CANVAS ---
+        self.preview_canvas.delete("all")
+        vis_pad = 10
+
+        # Le fond blanc de la zone de travail
+        self.preview_canvas.create_rectangle(
+            self.x0 - vis_pad, 
+            self.y0 - vis_pad, 
+            self.x0 + self.total_px_w + vis_pad, 
+            self.y0 + self.total_px_h + vis_pad, 
+            fill="white", 
+            outline="#d1d1d1", 
+            width=1,
+            tags="bg_rect"
+        )
+
+        # Coordonnées de l'origine de l'image pour screen_index()
+        # On se cale sur x0, y0 car l'image commence là
+        self.img_sx = self.x0
+        self.img_sy = self.y0
+
+        # Création du conteneur d'image dans le Canvas
+        self.tk_img = ImageTk.PhotoImage(Image.fromarray(self.display_data))
+        self.img_container = self.preview_canvas.create_image(
+            self.img_sx,
+            self.img_sy,
+            anchor="nw",
+            image=self.tk_img,
+            tags="main_image"
+        )
+
+        # Dessin de la grille (mm)
+        self.draw_grid()
+
+        # Création graphique du laser (Halo + Tête)
+        self.laser_halo = self.preview_canvas.create_oval(
+            0, 0, 0, 0, fill="#1a75ff", outline="#3385ff", width=1, tags="laser", stipple="gray50"
+        )
+        self.laser_head = self.preview_canvas.create_oval(
+            0, 0, 0, 0, fill="#00ffff", outline="white", width=1, tags="laser"
+        )
+        
+        # Éléments de la loupe
+        self.loupe_container = self.preview_canvas.create_image(0, 0, anchor="center", state="hidden", tags="loupe")
+        self.loupe_border = self.preview_canvas.create_oval(0, 0, 0, 0, outline="#ff9f43", width=2, state="hidden", tags="loupe")
+
+        # --- 6. ÉTAT DE SIMULATION INITIAL ---
+        self.current_point_idx = 0
+        self.current_sim_time = 0.0
+        self.last_frame_time = 0.0 # Important pour le prochain "Play"
+        
+        if self.points_list:
+            mx, my = self.points_list[0][0], self.points_list[0][1]
+            self.curr_x, self.curr_y = self.machine_to_screen(mx, my)
+            # Pour éviter un trait fantôme au début
+            self.prev_matrix_coords = self.screen_index(mx, my)
+
+        # Mise à jour de l'UI (Labels de temps)
         t_total = self._format_seconds_to_hhmmss(self.total_sim_seconds)
         self.time_label.configure(text=f"Time: 00:00:00 / {t_total}")
+        self.progress_bar.set(0)
+        self.progress_label.configure(text="Progress: 0%")
 
+        # Premier rendu visuel
+        self.update_graphics()
 
 
     def _build_left_panel(self, payload):
@@ -296,28 +374,76 @@ class SimulationView(ctk.CTkFrame):
         self._add_stat(info_container, "Output Path:", full_path, is_path=True)
 
         # Échelle de Puissance
-        p_min, p_max = float(payload.get("min_power", 0)), float(payload.get("max_power", 100))
+        params = payload.get('params', {})
+        p_min = float(params.get("min_power", 0))
+        p_max = float(params.get("max_power", 100))
         power_scale_frame = ctk.CTkFrame(info_container, fg_color="transparent")
         power_scale_frame.pack(fill="x", pady=10, padx=5)
         ctk.CTkLabel(power_scale_frame, text="Power Range (0-100%)", font=("Arial", 10, "bold")).pack(anchor="w")
-
-        self.power_canvas = ctk.CTkCanvas(power_scale_frame, height=45, bg="#1a1a1a", highlightthickness=0)
+        raw_color = self.left_panel.cget("fg_color")
+        
+        if isinstance(raw_color, (list, tuple)):
+            appearance_mode = ctk.get_appearance_mode() # "Light" ou "Dark"
+            bg_color = raw_color[1] if appearance_mode == "Dark" else raw_color[0]
+        else:
+            bg_color = raw_color
+        self.power_canvas = ctk.CTkCanvas(
+            power_scale_frame, 
+            height=63, 
+            bg=bg_color,
+            highlightthickness=0
+        )
         self.power_canvas.pack(fill="x", pady=5)
 
         def draw_power_scale():
+            if not self.winfo_exists(): return
             self.power_canvas.update()
             w = max(self.power_canvas.winfo_width(), 180)
-            margin, bar_y, bar_h = 15, 22, 8
+            
+            # Ajustement des marges pour laisser de la place au texte plus grand
+            margin = 25
+            bar_y = 35  # Descendu pour laisser de la place aux labels Min/Max en 14pt
+            bar_h = 10  # Barre un peu plus épaisse pour l'équilibre visuel
             bar_w = w - (2 * margin)
+            
+            # --- 1. DESSIN DU DÉGRADÉ DYNAMIQUE ---
             for i in range(int(bar_w)):
-                cv = int((1 - (i / bar_w)) * 255)
-                self.power_canvas.create_line(margin + i, bar_y, margin + i, bar_y + bar_h, fill=f'#{cv:02x}{cv:02x}{cv:02x}')
+                current_pct = (i / bar_w) * 100
+                if current_pct < p_min:
+                    color_val = 255 # Blanc
+                elif current_pct > p_max:
+                    color_val = 0   # Noir
+                else:
+                    range_width = (p_max - p_min) if p_max > p_min else 1
+                    local_ratio = (current_pct - p_min) / range_width
+                    color_val = int((1 - local_ratio) * 255)
+                
+                color_hex = f'#{color_val:02x}{color_val:02x}{color_val:02x}'
+                self.power_canvas.create_line(margin + i, bar_y, margin + i, bar_y + bar_h, fill=color_hex)
+            
             self.power_canvas.create_rectangle(margin, bar_y, margin + bar_w, bar_y + bar_h, outline="#444")
+
+            # --- 2. LIMITES 0% ET 100% (Police 12) ---
+            # Positionnés sous la barre
+            self.power_canvas.create_text(margin, bar_y + bar_h + 12, 
+                                          text="0%", fill="#888888", font=("Arial", 12))
+            self.power_canvas.create_text(margin + bar_w, bar_y + bar_h + 12, 
+                                          text="100%", fill="#888888", font=("Arial", 12))
+
+            # --- 3. CURSEURS ET VALEURS MIN/MAX (Police 14) ---
             for val, prefix in [(p_min, "Min: "), (p_max, "Max: ")]:
                 x = margin + (val / 100 * bar_w)
-                self.power_canvas.create_polygon([x, bar_y-2, x-5, bar_y-9, x+5, bar_y-9], fill="#ff9f43", outline="#1a1a1a")
-                self.power_canvas.create_text(x, bar_y-16, text=f"{prefix}{int(val)}%", fill="#ff9f43", font=("Arial", 8, "bold"))
-
+                
+                # Triangle orange
+                self.power_canvas.create_polygon([x, bar_y-2, x-6, bar_y-12, x+6, bar_y-12], 
+                                                  fill="#ff9f43", outline="#1a1a1a")
+                
+                # Texte Min/Max en gras et taille 14
+                self.power_canvas.create_text(x, bar_y - 22, 
+                                              text=f"{prefix}{int(val)}%", 
+                                              fill="#ff9f43", 
+                                              font=("Arial", 14, "bold"))
+        
         self.after(200, draw_power_scale)
 
         # # File Name
@@ -372,8 +498,6 @@ class SimulationView(ctk.CTkFrame):
             state="disabled"
         )
 
-        # On ajoute expand=True et fill="both"
-        # On retire height=200 car expand va maintenant gérer la taille dynamiquement
         self.gcode_view.pack(expand=True, fill="both", padx=10, pady=5)
 
     def _add_stat(self, parent, label, value, is_path=False):
@@ -395,7 +519,6 @@ class SimulationView(ctk.CTkFrame):
             )
             val_label.pack(side="top", fill="x", padx=5)
         else:
-            # Pour les autres : Label à gauche, Valeur à droite sur la même ligne
             ctk.CTkLabel(frame, text=label, font=("Arial", 10, "bold"), anchor="w").pack(side="left")
             ctk.CTkLabel(
                 frame, 
@@ -607,68 +730,80 @@ class SimulationView(ctk.CTkFrame):
       try:
          self.sim_speed = float(value)
          self.speed_title_label.configure(text=f"Speed:")
-         
-         # TRÈS IMPORTANT : On synchronise le marqueur de temps
-         # pour que la boucle animate_loop ne calcule pas un "bond" temporel
          self.last_frame_time = time.time()
                   
       except ValueError:
          pass
-
-    def _update_speed_label(self, value):
-      """Met à jour le texte au-dessus du slider en temps réel"""
-      multiplier = float(value)
-      self.sim_speed = multiplier # On applique la vitesse en direct si c'est un slider
-      self.last_frame_time = time.time() # Fluidité immédiate
-
-      # calcul de durée réelle de la simulation (ex: 10min à 2x = 5min devant l'écran)
-      sim_duration_sec = self.total_sim_seconds / max(0.1, multiplier)
-      duration_str = self._format_seconds_to_hhmmss(sim_duration_sec)
       
 
     def toggle_pause(self):
-        self.sim_running = not self.sim_running
-        
-        if self.sim_running:
-            # On cale l'horloge sur "maintenant" pour que le premier saut soit de 0ms
-            now = time.time()
-            self.last_frame_time = now
-            
-            # On synchronise l'index flottant sur l'index entier actuel
-            self.accumulated_index = float(self.current_point_idx)
-            
+        if not self.points_list:
+            return
+
+        # SI LE BOUTON EST EN MODE "REJOUER"
+        if self.btn_play_pause.cget("text") == "🔄":
+            self.rewind_sim()  # On remet tout à zéro (temps, points, matrice)
+            # Pas besoin de faire plus, rewind_sim remet le bouton en mode "▶"
+            # Si vous voulez qu'il se lance direct après le clic :
+            self.sim_running = True
+            self.last_frame_time = time.time()
             self.btn_play_pause.configure(text="⏸", fg_color="#e67e22")
             self.animate_loop()
-        else:
+            return
+
+        # LOGIQUE PLAY / PAUSE CLASSIQUE
+        if self.sim_running:
+            self.sim_running = False
             self.btn_play_pause.configure(text="▶", fg_color="#27ae60")
+        else:
+            self.sim_running = True
+            self.last_frame_time = time.time()
+            self.btn_play_pause.configure(text="⏸", fg_color="#e67e22")
+            self.animate_loop()
 
     def rewind_sim(self):
+        """Réinitialise la simulation au début."""
         self.sim_running = False
         if self.animation_job: 
-            self.after_cancel(self.animation_job)
+            try:
+                self.after_cancel(self.animation_job)
+            except:
+                pass
         self.animation_job = None
         
+        # 1. Reset des compteurs
         self.current_point_idx = 0
-        self.accumulated_index = 0.0 # Reset impératif
-        self.last_frame_time = time.time()
+        self.current_sim_time = 0.0  
+        self.last_frame_time = 0.0   
         
-        self.display_data.fill(255) # On efface le tracé
+        # 2. Reset de la matrice de dessin
+        if hasattr(self, 'display_data'):
+            self.display_data.fill(255)
+        
+        # 3. Reset de la position du laser
+        if self.points_list:
+            p0 = self.points_list[0]
+            self.curr_x, self.curr_y = self.machine_to_screen(p0[0], p0[1])
+            
+        # 4. Mise à jour de l'UI
         self.progress_bar.set(0)
         self.progress_label.configure(text="Progress: 0%")
-        self.time_label.configure(text=f"Time: 00:00:00 / {self._format_seconds_to_hhmmss(self.total_sim_seconds)}")
         
-        if self.points_list:
-            # On déballe les 4 valeurs (le _ ignore la puissance et l'index de ligne)
-            mx, my, _, _ = self.points_list[0]
-            # On convertit en coordonnées écran pour le laser bleu
-            self.curr_x, self.curr_y = self.machine_to_screen(mx, my)
-            
-        self.update_graphics()
+        t_tot_str = self._format_seconds_to_hhmmss(self.total_sim_seconds)
+        self.time_label.configure(text=f"Time: 00:00:00 / {t_tot_str}")
+        
+        # Remet le bouton en mode PLAY standard
         self.btn_play_pause.configure(text="▶", fg_color="#27ae60")
         
-        # Reset de la vue G-code
+        # 5. Reset de la vue G-code
         self.gcode_view.see("1.0")
         self.gcode_view.tag_remove("active", "1.0", "end")
+        # Ajout : On surligne la première ligne si elle existe
+        if self.points_list:
+             self.update_gcode_highlight(0)
+        
+        # Rafraîchissement graphique
+        self.update_graphics()
 
     def screen_index(self, mx, my):
         # 1. On récupère la position EXACTE du laser sur le Canvas (en pixels)
@@ -688,67 +823,69 @@ class SimulationView(ctk.CTkFrame):
 
 
     def animate_loop(self):
-        # 1. Sécurité immédiate : on vérifie si le widget existe encore
-        if not self.winfo_exists():
+        if not self.winfo_exists() or not self.sim_running:
             return
 
-        # 2. Si on a demandé l'arrêt ou si c'est fini
-        if not self.sim_running or self.current_point_idx >= len(self.points_list):
-            if self.sim_running and self.current_point_idx >= len(self.points_list):
-                self.skip_to_end()
-            return
-
-        # Gestion du temps (Delta Time)
+        # 1. Gestion du temps réel
         now = time.time()
-        if not hasattr(self, 'last_frame_time') or self.last_frame_time <= 0:
+        if not hasattr(self, 'last_frame_time') or self.last_frame_time == 0:
             self.last_frame_time = now
-        dt = now - self.last_frame_time
-        self.last_frame_time = now
-
-        # Calcul du bond d'index (Step)
-        is_framing = self.current_point_idx < self.framing_end_idx
-        pps = self.pts_per_sec_framing if is_framing else self.pts_per_sec_image
-        step = dt * pps * self.sim_speed
-        self.accumulated_index += step
         
-        target_idx = min(int(self.accumulated_index), len(self.points_list) - 1)
+        dt = (now - self.last_frame_time) * self.sim_speed
+        self.last_frame_time = now
+        self.current_sim_time += dt
 
-        if target_idx >= self.current_point_idx:
-            # --- LOGIQUE DE DESSIN OPENCV ---
-            # On traite tous les points entre l'ancien et le nouveau pour ne pas avoir de trous
-            batch = self.points_list[self.current_point_idx : target_idx + 1]
+        # 2. Rattrapage des points et dessin sur la matrice
+        while (self.current_point_idx < len(self.points_list) - 1 and 
+               self.points_list[self.current_point_idx + 1][4] < self.current_sim_time):
+            
+            idx = self.current_point_idx
+            p1 = self.points_list[idx]
+            p2 = self.points_list[idx + 1]
+            
+            if idx >= self.framing_end_idx and p2[2] > 0:
+                ix1, iy1 = self.screen_index(p1[0], p1[1])
+                ix2, iy2 = self.screen_index(p2[0], p2[1])
+                
+                # Calcul de la couleur (0=noir, 255=blanc)
+                pwr = p2[2]
+                ratio = max(0.0, min(1.0, float(pwr) / self.ctrl_max))
+                color = int(255 * (1.0 - ratio))
+                
+                cv2.line(self.display_data, (ix1, iy1), (ix2, iy2), color, 
+                         thickness=max(1, self.laser_width_px))
+            
+            self.current_point_idx += 1
 
-            for i, point_data in enumerate(batch):
-                mx, my, pwr, _ = point_data
-                actual_idx = self.current_point_idx + i
-                ix, iy = self.screen_index(mx, my)
-
-                if actual_idx < self.framing_end_idx:
-                    self.prev_matrix_coords = None # Pas de dessin en framing
-                else:
-                    if self.prev_matrix_coords is not None:
-                        old_ix, old_iy = self.prev_matrix_coords
-                        if (old_ix, old_iy) != (ix, iy) and pwr > 0:
-                            self._draw_line_on_matrix(
-                                self.display_data, old_ix, old_iy,
-                                ix, iy, pwr, thickness=self.laser_width_px
-                            )
-                    self.prev_matrix_coords = (ix, iy)
-
-            # Mise à jour de l'index de progression
-            self.current_point_idx = target_idx + 1
-
-            # --- APPEL À LA SYNCHRONISATION UI ---
-            # On met à jour l'affichage une seule fois pour tout le batch
-            self.sync_sim_to_index(target_idx)
-
-        try:
-            if self.winfo_exists() and self.sim_running:
-                self.animation_job = self.after(16, self.animate_loop)
-        except:
-            # Si l'app est fermée pile à ce moment, on ignore l'erreur proprement
+        # 3. Vérification de la fin ou Interpolation
+        if self.current_point_idx >= len(self.points_list) - 1:
+            # --- CAS : FIN DE SIMULATION ---
             self.sim_running = False
             self.animation_job = None
+            # On s'assure d'être exactement à 100%
+            self.current_sim_time = self.total_sim_seconds
+            self.sync_sim_to_index(len(self.points_list) - 1)
+            # Bouton en mode REJOUER
+            self.btn_play_pause.configure(text="🔄", fg_color="#2980b9")
+            self.update_graphics()
+            return
+        else:
+            # --- CAS : CONTINUATION (Interpolation Laser Bleu) ---
+            p_prev = self.points_list[self.current_point_idx]
+            p_next = self.points_list[self.current_point_idx + 1]
+            
+            t_start, t_end = p_prev[4], p_next[4]
+            ratio_interp = (self.current_sim_time - t_start) / (t_end - t_start) if (t_end - t_start) > 0 else 1.0
+            
+            interp_x = p_prev[0] + (p_next[0] - p_prev[0]) * ratio_interp
+            interp_y = p_prev[1] + (p_next[1] - p_prev[1]) * ratio_interp
+            
+            self.curr_x, self.curr_y = self.machine_to_screen(interp_x, interp_y)
+            self.sync_sim_to_index(self.current_point_idx)
+
+        # 4. Rendu et planification
+        self.update_graphics()
+        self.animation_job = self.after(16, self.animate_loop)  
 
     def sync_sim_to_index(self, target_idx):
         """Met à jour l'UI, le temps et le laser pour un index donné."""
@@ -756,7 +893,7 @@ class SimulationView(ctk.CTkFrame):
             return
 
         # 1. Mise à jour des coordonnées du laser
-        mx, my, pwr, line_idx = self.points_list[target_idx]
+        mx, my, pwr, line_idx, ts = self.points_list[target_idx]
         self.curr_x, self.curr_y = self.machine_to_screen(mx, my)
 
         # 2. Progression
@@ -765,12 +902,8 @@ class SimulationView(ctk.CTkFrame):
         self.progress_bar.set(progress)
         self.progress_label.configure(text=f"Progress: {int(progress*100)}%")
 
-        # 3. Calcul du temps (identique à votre logique actuelle)
-        if target_idx < self.framing_end_idx:
-            c_sec = target_idx / max(1, self.pts_per_sec_framing)
-        else:
-            pts_image = target_idx - self.framing_end_idx
-            c_sec = self.framing_duration + (pts_image / max(1, self.pts_per_sec_image))
+        # 3. Calcul du temps
+        c_sec = self.points_list[target_idx][4]
 
         self.time_label.configure(
             text=f"Time: {self._format_seconds_to_hhmmss(c_sec)} / {self._format_seconds_to_hhmmss(self.total_sim_seconds)}"
@@ -784,6 +917,8 @@ class SimulationView(ctk.CTkFrame):
 
     def update_gcode_highlight(self, target_idx):
             """Met à jour la ligne surlignée dans l'éditeur G-code en fonction de l'index du point."""
+            if not self.sim_running and target_idx != self.current_point_idx:
+                return
             if not self.points_list or target_idx >= len(self.points_list):
                 return
 
@@ -823,162 +958,181 @@ class SimulationView(ctk.CTkFrame):
 
     def _on_gcode_click(self, event):
         try:
-            # Trouver la ligne cliquée
+            # Trouver la ligne cliquée dans le widget texte
             index = self.gcode_view.index(f"@{event.x},{event.y}")
             line_clicked = int(index.split('.')[0])
 
             # Chercher le point correspondant
             target_idx = None
             for i, p in enumerate(self.points_list):
-                if len(p) >= 4 and p[3] == line_clicked:
+                # p[3] est l'index de ligne G-Code
+                if p[3] == line_clicked:
                     target_idx = i
                     break
             
             if target_idx is not None:
-                # 1. On arrête l'animation pour éviter les sauts bizarres
+                # 1. On fige la simulation
                 self.sim_running = False
                 self.btn_play_pause.configure(text="▶", fg_color="#27ae60")
 
-                # 2. Synchronisation des index
+                # 2. SYNCHRONISATION TEMPORELLE (Crucial !)
+                # On récupère le timestamp (p[4]) associé à ce point
                 self.current_point_idx = target_idx
-                self.accumulated_index = float(target_idx)
+                self.current_sim_time = self.points_list[target_idx][4]
 
-                # 3. MISE À JOUR VISUELLE COMPLÈTE
-                self.sync_sim_to_index(target_idx) # Déplace le laser et le temps
-                self._redraw_up_to(target_idx)      # RE-DESSINE le trajet exact
+                # 3. MISE À JOUR VISUELLE
+                self.sync_sim_to_index(target_idx) # Met à jour labels et barre
+                self._redraw_up_to(target_idx)      # Redessine la matrice jusqu'à ce point
                 self.update_gcode_highlight(target_idx)
                 
         except Exception as e:
             print(f"GCode selection error: {e}")
 
     def _on_progress_click(self, event):
-        """Calcule la position du clic sur la barre et déplace la simulation."""
+        """Déplace la simulation sans freezer l'UI."""
+        if not self.points_list or self.total_sim_seconds <= 0:
+            return
+
+        try:
+            # 1. Calcul du ratio
+            bar_width = self.progress_bar.winfo_width()
+            ratio = max(0, min(event.x / bar_width, 1.0))
+            
+            # 2. Suspension de l'animation pour éviter les conflits
+            was_running = self.sim_running
+            self.sim_running = False 
+            if self.animation_job:
+                self.after_cancel(self.animation_job)
+                self.animation_job = None
+            
+            # 3. Calcul du nouveau point (Temporel)
+            self.current_sim_time = ratio * self.total_sim_seconds
+            self.current_point_idx = bisect.bisect_left(self.timestamps, self.current_sim_time)
+            self.current_point_idx = max(0, min(self.current_point_idx, len(self.points_list) - 1))
+            
+            # 4. Rendu (La partie qui peut prendre du temps)
+            self._redraw_up_to(self.current_point_idx)
+            self.sync_sim_to_index(self.current_point_idx)
+            
+            # 5. Reprise après un court délai pour laisser l'UI respirer
+            if was_running:
+                self.sim_running = True
+                self.last_frame_time = time.time()
+                self.animation_job = self.after(10, self.animate_loop)
+            else:
+                self.update_graphics()
+                
+        except Exception as e:
+            print(f"Progress click error: {e}")
+
+
+    def _recalibrate_index_from_time(self):
+        """Trouve l'index du point G-Code le plus proche du temps actuel via recherche binaire."""
+        if not self.points_list:
+            return
+        
+        # On crée ou récupère la liste des timestamps (le 5ème élément de chaque point)
+        # Note : pour optimiser encore plus, tu peux stocker cette liste de timestamps 
+        # une fois pour toutes dans _on_gen_done
+        timestamps = [p[4] for p in self.points_list]
+        
+        # Trouve l'index d'insertion pour maintenir l'ordre
+        # C'est l'équivalent ultra-rapide de ta boucle for
+        found_idx = bisect.bisect_left(timestamps, self.current_sim_time)
+        
+        # Sécurité pour ne pas dépasser la liste
+        self.current_point_idx = min(found_idx, len(self.points_list) - 1)
+        
+        # Synchronisation UI
+        self.sync_sim_to_index(self.current_point_idx)
+
+    def _redraw_up_to(self, target_idx):
+        """
+        Version optimisée du rendu de masse.
+        Optimisation : réduction des accès aux attributs et suppression des appels UI.
+        """
         if not self.points_list:
             return
 
-        # 1. Calculer le ratio du clic (x / largeur_totale)
-        bar_width = self.progress_bar.winfo_width()
-        click_x = event.x
-        
-        # Sécurité pour ne pas diviser par zéro ou sortir des bornes
-        ratio = max(0, min(click_x / bar_width, 1.0))
-        
-        # 2. Trouver l'index du point correspondant
-        target_idx = int(ratio * (len(self.points_list) - 1))
-        
-        # 3. Mettre à jour la simulation
-        # On arrête l'animation automatique pour éviter les conflits pendant le saut
-        was_running = self.sim_running
-        self.sim_running = False 
-        
-        # Synchronisation complète (Laser, Temps, G-Code)
-        self.current_point_idx = target_idx
-        self.accumulated_index = float(target_idx)
-        self.sync_sim_to_index(target_idx)
-        
-        # Si on veut que l'image se redessine jusqu'à ce point précis :
-        # Note : Redessiner depuis le début peut être lent si target_idx est grand.
-        # Une solution simple est d'appeler skip_to_end() mais seulement jusqu'à target_idx.
-        self._redraw_up_to(target_idx)
+        # 1. On efface tout (fond blanc)
+        self.display_data.fill(255)
 
-        # 4. Reprendre si c'était en lecture
-        if was_running:
-            self.toggle_pause()
-
-    def _redraw_up_to(self, target_idx):
-        """Recalcule l'image tracée jusqu'à l'index donné."""
-        # On repart d'une feuille blanche
-        h, w = self.display_data.shape
-        self.display_data = np.full((h, w), 255, dtype=np.uint8)
-        self.prev_matrix_coords = None
+        # 2. CACHING : On extrait les variables de l'objet vers des variables locales
+        # Accéder à 'self.xxx' dans une boucle de 100k itérations ralentit Python
+        points = self.points_list
+        ctrl_max = float(self.ctrl_max)
+        laser_width = max(1, self.laser_width_px)
+        # On récupère les fonctions comme variables locales
+        screen_index = self.screen_index
+        cv2_line = cv2.line
         
-        # On redessine tout le trajet jusqu'à l'index (uniquement les points avec puissance > 0)
-        for i in range(target_idx + 1):
-            mx, my, pwr, _ = self.points_list[i]
+        # 3. Boucle de dessin optimisée
+        # On commence après le framing
+        start_idx = self.framing_end_idx + 1
+        
+        # On limite l'index cible pour éviter les débordements
+        limit = min(target_idx + 1, len(points))
+
+        for i in range(start_idx, limit):
+            p1 = points[i-1]
+            p2 = points[i]
             
-            # On ne dessine pas le framing
-            if i < self.framing_end_idx:
-                self.prev_matrix_coords = None
-                continue
+            # p2[2] est la puissance (S)
+            pwr = p2[2]
+            if pwr > 0:
+                # Conversion coordonnées machine -> pixels écran
+                ix1, iy1 = screen_index(p1[0], p1[1])
+                ix2, iy2 = screen_index(p2[0], p2[1])
                 
-            ix, iy = self.screen_index(mx, my)
-            if self.prev_matrix_coords is not None and pwr > 0:
-                old_ix, old_iy = self.prev_matrix_coords
-                self._draw_line_on_matrix(
-                    self.display_data, old_ix, old_iy,
-                    ix, iy, pwr, thickness=self.laser_width_px
-                )
-            self.prev_matrix_coords = (ix, iy)
-            
-        self.update_graphics()
+                # Calcul de la couleur (0=noir, 255=blanc)
+                # On évite les fonctions complexes, on utilise l'arithmétique pure
+                ratio = pwr / ctrl_max
+                if ratio > 1.0: ratio = 1.0
+                color = int(255 * (1.0 - ratio))
+                
+                # Dessin sur la matrice en mémoire
+                cv2_line(self.display_data, (ix1, iy1), (ix2, iy2), 
+                         color, thickness=laser_width)
+
+        # 4. Mise à jour finale du curseur bleu (en dehors de la boucle)
+        last_p = points[target_idx]
+        self.curr_x, self.curr_y = self.machine_to_screen(last_p[0], last_p[1])
+        
+        # On ne rafraîchit l'UI qu'UNE seule fois ici
+        # L'appel à update_graphics() se chargera de convertir display_data en image Tkinter
 
     def skip_to_end(self):
-        # Sécurité : si la fenêtre est fermée, on sort
-        if not self.winfo_exists():
+        """Termine instantanément la simulation avec un rendu optimisé."""
+        if not self.winfo_exists() or not self.points_list:
             return
 
+        # 1. Arrêt immédiat de l'animation
         self.sim_running = False
-        if self.animation_job: 
-            try:
-                self.after_cancel(self.animation_job)
-            except:
-                pass
+        if self.animation_job:
+            try: self.after_cancel(self.animation_job)
+            except: pass
         self.animation_job = None
-        
-        # --- RÉCUPÉRATION DES DIMENSIONS ---
-        # Au lieu de self.rect_h qui n'existe pas, on prend la taille de l'image actuelle
-        h, w = self.display_data.shape
-        
-        # 1. Utiliser une feuille BLANCHE (255)
-        import numpy as np
-        final_view = np.full((h, w), 255, dtype=np.uint8)
-        
-        if len(self.points_list) > 0:
-            temp_prev_coords = None 
-            
-            for i in range(len(self.points_list)):
-                mx, my, pwr, _ = self.points_list[i]
-                
-                if pwr > 0:
-                    ix, iy = self.screen_index(mx, my)
-                    
-                    if temp_prev_coords:
-                        old_x, old_y = temp_prev_coords
-                        self._draw_line_on_matrix(
-                            final_view, old_x, old_y,
-                            ix, iy, pwr,
-                            thickness=self.laser_width_px
-                        )
-                    else:
-                        # Sécurité pour ne pas dessiner hors matrice
-                        if 0 <= iy < h and 0 <= ix < w:
-                            ratio = max(0.0, min(1.0, float(pwr) / self.ctrl_max))
-                            color = int(255 * (1.0 - ratio))
-                            final_view[iy, ix] = color
-                        
-                    temp_prev_coords = (ix, iy)
-                else:
-                    temp_prev_coords = None
 
-        self.display_data = final_view
-        self.current_point_idx = len(self.points_list)
+        # 2. On saute directement à la fin du temps et des points
+        self.current_sim_time = self.total_sim_seconds
+        self.current_point_idx = len(self.points_list) - 1
         
-        # Mise à jour UI (on vérifie l'existence des widgets avant)
+        # 3. Dessin massif (Optimisé : pas d'appels UI dans la boucle)
+        self._redraw_up_to(self.current_point_idx)
+
+        # 4. Une SEULE mise à jour UI finale (très important pour la vitesse)
         try:
             t_str = self._format_seconds_to_hhmmss(self.total_sim_seconds)
             self.time_label.configure(text=f"Time: {t_str} / {t_str}")
             self.progress_bar.set(1.0)
             self.progress_label.configure(text="Progress: 100%")
             
-            if self.points_list:
-                last_mx, last_my, _, last_line = self.points_list[-1]
-                self.curr_x, self.curr_y = self.machine_to_screen(last_mx, last_my)
-                self.update_gcode_highlight(len(self.points_list) - 1)
-                
+            # On ne fait défiler le G-Code qu'une fois
+            self.update_gcode_highlight(self.current_point_idx)
+            self.btn_play_pause.configure(text="🔄", fg_color="#2980b9")
             self.update_graphics()
-            self.btn_play_pause.configure(text="▶", fg_color="#27ae60")
-        except:
-            pass # L'UI est peut-être déjà en train de se fermer
+        except Exception as e:
+            print(f"Erreur UI skip_to_end: {e}")
 
     def _draw_line_on_matrix(self, matrix, x0, y0, x1, y1, pwr, thickness=1):
         #print(f"DEBUG DRAW: pwr_brute={pwr}, ctrl_max={self.ctrl_max}")
@@ -1078,112 +1232,6 @@ class SimulationView(ctk.CTkFrame):
 
     def _format_seconds_to_hhmmss(self, s):
         return f"{int(s//3600):02d}:{int((s%3600)//60):02d}:{int(s%60):02d}"
-
-    
-
-    def draw_simulation(self, payload):
-        try:
-            #self.update_idletasks()
-
-            w_mm = max(1, payload.get("real_w", 100))
-            h_mm = max(1, payload.get("real_h", 100))
-
-            # --- 1. MATRICE IMAGE DE RÉFÉRENCE (Pour la loupe) ---
-            p_min = float(payload.get("min_power", 0))
-            p_max = float(payload.get("max_power", 100))
-
-            # On crée un rendu visuel de la matrice originale
-            render = np.clip(
-                (self.matrix - p_min) / max(1, p_max - p_min) * 255,
-                0, 255
-            ).astype('uint8')
-
-            pil_img = Image.fromarray(255 - render).resize(
-                (self.rect_w, self.rect_h),
-                Image.NEAREST
-            )
-
-            # ON REPREND FULL_DATA ICI (Indispensable pour la loupe)
-            self.full_data = np.array(pil_img)
-
-            # --- 2. MATRICE DE DESSIN (display_data) ---
-            # C'est celle-ci qu'OpenCV va modifier pendant l'animation
-            self.display_data = np.full(
-                (self.rect_h, self.rect_w), 
-                255, 
-                dtype=np.uint8
-            )
-
-            #self.frame_mask = np.zeros((self.rect_h, self.rect_w), dtype=bool)
-
-            # --- 3. NETTOYAGE CANVAS ---
-            self.preview_canvas.delete("all")
-            vis_pad = 10
-
-            self.preview_canvas.create_rectangle(
-                self.x0 - vis_pad, 
-                self.y0 - vis_pad, 
-                self.x0 + self.total_px_w + vis_pad, 
-                self.y0 + self.total_px_h + vis_pad, 
-                fill="white", 
-                outline="#d1d1d1", 
-                width=1,
-                tags="bg_rect"
-            )
-
-            # --- 4. POSITION IMAGE (ALIGNEE SUR LA GRILLE) ---
-            # On aligne l'image sur les limites minimales de la machine
-            # pour que (ix, iy) = (0, 0) corresponde au premier pixel.
-            tl_mx = self.min_x_machine
-            tl_my = self.min_y_machine
-
-            # On calcule les coordonnées Canvas du point (min_x, min_y)
-            self.img_sx, self.img_sy = self.machine_to_screen(tl_mx, tl_my)
-
-            # On crée l'image et on l'affiche
-            self.tk_img = ImageTk.PhotoImage(Image.fromarray(self.display_data))
-            self.img_container = self.preview_canvas.create_image(
-                self.img_sx,
-                self.img_sy,
-                anchor="nw",  # Indispensable
-                image=self.tk_img,
-                tags="main_image"
-            )
-
-            # --- 5. GRILLE ET LASER ---
-            self.draw_grid()
-
-            self.laser_halo = self.preview_canvas.create_oval(
-                0, 0, 0, 0, fill="#1a75ff", outline="#3385ff", width=1, tags="laser", stipple="gray50"
-            )
-            self.laser_head = self.preview_canvas.create_oval(
-                0, 0, 0, 0, fill="#00ffff", outline="white", width=1, tags="laser"
-            )
-
-            # --- 6. ORDRE DES CALQUES ---
-            self.preview_canvas.tag_lower("bg_rect")
-            self.preview_canvas.tag_raise("main_image")
-            self.preview_canvas.tag_raise("grid")
-            self.preview_canvas.tag_raise("laser")
-
-            # --- 6b. RECREATION DES ELEMENTS DE LA LOUPE ---
-            # Puisque "delete('all')" a tout supprimé, on doit les recréer
-            # pour qu'ils soient au-dessus de tout le reste.
-            self.loupe_container = self.preview_canvas.create_image(
-                0, 0, anchor="center", state="hidden", tags="loupe"
-            )
-            self.loupe_border = self.preview_canvas.create_oval(
-                0, 0, 0, 0, outline="#ff9f43", width=2, state="hidden", tags="loupe"
-            )
-            
-            # On s'assure qu'ils sont au sommet absolu
-            self.preview_canvas.tag_raise("loupe")
-
-            # --- 7. RESET ---
-            self.rewind_sim()
-
-        except Exception as e:
-            print(f"Error in draw_simulation: {e}")
 
    
 

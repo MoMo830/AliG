@@ -683,7 +683,6 @@ class RasterView(ctk.CTkFrame):
 
         # 3. APPEL DU MOTEUR VIA L'INSTANCE self.engine
         try:
-            # <--- MODIFIÉ ICI : on appelle self.engine.process_image_logic
             results = self.engine.process_image_logic(
                   self.input_image_path, 
                   settings, 
@@ -872,6 +871,8 @@ class RasterView(ctk.CTkFrame):
                 'e_num': int(self.get_val(self.controls["m67_e_num"])),
                 'use_s_mode': "S (Spindle)" in current_cmd_mode,
                 'ctrl_max': self.get_val(self.controls["ctrl_max"]),
+                'min_power': self.get_val(self.controls["min_p"]),
+                'max_power': self.get_val(self.controls["max_p"]),
                 'premove': self.get_val(self.controls["premove"]),
                 'feedrate': self.get_val(self.controls["feedrate"]),
                 'm67_delay': self.get_val(self.controls["m67_delay"]),
@@ -897,7 +898,7 @@ class RasterView(ctk.CTkFrame):
                 'mode': current_cmd_mode.split(' ')[0],
                 'firing_cmd': current_firing_mode.split('/')[0],
                 'file_name': os.path.basename(self.input_image_path).split('.')[0] + ".nc",
-                'output_dir': self.output_dir, # <-- IMPORTANT : On l'ajoute ici
+                'output_dir': self.output_dir, 
                 'origin_mode': current_origin_mode,
                 'real_w': real_w, 'real_h': real_h,
                 'est_sec': int(est_min * 60)
