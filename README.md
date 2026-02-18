@@ -81,6 +81,7 @@ If you just want to use the software without installing Python, follow these ste
 
 ## Roadmap :
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
+* More options to change image geometry.
 * Option to split big Gcode files?
 * Calibration improvement to test and select best settings (power range, thermal correction, latency).
 * **Variable Raster Direction:** Toggle between Horizontal (X-axis) and Vertical (Y-axis) engraving. This allows optimizing for machine rigidity or following wood grain patterns.
