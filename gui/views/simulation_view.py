@@ -4,6 +4,9 @@ A.L.I.G. Project - Simulation window
 ------------------------------------
 """
 #agrandir barre de gauche
+#changer couleur boutons rewind/skip
+#bordure cadre
+#prise en compte vitesse du framing
 
 
 import customtkinter as ctk

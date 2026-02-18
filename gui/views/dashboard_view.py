@@ -22,12 +22,10 @@ class DashboardView(ctk.CTkFrame):
         self.main_grid.grid_rowconfigure(0, weight=1)
 
         # --- COLONNE GAUCHE : MODES DÉFILANTS ---
-        # Elle prend maintenant toute la hauteur grâce à rowconfigure(0, weight=1)
         self.modes_container = ctk.CTkScrollableFrame(
             self.main_grid, 
             fg_color="transparent",
             width=420,
-            label_text="MODES",
             label_font=("Arial", 12, "bold")
         )
         self.modes_container.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
@@ -150,7 +148,6 @@ class DashboardView(ctk.CTkFrame):
         ctk.CTkLabel(f, text=label, font=("Arial", 11), text_color="gray").pack()
 
     def create_mode_card(self, row, col, title, description, callback, icon_char, state="normal"):
-        # ... (votre code create_mode_card reste inchangé) ...
         base_color = ["#F2F2F2", "#2B2B2B"]
         hover_color = ["#EBEBEB", "#333333"]
         border_color = ["#DCE4EE", "#3E454A"]
@@ -183,10 +180,20 @@ class DashboardView(ctk.CTkFrame):
 
         if state == "normal" and callback is not None:
             widgets = [card, icon_lbl, text_container, t_lbl, d_lbl]
-            for w in widgets: w.configure(cursor="hand2")
-            card.bind("<Enter>", lambda e: card.configure(fg_color=hover_color, border_color=accent_color))
-            card.bind("<Leave>", lambda e: card.configure(fg_color=base_color, border_color=border_color))
-            for w in widgets:
+            
+            # Fonctions de changement d'état
+            def on_enter(e):
+                card.configure(fg_color=hover_color, border_color=accent_color)
+            
+            def on_leave(e):
+                card.configure(fg_color=base_color, border_color=border_color)
+
+            for w in widgets: 
+                w.configure(cursor="hand2")
+                # On bind l'entrée et la sortie sur CHAQUE widget
+                # pour que le highlight de la 'card' reste actif
+                w.bind("<Enter>", on_enter)
+                w.bind("<Leave>", on_leave)
                 w.bind("<Button-1>", lambda e: callback())
         else:
             for w in [icon_lbl, t_lbl, d_lbl]:
