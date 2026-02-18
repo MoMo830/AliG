@@ -90,52 +90,6 @@ If you just want to use the software without installing Python, follow these ste
 * [Under consideration] Auto-Contour Detection & Trace & Fill Logic: Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
 * [Under consideration] Diagonal Rastering (45°):** Advanced trajectory logic to engrave at 45 degrees. 
 * [Theoretical] Implementation of SVG path parsing to allow hybrid projects (Raster engraving + Vector cutting) in a single G-code file.
-* Keep this readme up-to-date !
-* Add a Wiki.
-
-## Gcode Export
-All trajectories are calculated using **Absolute Coordinates**. This ensures that every pixel of the image is tied to a fixed position relative to your origin, preventing cumulative errors or trajectory drift common in incremental modes.
-
-| Parameter | Description | G-Code Command |
-| :--- | :--- | :--- |
-| **Distance Mode** | **Absolute Positioning** (Fixed precision) | `G90` |
-| **Unit System** | Metric (**Millimeters**) | `G21` |
-| **Plane Selection** | **X / Y** Working Plane | `G17` |
-| **Feedrate Mode** | **Units per Minute** | `G94` |
-| **Laser (Analog)** | Real-time synced modulation (Mach4/PoKeys) | `M67 E[0-3] Q[0-XXX]` |
-| **Laser (Spindle)** | Universal Spindle command (GRBL/Smoothie) | `S[0-XXX]` |
-
-The final file is exported with the `.nc` extension.
-
-## Parameters
-### Line Step / Resolution (mm)
-This is the "vertical resolution" of your project. It defines the distance between each horizontal pass of the laser.
-
-* **Optimal Setting:** This value should ideally match your laser's physical beam spot size (typically between **0.1mm and 0.15mm** for most diodes).
-* **The Focus Factor:** The ideal setting depends heavily on your **laser focus**. A perfectly focused laser allows for a finer step, while a slightly out-of-focus beam will require a larger step to cover the surface.
-* **Too Low:** If the Line Step is too small, the laser passes will overlap excessively. This results in a **much darker image**, loss of detail, and potential over-charring of the wood fibers due to accumulated heat.
-* **Too High:** If the Line Step is too large, you will see **visible gaps or white "striped" zones** between the passes where the material remains unmarked, leading to a faded and inconsistent result.
-  
-### DPI (Dots Per Inch)
-This parameter defines the horizontal resolution of your engraving. While the Line Step controls the vertical spacing between passes, the DPI determines how many individual laser pulses occur along each horizontal line.
-* X-Axis Resolution: Adjusting the DPI directly changes the density of points on the X-axis. A higher DPI results in more concentrated laser pulses per inch, increasing the level of horizontal detail.
-* Risk of Overloading: Be cautious with excessively high values. A DPI that exceeds your laser's physical capabilities or the material's thermal threshold can overload the engraving area, leading to excessive heat buildup and a charred appearance.
-* Hardware Limitations: Beyond the material, an extremely high DPI can overload the controller board. Forcing the processor to handle too many instructions per second may cause "stuttering," buffer underuns, or communication timeouts, potentially ruining the job. It also significantly increases processing time without necessarily improving visual quality.
-
-### Thermal Correction
-The Thermal Correction setting adjusts the power ramp of your laser. By increasing this coefficient, you slow down the power rise, keeping the laser at lower intensities for a longer range of gray tones. This prevents premature wood carbonization and preserves subtle details in highlights and mid-tones, ensuring that high power is only reached for the deepest blacks.
-
-### Min Power (%)
-Sets the power level for the lightest parts of your image. Since every material (wood types, MDF, etc.) has a different combustion threshold, this setting ensures the laser is already at its "starting point" for the first level of gray, preventing "dead zones" in the highlights.
-
-### Max Power (%)
-Defines the upper power limit for the darkest pixels. Adjust this based on your laser's wattage and the material's density. The goal is to achieve a deep black without deep charring or structural damage to the wood fibers.
-
-### Laser latency/delay (ms)
-M67 commands and Laser drivers have internal delays. Therefore, there's a parameter to take this into account. In my build, at a feedrate of 3000mm/min, the ideal setting is **11.5 ms**. If this parameter is not correctly set, you will experience blur as the engraved lines will not align.
-
-### Premove /Overscan (mm)
-Premove adds an overscan to allow your machine to reach a constant velocity before the laser starts engraving, ensuring consistent power delivery.
 
 ---
 
