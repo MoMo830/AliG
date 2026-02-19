@@ -72,9 +72,10 @@ class GCodeParser:
                         points.append((s_px + (t_px - s_px) * ratio,  
                                        s_py + (t_py - s_py) * ratio,  
                                        pwr_to_store, 
-                                       line_idx))  
+                                       line_idx,
+                                       current_f))  
                  
-                points.append((t_px, t_py, pwr_to_store, line_idx)) 
+                points.append((t_px, t_py, pwr_to_store, line_idx, current_f)) 
                 curr_x, curr_y = target_x, target_y 
 
         return points, duration_total

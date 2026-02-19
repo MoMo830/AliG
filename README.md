@@ -79,18 +79,33 @@ If you just want to use the software without installing Python, follow these ste
 </details>
 
 
-## Roadmap :
+## Roadmap
+
+### Phase 1: Core Stability & UX (Towards v1.0)
+* **Mastering the Raster Engine:** Finalization of the core rastering logic to ensure pixel-perfect reproduction and optimized laser power modulation.
+* **Universal 2D G-code Parser & Preview:** Full implementation of the G-code parser with a built-in trajectory visualizer to support and clean any standard 2D G-code file.
+* **Latency Visual Correction:** Implement a toggle option to mathematically compensate for hardware latency in the simulation view (visual correction only), ensuring a perfectly aligned preview.
+* **Export Policy Overhaul:** Flexible export management allowing users to choose specific file extensions (e.g., .gcode, .nc, .txt) to match various CNC controller requirements.
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
-* More options to change image geometry.
-* UI enhancement: Replace emojis with custom SVG vector icons.
-* Option to split big Gcode files?
-* Calibration improvement to test and select best settings (power range, thermal correction, latency).
-* **Variable Raster Direction:** Toggle between Horizontal (X-axis) and Vertical (Y-axis) engraving. This allows optimizing for machine rigidity or following wood grain patterns.
-* [In discussion] 3D Relief Engraving Mode:** Implementation of multi-pass logic with Z-axis decrement for deep carving. *Since my current laser lacks the power to benchmark this properly, I'm looking for user interest/feedback before developing this.*
-* [Likely] Dithering Implementation: Integration of the Floyd-Steinberg algorithm.
-* [Under consideration] Auto-Contour Detection & Trace & Fill Logic: Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
-* [Under consideration] Diagonal Rastering (45°):** Advanced trajectory logic to engrave at 45 degrees. 
-* [Theoretical] Implementation of SVG path parsing to allow hybrid projects (Raster engraving + Vector cutting) in a single G-code file.
+* **UI Enhancement & Custom Branding:** * Replace emojis with custom SVG vector icons (Theme-aware).
+    * Dynamic color adaptation for seamless Light/Dark mode transitions.
+* **Full Internationalization (i18n):** Completion of multi-language support for the entire interface.
+* **Onboarding Experience:** First-run setup wizard for essential machine configuration (safety limits, workspace, language).
+* **Variable Raster Direction:** X-axis or Y-axis engraving optimization.
+
+---
+##  Milestone: Version 1.0 (Official Stable Release)
+**Goal:** Providing a rock-solid, theme-responsive tool for high-quality rastering and universal 2D G-code processing with advanced visual feedback.
+---
+
+### Phase 2: Advanced Features & Post-1.0
+* **Interactive Workspace Navigation:** Enhanced visualization tools including Real-time Zoom and Pan (drag-to-move) to inspect high-resolution G-code paths.
+* **Large File Management:** Option to split massive G-code files for better buffer management.
+* **[Likely] Dithering Implementation:** Integration of the Floyd-Steinberg algorithm for superior grayscale rendering.
+* **[Under consideration] Auto-Contour Detection & Trace:** Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
+* **[Under consideration] Diagonal Rastering (45°):** Advanced trajectory logic to engrave at 45-degree angles.
+* **[Theoretical] Hybrid Engine:** Implementation of SVG path parsing to allow hybrid projects (Raster engraving + Vector cutting) in a single G-code file.
+* **[In discussion] 3D Relief Engraving Mode:** Implementation of multi-pass logic with Z-axis decrement for deep carving. *Currently seeking user feedback/interest due to hardware power constraints.*
 
 ---
 

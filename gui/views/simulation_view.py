@@ -3,10 +3,6 @@
 A.L.I.G. Project - Simulation window
 ------------------------------------
 """
-#agrandir barre de gauche
-#changer couleur boutons rewind/skip
-#bordure cadre
-#prise en compte vitesse du framing
 
 
 import customtkinter as ctk
@@ -71,8 +67,8 @@ class SimulationView(ctk.CTkFrame):
 
 
         # 3. Configuration UI
-        self.grid_columnconfigure(0, weight=0, minsize=200) 
-        self.grid_columnconfigure(1, weight=1) 
+        self.grid_columnconfigure(0, weight=0, minsize=500) 
+        self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         # 4. Construction des panneaux
@@ -108,7 +104,6 @@ class SimulationView(ctk.CTkFrame):
 
     def _async_generation(self):
         try:
-            print("[DEBUG] Thread: Début de la génération complète...")
             # 1. PRÉPARATION DES PARAMÈTRES
             params = self.payload['params']
             g_steps = params.get('gray_steps')
@@ -145,26 +140,30 @@ class SimulationView(ctk.CTkFrame):
 
             all_points_raw, total_dur_estimated = self.parser.parse(self.final_gcode)
             
-            # 2. INJECTION DES TIMESTAMPS (Crucial pour la nouvelle simulation)
+            # 2. INJECTION DES TIMESTAMPS
             # On recalcule le temps cumulé pour chaque point pour l'interpolation
             points_with_time = []
             cumulative_time = 0.0
             
-            # On récupère la vitesse d'avance (feedrate) pour le calcul
-            # conversion mm/min -> mm/s
-            base_feed = params.get('feedrate', 3000) / 60.0 
-
             for i in range(len(all_points_raw)):
-                p = list(all_points_raw[i]) # (x, y, pwr, line_idx)
+                p = list(all_points_raw[i]) # (x, y, pwr, line_idx, f_rate)
+                
                 if i > 0:
                     prev = all_points_raw[i-1]
-                    # Distance entre les deux points
+                    # Distance entre les deux points (X, Y)
                     dist = ((p[0]-prev[0])**2 + (p[1]-prev[1])**2)**0.5
-                    # Temps pour parcourir cette distance
-                    duration = dist / base_feed if base_feed > 0 else 0
+                    
+                    # RÉCUPÉRATION DE LA VITESSE DU PARSER (p[4])
+                    # Si le parser n'a pas trouvé de F, on utilise base_feed par sécurité
+                    f_rate = p[4] if len(p) > 4 else params.get('feedrate', 3000)
+                    f_sec = f_rate / 60.0
+                    
+                    # Temps pour parcourir cette distance à la vitesse G-Code
+                    duration = dist / f_sec if f_sec > 0 else 0
                     cumulative_time += duration
                 
-                # On ajoute le 5ème élément : le timestamp
+                # On garde la structure : (x, y, pwr, line_idx, timestamp)
+                # On remplace l'élement de vitesse par le temps cumulé
                 points_with_time.append((p[0], p[1], p[2], p[3], cumulative_time))
 
             # E. PRÉPARATION DU RETOUR
@@ -175,8 +174,6 @@ class SimulationView(ctk.CTkFrame):
                 'total_dur': cumulative_time,
                 'full_metadata': full_metadata 
             }
-
-            print(f"[DEBUG] Génération réussie: {len(points_with_time)} points, {cumulative_time:.1f}s")
             
             if self.winfo_exists():
                 self.after(0, self._on_gen_done)
@@ -192,9 +189,7 @@ class SimulationView(ctk.CTkFrame):
         self.destroy()
 
     def _on_gen_done(self):
-        print("[DEBUG] UI: _on_gen_done reçu")
         if not self.raw_sim_data:
-            print("[DEBUG ERROR] raw_sim_data est NULL")
             return
 
         self.points_list = self.raw_sim_data['points_list']
@@ -202,7 +197,6 @@ class SimulationView(ctk.CTkFrame):
         
         # Injection du texte dans le widget
         if hasattr(self, 'final_gcode') and self.final_gcode:
-            print("[DEBUG] UI: Remplissage du widget G-Code")
             self.gcode_view.configure(state="normal")
             self.gcode_view.delete("1.0", "end")
             self.gcode_view.insert("1.0", self.final_gcode)
@@ -213,7 +207,6 @@ class SimulationView(ctk.CTkFrame):
         if hasattr(self, 'loading_frame'):
             self.loading_frame.destroy()
 
-        print("[DEBUG] UI: Lancement de _prepare_and_draw")
         self._prepare_and_draw()
 
 
@@ -340,7 +333,7 @@ class SimulationView(ctk.CTkFrame):
 
 
     def _build_left_panel(self, payload):
-        self.left_panel = ctk.CTkFrame(self, corner_radius=0, width=220)
+        self.left_panel = ctk.CTkFrame(self, corner_radius=0, width=300)
         self.left_panel.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
         self.left_panel.grid_propagate(False) 
         
@@ -358,16 +351,11 @@ class SimulationView(ctk.CTkFrame):
         dims = payload.get('dims', (0, 0, 0, 0))
         h_px, w_px, step_y, step_x = dims
 
-        # 2. Affichage des statistiques sur une ligne (Label à gauche, Valeur à droite)
-        self._add_stat(info_container, "Matrix (px)", f"{w_px}x{h_px}")
-        self._add_stat(info_container, "Step X", f"{step_x:.3f}")
-        self._add_stat(info_container, "Step Y", f"{step_y:.3f}")
-
-        # 3. Calcul et affichage de la taille finale en mm
+        # 2. Calcul et affichage de la taille finale en mm
         # (Largeur = pixels * pas)
         w_mm = w_px * step_x
         h_mm = h_px * step_y
-        self._add_stat(info_container, "Size (mm)", f"{w_mm:.1f}x{h_mm:.1f}")
+        self._add_stat(info_container, "Final Size (mm):", f"{w_mm:.1f}x{h_mm:.1f}")
 
         # --- CHEMIN DE SORTIE FORMATÉ ---
         out_dir = payload.get('metadata', {}).get('output_dir', 'C:/')
@@ -382,7 +370,7 @@ class SimulationView(ctk.CTkFrame):
         p_max = float(params.get("max_power", 100))
         power_scale_frame = ctk.CTkFrame(info_container, fg_color="transparent")
         power_scale_frame.pack(fill="x", pady=10, padx=5)
-        ctk.CTkLabel(power_scale_frame, text="Power Range (0-100%)", font=("Arial", 10, "bold")).pack(anchor="w")
+        ctk.CTkLabel(power_scale_frame, text="Power Range (%)", font=("Arial", 10, "bold")).pack(anchor="w")
         raw_color = self.left_panel.cget("fg_color")
         
         if isinstance(raw_color, (list, tuple)):
@@ -502,6 +490,23 @@ class SimulationView(ctk.CTkFrame):
         )
 
         self.gcode_view.pack(expand=True, fill="both", padx=10, pady=5)
+    
+        self.gcode_view.bind("<Up>", lambda e: self._scroll_gcode(-1))
+        self.gcode_view.bind("<Down>", lambda e: self._scroll_gcode(1))
+        self.gcode_view.bind("<Left>", lambda e: self._scroll_gcode(-5)) # Saut plus grand
+        self.gcode_view.bind("<Right>", lambda e: self._scroll_gcode(5))
+
+    def _scroll_gcode(self, delta):
+        """Permet de naviguer dans le G-code et de synchroniser la simulation"""
+        new_idx = max(0, min(self.current_point_idx + delta, len(self.points_list) - 1))
+        if new_idx != self.current_point_idx:
+            self.sim_running = False
+            self.btn_play_pause.configure(text="▶", fg_color="#27ae60")
+            self.current_point_idx = new_idx
+            self.current_sim_time = self.points_list[new_idx][4]
+            self._redraw_up_to(new_idx)
+            self.sync_sim_to_index(new_idx)
+        return "break" # Empêche le comportement par défaut du widget texte
 
     def _add_stat(self, parent, label, value, is_path=False):
         """Helper pour afficher une ligne d'information propre"""
@@ -552,13 +557,17 @@ class SimulationView(ctk.CTkFrame):
         playback_cont = ctk.CTkFrame(self.controls_bar, fg_color="transparent")
         playback_cont.pack(pady=(0, 10)) # Centré par défaut dans un pack() sans side
 
-        self.btn_rewind = ctk.CTkButton(playback_cont, text="⏮", width=60, height=40, font=("Arial", 20), command=self.rewind_sim)
+        self.btn_rewind = ctk.CTkButton(playback_cont, text="⏮", width=60, height=40, 
+                                        font=("Arial", 20), fg_color="#444", hover_color="#555", 
+                                        command=self.rewind_sim)
         self.btn_rewind.pack(side="left", padx=5)
         
         self.btn_play_pause = ctk.CTkButton(playback_cont, text="▶", width=100, height=40, font=("Arial", 20), fg_color="#27ae60", command=self.toggle_pause)
         self.btn_play_pause.pack(side="left", padx=5)
         
-        self.btn_end = ctk.CTkButton(playback_cont, text="⏭", width=60, height=40, font=("Arial", 20), fg_color="#555", command=self.skip_to_end)
+        self.btn_end = ctk.CTkButton(playback_cont, text="⏭", width=60, height=40, 
+                             font=("Arial", 20), fg_color="#444", hover_color="#555", 
+                             command=self.skip_to_end)
         self.btn_end.pack(side="left", padx=5)
 
         # LIGNE 2 : Sélection de vitesse
@@ -1095,7 +1104,7 @@ class SimulationView(ctk.CTkFrame):
                 
                 # Dessin sur la matrice en mémoire
                 cv2_line(self.display_data, (ix1, iy1), (ix2, iy2), 
-                         color, thickness=laser_width)
+                         color, thickness=laser_width, lineType=cv2.LINE_8)
 
         # 4. Mise à jour finale du curseur bleu (en dehors de la boucle)
         last_p = points[target_idx]
@@ -1241,59 +1250,36 @@ class SimulationView(ctk.CTkFrame):
     def draw_grid(self):
         """Dessine la grille millimétrée (tous les 10mm) basée sur les coordonnées machine."""
         col, txt_col, dash = "#e0e0e0", "#888888", (2, 4)
-        
         self.preview_canvas.delete("grid")
 
-        # 1. DÉFINITION DES BORNES RÉELLES (en mm)
-        total_w_mm = self.total_mouvement_w
-        total_h_mm = self.total_mouvement_h
-        
-        x_start = self.min_x_machine
-        x_end = self.min_x_machine + total_w_mm
-        y_start = self.min_y_machine
-        y_end = self.min_y_machine + total_h_mm
+        vis_pad = 10
 
-        # On arrondit pour caler les lignes sur des multiples de 10
+        # 1. DÉFINITION DES BORNES RÉELLES (en mm)
+        
+        x_start_mm = self.min_x_machine - (vis_pad / self.scale)
+        x_end_mm = self.min_x_machine + self.total_mouvement_w + (vis_pad / self.scale)
+        y_start_mm = self.min_y_machine - (vis_pad / self.scale)
+        y_end_mm = self.min_y_machine + self.total_mouvement_h + (vis_pad / self.scale)
+
         step = 10
-        first_x = int(np.ceil(x_start / step) * step)
-        last_x = int(np.floor(x_end / step) * step)
-        first_y = int(np.ceil(y_start / step) * step)
-        last_y = int(np.floor(y_end / step) * step)
 
         # 2. LIGNES VERTICALES (Axe X)
-        for vx in range(first_x, last_x + step, step):
-            # On projette le point machine sur le canvas
-            sx, sy_top = self.machine_to_screen(vx, y_start)
-            _, sy_bottom = self.machine_to_screen(vx, y_end)
+        for vx in range(int(np.floor(x_start_mm/step)*step), int(np.ceil(x_end_mm/step)*step) + step, step):
+            sx, _ = self.machine_to_screen(vx, self.min_y_machine)
+            # Ligne de haut en bas du canvas (ou limites du rect)
+            self.preview_canvas.create_line(sx, self.y0 - vis_pad, sx, self.y0 + self.total_px_h + vis_pad, 
+                                            fill=col, dash=dash, tags="grid")
+            self.preview_canvas.create_text(sx, self.y0 + self.total_px_h + vis_pad + 15, 
+                                            text=str(vx), fill=txt_col, font=("Arial", 14), tags="grid")
 
-            self.preview_canvas.create_line(
-                sx, sy_top, sx, sy_bottom, 
-                fill=col, dash=dash, tags="grid"
-            )
+        for vy in range(int(np.floor(y_start_mm/step)*step), int(np.ceil(y_end_mm/step)*step) + step, step):
+            _, sy = self.machine_to_screen(self.min_x_machine, vy)
+            self.preview_canvas.create_line(self.x0 - vis_pad, sy, self.x0 + self.total_px_w + vis_pad, sy, 
+                                            fill=col, dash=dash, tags="grid")
+            self.preview_canvas.create_text(self.x0 - vis_pad - 20, sy, 
+                                            text=str(vy), fill=txt_col, font=("Arial", 14), tags="grid")
 
-            # Labels X
-            self.preview_canvas.create_text(
-                sx, max(sy_top, sy_bottom) + 15,
-                text=str(vx), fill=txt_col, font=("Arial", 8), tags="grid"
-            )
-
-        # 3. LIGNES HORIZONTALES (Axe Y)
-        for vy in range(first_y, last_y + step, step):
-            sx_left, sy = self.machine_to_screen(x_start, vy)
-            sx_right, _ = self.machine_to_screen(x_end, vy)
-
-            self.preview_canvas.create_line(
-                sx_left, sy, sx_right, sy, 
-                fill=col, dash=dash, tags="grid"
-            )
-
-            # Labels Y
-            self.preview_canvas.create_text(
-                sx_left - 20, sy,
-                text=str(vy), fill=txt_col, font=("Arial", 8), tags="grid"
-            )
-
-        self.preview_canvas.tag_raise("grid", "bg_rect") # Juste au dessus du fond blanc
+            #self.preview_canvas.tag_raise("grid", "bg_rect") # Juste au dessus du fond blanc
 
 
 

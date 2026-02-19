@@ -31,8 +31,19 @@ class DashboardView(ctk.CTkFrame):
         self.modes_container.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
         self.modes_container.grid_columnconfigure(0, weight=1)
 
+        # --- CHARGEMENT DES ICONES ---
+        current_file_path = os.path.dirname(os.path.realpath(__file__))
+        project_root = os.path.abspath(os.path.join(current_file_path, "..", ".."))
+        assets_path = os.path.join(project_root, "assets")
+
+        raster_img = ctk.CTkImage(
+            light_image=Image.open(os.path.join(assets_path, "raster_black.png")),
+            dark_image=Image.open(os.path.join(assets_path, "raster_white.png")),
+            size=(45, 45) # Taille de l'icône dans la carte
+)
+
         modes_list = [
-            (self.texts["raster_title"], self.texts["raster_desc"], self.controller.show_raster_mode, "📷", "normal"),
+            (self.texts["raster_title"], self.texts["raster_desc"], self.controller.show_raster_mode, raster_img, "normal"),
             (self.texts["dithering_title"], self.texts["dithering_desc"], None, "🏁", "normal"),
             (self.texts["infill_title"], self.texts["infill_desc"], None, "📐", "disabled"),
             (self.texts["parser_title"], self.texts["parser_desc"], None, "📐", "disabled"),
@@ -163,7 +174,15 @@ class DashboardView(ctk.CTkFrame):
         card.grid(row=row, column=col, padx=10, pady=8, sticky="ew")
         card.grid_columnconfigure(1, weight=1)
 
-        icon_lbl = ctk.CTkLabel(card, text=icon_char, font=("Arial", 35))
+        # --- MODIFICATION ICI ---
+        # Si icon_char est une CTkImage, on l'utilise dans l'argument 'image'
+        if isinstance(icon_char, ctk.CTkImage):
+            icon_lbl = ctk.CTkLabel(card, image=icon_char, text="")
+        else:
+            # Sinon, on l'affiche comme du texte (émojis)
+            icon_lbl = ctk.CTkLabel(card, text=icon_char, font=("Arial", 35))
+        # -------------------------
+
         icon_lbl.grid(row=0, column=0, padx=20, pady=20)
 
         text_container = ctk.CTkFrame(card, fg_color="transparent")
@@ -181,7 +200,6 @@ class DashboardView(ctk.CTkFrame):
         if state == "normal" and callback is not None:
             widgets = [card, icon_lbl, text_container, t_lbl, d_lbl]
             
-            # Fonctions de changement d'état
             def on_enter(e):
                 card.configure(fg_color=hover_color, border_color=accent_color)
             
@@ -190,11 +208,10 @@ class DashboardView(ctk.CTkFrame):
 
             for w in widgets: 
                 w.configure(cursor="hand2")
-                # On bind l'entrée et la sortie sur CHAQUE widget
-                # pour que le highlight de la 'card' reste actif
                 w.bind("<Enter>", on_enter)
                 w.bind("<Leave>", on_leave)
                 w.bind("<Button-1>", lambda e: callback())
         else:
+            # Gestion du mode désactivé (grisage)
             for w in [icon_lbl, t_lbl, d_lbl]:
                 w.configure(text_color="#707070")
