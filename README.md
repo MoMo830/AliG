@@ -83,7 +83,6 @@ If you just want to use the software without installing Python, follow these ste
 
 ### Phase 1: Core Stability & UX (Towards v1.0)
 * **Comprehensive Raster Toolkit:** Finalizing the entire user interface to provide a rock-solid, streamlined environment dedicated to high-performance rastering.
-* **Universal 2D G-code Parser & Preview:** Full implementation of the G-code parser with a built-in trajectory visualizer to support and clean any standard 2D G-code file.
 * **Latency Visual Correction:** Implement a toggle option to mathematically compensate for hardware latency in the simulation view (visual correction only), ensuring a perfectly aligned preview.
 * **Export Policy Overhaul:** Flexible export management allowing users to choose specific file extensions (e.g., .gcode, .nc, .txt) to match various CNC controller requirements.
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
@@ -99,6 +98,7 @@ If you just want to use the software without installing Python, follow these ste
 ---
 
 ### Phase 2: Advanced Features & Post-1.0
+* **Universal 2D G-code Parser & Preview:** Full implementation of the G-code parser with a built-in trajectory visualizer to support and clean any standard 2D G-code file.
 * **Smart Calibration Analysis:** Implementation of a computer vision module to analyze user-uploaded photos of calibration tests. The system will automatically suggest parameter corrections (latency) based on visual results.
 * **Interactive Workspace Navigation:** Enhanced visualization tools including Real-time Zoom and Pan (drag-to-move) to inspect high-resolution G-code paths.
 * **Large File Management:** Option to split massive G-code files for better buffer management.

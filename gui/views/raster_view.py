@@ -171,26 +171,29 @@ class RasterView(ctk.CTkFrame):
         self.canvas_img.get_tk_widget().config(bg='#1e1e1e', highlightthickness=0)
 
         # --- 2. FIGURE STATS (BAS) ---
-        self.stats_container = ctk.CTkFrame(self.view_frame, fg_color="#1a1a1a", border_width=1, border_color="#333333")
+        self.stats_container = ctk.CTkFrame(self.view_frame, fg_color="#202020", border_width=1, border_color="#333333")
         self.stats_container.grid(row=1, column=0, sticky="nsew")
         
-        self.fig_stats = plt.figure(figsize=(5, 1.5), facecolor='#1a1a1a')
-        # GridSpec : Stats à gauche (30%) et Histo à droite (70%)
-        # On passe le width_ratio à [1, 2] pour que l'histo reste plus large
-        gs_stats = self.fig_stats.add_gridspec(1, 2, width_ratios=[1, 2], wspace=0.15, left=0.08, right=0.95, top=0.85, bottom=0.2)
-        
-        # Attribution inversée
-        self.ax_info = self.fig_stats.add_subplot(gs_stats[0, 0]) # Colonne 0 (Gauche)
-        self.ax_hist = self.fig_stats.add_subplot(gs_stats[0, 1]) # Colonne 1 (Droite)
-        
-        self.ax_hist.set_facecolor('#1a1a1a')
+        self.fig_stats = plt.figure(figsize=(5, 1.5), facecolor='#202020')
+
+        # Utilisation de self. pour permettre la modification dynamique plus tard
+        # On initialise avec des valeurs par défaut (33% / 67%)
+        self.gs_left = self.fig_stats.add_gridspec(1, 1, left=0.0, right=0.33, top=1.0, bottom=0.0)
+        self.gs_right = self.fig_stats.add_gridspec(1, 1, left=0.42, right=0.96, top=0.82, bottom=0.28)
+
+        self.ax_info = self.fig_stats.add_subplot(self.gs_left[0, 0])
+        self.ax_hist = self.fig_stats.add_subplot(self.gs_right[0, 0])
+
+        self.ax_hist.set_facecolor('#202020')
         self.ax_info.set_facecolor('#202020')
+        
         self.ax_hist.set_visible(False)
         self.ax_info.set_visible(False)
         
         self.canvas_stats = FigureCanvasTkAgg(self.fig_stats, master=self.stats_container)
         self.canvas_stats.get_tk_widget().pack(fill="both", expand=True)
-        self.canvas_stats.get_tk_widget().config(bg='#1a1a1a', highlightthickness=0)
+        self.canvas_stats.get_tk_widget().config(bg='#202020', highlightthickness=0)
+
 
         # Initialisation des éléments graphiques persistants
         self.bg_rect = plt.Rectangle((0, 0), 0, 0, color='white', zorder=-2)
@@ -802,30 +805,38 @@ class RasterView(ctk.CTkFrame):
             for spine in self.ax_hist.spines.values():
                 spine.set_edgecolor('#333333')
 
-            # --- 7. PANNEAU D'INFORMATIONS (JOB STATS À GAUCHE) ---
+            # --- 7. PANNEAU D'INFORMATIONS (DYNAMIQUE) ---
             self.ax_info.clear()
             self.ax_info.set_facecolor('#202020')
             self.ax_info.set_xticks([]); self.ax_info.set_yticks([])
-            
+
             lines = [
                 f"ESTIMATED TIME:  {hours:02d}:{minutes:02d}:{seconds:02d}",
-                f"MATRIX SIZE:     {w_px}x{h_px} px",
-                f"REAL DIMENSIONS: {real_w:.2f}x{real_h:.2f} mm",
+                f"MATRIX SIZE:     {w_px} x {h_px} px",
+                f"REAL DIMENSIONS: {real_w:.2f} x {real_h:.2f} mm",
                 f"PIXEL PITCH X:   {x_st:.4f} mm",
                 f"PIXEL PITCH Y:   {l_step:.4f} mm"
             ]
             info_text = "\n".join(lines)
 
-            # Texte aligné à gauche
-            self.ax_info.text(0.1, 0.45, info_text, color='#aaaaaa', 
-                             fontfamily='monospace', fontsize=14, 
-                             ha='left', va='center', linespacing=1.8, 
-                             transform=self.ax_info.transAxes)
+            # --- CALCUL DE LA LARGEUR NÉCESSAIRE ---
+            # On prend la ligne la plus longue et on estime la place (environ 0.008 par caractère monospace)
+            max_chars = max(len(l) for l in lines)
+            # Ratio de la largeur de la figure (ajuste 0.0085 selon tes tests)
+            needed_width = max_chars * 0.0085 
             
-            # Titre JOB STATS centré
-            self.ax_info.set_title("JOB STATS", color='white', fontsize=20, 
-                                 fontweight='bold', loc='center', pad=10)
+            # Sécurité : entre 20% et 45% de la largeur totale
+            final_ratio = min(max(needed_width, 0.20), 0.45)
 
+            # Mise à jour des grilles
+            self.gs_left.update(right=final_ratio)
+            self.gs_right.update(left=final_ratio + 0.08) # Marge de 8% entre les deux
+
+            self.ax_info.text(0.05, 0.5, info_text, color='#aaaaaa', 
+                            fontfamily='monospace', fontsize=20, 
+                            ha='left', va='center', linespacing=1.6, 
+                            transform=self.ax_info.transAxes)
+            
             # --- 8. FINALISATION ---
             self.canvas_img.draw_idle()
             self.canvas_stats.draw_idle()

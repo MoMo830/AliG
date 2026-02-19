@@ -1,7 +1,7 @@
 {
     "window_settings": {
         "is_maximized": true,
-        "geometry": "1300x900+50+50"
+        "geometry": "1300x724+156+137"
     },
     "machine_settings": {
         "theme": "Dark",
@@ -32,7 +32,7 @@
         "gray_steps": 256,
         "m67_e_num": 0,
         "ctrl_max": 100,
-        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/Original-image-512x512-pixels.png",
+        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/IMG_3938.jpeg",
         "output_dir": "C:/Users/momof/SynologyDrive/Python/CNC",
         "custom_header": "",
         "custom_footer": "",
@@ -46,5 +46,11 @@
         "framing_ratio": "20%",
         "force_width": false,
         "invert_relief": false
+    },
+    "stats": {
+        "total_lines": 224797,
+        "total_gcodes": 3,
+        "total_time_seconds": 881.9901320003178,
+        "last_project_time": 320.3500700000183
     }
 }
