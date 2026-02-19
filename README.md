@@ -83,7 +83,7 @@ If you just want to use the software without installing Python, follow these ste
 
 ### Phase 1: Core Stability & UX (Towards v1.0)
 * **Comprehensive Raster Toolkit:** Finalizing the entire user interface to provide a rock-solid, streamlined environment dedicated to high-performance rastering.
-* **Latency Visual Correction:** Implement a toggle option to mathematically compensate for hardware latency in the simulation view (visual correction only), ensuring a perfectly aligned preview.
+* **Latency Visual Correction:** Implement a toggle option to mathematically compensate for hardware latency in the simulation view (visual correction only), ensuring a perfectly aligned preview. (done)
 * **Export Policy Overhaul:** Flexible export management allowing users to choose specific file extensions (e.g., .gcode, .nc, .txt) to match various CNC controller requirements.
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
 * **UI Enhancement & Custom Branding:** * Replace emojis with custom SVG vector icons (Theme-aware).
