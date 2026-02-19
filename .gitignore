@@ -21,3 +21,6 @@ alig_config.json
 
 # --- G-code ---
 *.nc
+
+# --- Assets ---
+assets/thumbnails/
