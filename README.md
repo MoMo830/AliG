@@ -18,7 +18,7 @@
 
 
 ## Description
-### A Specialized & Optimized G-Code Generator for Laser Engraving
+### A high-precision CAM dedicated to advanced raster engraving and hardware calibration.
 ALIG gives you **total control** over the G-Code generation process. Whether you are using a standard hobbyist controller or a professional industrial setup, you can fine-tune every parameter to match your hardware's response.
 
 * **Universal Compatibility**: Supports standard **S (Spindle)** commands for GRBL, Marlin, and FluidNC, as well as high-speed **M67 (Analog)** commands for Mach4/PoKeys57CNC systems.
@@ -82,7 +82,7 @@ If you just want to use the software without installing Python, follow these ste
 ## Roadmap
 
 ### Phase 1: Core Stability & UX (Towards v1.0)
-* **Mastering the Raster Engine:** Finalization of the core rastering logic to ensure pixel-perfect reproduction and optimized laser power modulation.
+* **Comprehensive Raster Toolkit:** Finalizing the entire user interface to provide a rock-solid, streamlined environment dedicated to high-performance rastering.
 * **Universal 2D G-code Parser & Preview:** Full implementation of the G-code parser with a built-in trajectory visualizer to support and clean any standard 2D G-code file.
 * **Latency Visual Correction:** Implement a toggle option to mathematically compensate for hardware latency in the simulation view (visual correction only), ensuring a perfectly aligned preview.
 * **Export Policy Overhaul:** Flexible export management allowing users to choose specific file extensions (e.g., .gcode, .nc, .txt) to match various CNC controller requirements.
@@ -99,6 +99,7 @@ If you just want to use the software without installing Python, follow these ste
 ---
 
 ### Phase 2: Advanced Features & Post-1.0
+* **Smart Calibration Analysis:** Implementation of a computer vision module to analyze user-uploaded photos of calibration tests. The system will automatically suggest parameter corrections (latency) based on visual results.
 * **Interactive Workspace Navigation:** Enhanced visualization tools including Real-time Zoom and Pan (drag-to-move) to inspect high-resolution G-code paths.
 * **Large File Management:** Option to split massive G-code files for better buffer management.
 * **[Likely] Dithering Implementation:** Integration of the Floyd-Steinberg algorithm for superior grayscale rendering.
