@@ -122,15 +122,16 @@ A.L.I.G. is a free project, developed during their spare time by a world-class t
 
 ## ⚠️ WARNING & SAFETY DISCLAIMER
 > [!CAUTION]
-> ALIG is a G-code generator (CAM). It does not control your machine.
-
+> **ALIG is a G-code generator (CAM).** It does not control your machine.
+>
 > Laser engraving involves real physical risks. Always:
 > - Wear certified safety goggles
 > - Verify your machine is in Laser Mode
 > - Check overscan travel limits
 > - Inspect generated G-code before execution
-
+>
 > Full safety documentation is available in the Wiki.
+
 
 
 
