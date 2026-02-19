@@ -16,49 +16,53 @@ class GCodeEngine:
         self.last_gcode_body = []
 
 
-
-
-
     def process_image_logic(self, image_path, s, source_img_cache=None):
         """
-        Pure image processing logic. 
-        's' is a dictionary of settings.
+        Traitement d'image avec support du sens de raster.
         """
+        # 1. Init et calculs de base
         x_step = 25.4 / max(1, s["dpi"])
+        raster_mode = s.get('raster_mode', "Horizontal")
         
-        # Gestion du cache d'image
         if source_img_cache is None:
             img = Image.open(image_path).convert('L')
         else:
             img = source_img_cache
         
         orig_w, orig_h = img.size
-        tw = min(s["width"], 2000) # Sécurité 2000mm
+        tw = min(s["width"], 2000)
+        th = (tw * orig_h / orig_w)
 
+        # Pixels théoriques
         w_px = max(2, int(tw / x_step))
-        h_px = max(1, int((tw * orig_h / orig_w) / s["line_step"]))
+        h_px = max(1, int(th / s["line_step"]))
 
-        # Sécurité mémoire
+        # 2. Sécurité mémoire
         MAX_TOTAL_PIXELS = 10000000 
         current_pixels = w_px * h_px
         memory_warning = False
+
+        l_step_val = s["line_step"]
 
         if current_pixels > MAX_TOTAL_PIXELS:
             memory_warning = True
             scale_factor = np.sqrt(MAX_TOTAL_PIXELS / current_pixels)
             w_px = int(w_px * scale_factor)
             h_px = int(h_px * scale_factor)
-            # Recalcul des pas si réduction
-            x_step = tw / (w_px - 1) if w_px > 1 else x_step
-            l_step_val = (tw * orig_h / orig_w) / h_px if h_px > 0 else s["line_step"]
-        else:
-            l_step_val = s["line_step"]
-
-        # Option Force Exact Width
-        if s.get("force_width"):
+            
+            # Correction des pas pour maintenir la taille physique (tw x th)
+            if raster_mode == "Horizontal":
+                # On ajuste le pas horizontal, on garde le line_step vertical fixe
+                x_step = tw / (w_px - 1) if w_px > 1 else x_step
+            else:
+                # En vertical, le "line_step" devient l'axe de balayage, on l'ajuste
+                l_step_val = th / (h_px - 1) if h_px > 1 else s["line_step"]
+                # Le x_step (écart entre colonnes) reste celui du DPI
+        
+        if s.get("force_width") and raster_mode == "Horizontal":
             x_step = tw / max(1, (w_px - 1))
 
-        # Traitement image
+        # 3. Traitement matriciel
         img_resized = img.resize((w_px, h_px), Image.Resampling.LANCZOS)
         arr = np.asarray(img_resized, dtype=np.float32) / 255.0
 
@@ -75,7 +79,6 @@ class GCodeEngine:
         
         matrix = s["min_p"] + (arr * (s["max_p"] - s["min_p"]))
         
-        # Quantification
         if s["gray_steps"] < 256:
             range_p = s["max_p"] - s["min_p"]
             if range_p > 0:
@@ -83,120 +86,109 @@ class GCodeEngine:
 
         matrix[arr < 0.005] = 0
         
-        # Estimation temps
-        total_dist = h_px * (tw + (2 * s["premove"]))
+        # 4. Estimation temps adaptée au sens
+        if raster_mode == "Horizontal":
+            total_dist = h_px * (tw + (2 * s["premove"]))
+        else:
+            total_dist = w_px * (th + (2 * s["premove"]))
+            
         est_min = total_dist / s["feedrate"]
+        m67_delay = s.get('m67_delay', 0)
+        latency_mm = (s['feedrate'] * m67_delay) / 60000
 
-        return matrix, h_px, w_px, l_step_val, x_step, est_min, memory_warning, img
+        return matrix, h_px, w_px, l_step_val, x_step, est_min, memory_warning, img, latency_mm
 
 
 
     def generate_gcode_list(self, matrix, h_px, w_px, l_step, x_st, offX, offY, gc):
-        """
-        Génère les lignes de G-Code de mouvement.
-        """
         gcode = []
         
-        # Extraction des paramètres du dictionnaire
+        # Extraction rapide des paramètres
         e_num = gc['e_num']
         use_s_mode = gc['use_s_mode']
         ratio = gc['ratio']
         ctrl_max = gc['ctrl_max']
         pre = gc['premove']
-        f_int = gc['feedrate']
         offset_latence = gc['offset_latence']
+        raster_mode = gc.get('raster_mode', "Horizontal")
 
-        # 1. Vitesse de travail initiale
-        gcode.append(f"G1 F{f_int}")
-        
-        # 2. Synchronisation initiale pour le mode M67
+        gcode.append(f"G1 F{gc['feedrate']}")
         if not use_s_mode:
-            gcode.append(f"M67 E{e_num} Q0.00")
-            gcode.append("G4 P0.1 (Sync before first move)")
+            gcode.append(f"M67 E{e_num} Q0.00\nG4 P0.1")
 
-        real_w = (w_px - 1) * x_st
+        # Pré-formatage des commandes pour éviter de reconstruire les strings complexes
+        if not use_s_mode:
+            cmd_template = f"M67 E{e_num} Q{{:.2f}} G1 {{}}{{:.4f}}"
+            move_template = f"M67 E{e_num} Q0.00 G1 {{}}{{:.4f}}"
+        else:
+            cmd_template = "G1 {0}{1:.4f} S{2:.2f}"
+            move_template = "G1 {0}{1:.4f} S0"
 
-        for row_idx in range(h_px):
-            y_pos = (row_idx * l_step) + offY
-            py = (h_px - 1) - row_idx 
-            is_fwd = (row_idx % 2 == 0)
-            x_dir = 1 if is_fwd else -1
-            corr = offset_latence * x_dir
+        # Pré-calcul de la matrice de puissance (ratio + clip) pour toute l'image d'un coup
+        # C'est BEAUCOUP plus rapide que de le faire dans la boucle
+        p_matrix = np.clip(matrix * ratio, 0, ctrl_max)
+
+        if raster_mode == "Horizontal":
+            outer_range, step_main, step_scan = h_px, l_step, x_st
+            axis = "X"
+            main_offset, scan_offset = offY, offX
+        else:
+            outer_range, step_main, step_scan = w_px, x_st, l_step
+            axis = "Y"
+            main_offset, scan_offset = offX, offY
+
+        real_scan_dist = ( (w_px if raster_mode == "Horizontal" else h_px) - 1) * step_scan
+
+        for outer_idx in range(outer_range):
+            main_pos = (outer_idx * step_main) + main_offset
+            is_fwd = (outer_idx % 2 == 0)
+            scan_dir = 1 if is_fwd else -1
+            corr = offset_latence * scan_dir
             
-            # Calcul des limites de ligne
-            x_img_start = (offX if is_fwd else real_w + offX)
-            x_img_end = (real_w + offX if is_fwd else offX)
-            x_pre_start = x_img_start - (pre * x_dir)
-            x_pre_end = x_img_end + (pre * x_dir)
-
-            # --- ÉTAPE A : POSITIONNEMENT INITIAL (Saut de ligne) ---
-            if not use_s_mode:
-                gcode.append(f"M67 E{e_num} Q0.00 G1 X{x_pre_start:.3f} Y{y_pos:.4f}")
+            # Extraction de la ligne de puissance
+            if raster_mode == "Horizontal":
+                row = p_matrix[(h_px - 1) - outer_idx, :]
             else:
-                gcode.append(f"G1 X{x_pre_start:.3f} Y{y_pos:.4f} S0")
+                row = p_matrix[::-1, outer_idx]
+
+            if not is_fwd:
+                row = row[::-1]
+
+            # --- DÉTECTION DES CHANGEMENTS (Le coeur de l'optimisation) ---
+            # On ne garde que les indices où la puissance change
+            changes = np.where(np.abs(np.diff(row)) > 0.0001)[0] + 1
+            # On ajoute le premier et le dernier point
+            indices = np.unique(np.concatenate(([0], changes, [len(row) - 1])))
             
-            current_x = x_pre_start
-
-            # --- ÉTAPE B : PRE-MOVE (OVERSCAN D'ENTRÉE) ---
-            target_edge = x_img_start + corr
-            if abs(target_edge - current_x) > 0.0001:
-                if not use_s_mode:
-                    gcode.append(f"M67 E{e_num} Q0.00 G1 X{target_edge:.4f}")
-                else:
-                    gcode.append(f"G1 X{target_edge:.4f} S0")
-                current_x = target_edge
-
-            # --- ÉTAPE C : GRAVURE DE L'IMAGE ---
-            row_data = matrix[py, :]
-            x_range = list(range(w_px)) if is_fwd else list(range(w_px - 1, -1, -1))
+            # Calcul des positions de balayage pré-move
+            scan_start = (0 if is_fwd else real_scan_dist) + scan_offset
+            pre_start = scan_start - (pre * scan_dir)
             
-            # Valeur initiale du premier pixel de la ligne
-            last_p = max(0, min(row_data[x_range[0]] * ratio, ctrl_max))
+            # 1. Positionnement initial
+            if raster_mode == "Horizontal":
+                gcode.append(move_template.format(f"X{pre_start:.3f} Y", main_pos))
+            else:
+                gcode.append(move_template.format(f"X{main_pos:.4f} Y", pre_start))
 
-            for i in range(1, len(x_range)):
-                px = x_range[i]
-                p_val = max(0, min(row_data[px] * ratio, ctrl_max))
+            # 2. Pre-move vers bord image
+            current_scan = scan_start + corr
+            gcode.append(move_template.format(axis, current_scan))
+
+            # 3. Gravure (Boucle uniquement sur les points de changement)
+            for idx in indices:
+                p_val = row[idx]
+                # Calcul de la position X ou Y réelle sur la grille
+                grid_idx = idx if is_fwd else (len(row) - 1 - idx)
+                target_scan = (grid_idx * step_scan) + scan_offset + corr
                 
-                # On ne génère une ligne que si la puissance change (Clustering)
-                if abs(p_val - last_p) > 0.0001:
-                    target_x = (x_range[i] * x_st) + offX + corr
-                    
-                    if abs(target_x - current_x) > 0.00001:
-                        if not use_s_mode:
-                            gcode.append(f"M67 E{e_num} Q{last_p:.2f} G1 X{target_x:.4f}")
-                        else:
-                            gcode.append(f"G1 X{target_x:.4f} S{last_p:.2f}")
-                        
-                        current_x = target_x
-                        last_p = p_val
-
-            # --- ÉTAPE D : FERMETURE BORD IMAGE ---
-            final_img_x = x_img_end + corr
-            if abs(final_img_x - current_x) > 0.00001:
                 if not use_s_mode:
-                    gcode.append(f"M67 E{e_num} Q{last_p:.2f} G1 X{final_img_x:.4f}")
+                    gcode.append(cmd_template.format(p_val, axis, target_scan))
                 else:
-                    gcode.append(f"G1 X{final_img_x:.4f} S{last_p:.2f}")
-                current_x = final_img_x
+                    gcode.append(cmd_template.format(axis, target_scan, p_val))
 
-            # --- ÉTAPE E : OVERSCAN FINAL HACHÉ ---
-            overscan_step = x_st * 4
-            dist_to_go = abs(x_pre_end - current_x)
-            num_steps_overscan = int(dist_to_go / overscan_step)
-            
-            for _ in range(num_steps_overscan):
-                current_x += (overscan_step * x_dir)
-                if not use_s_mode:
-                    gcode.append(f"M67 E{e_num} Q0.00 G1 X{current_x:.4f}")
-                else:
-                    gcode.append(f"G1 X{current_x:.4f} S0")
-
-            # --- ÉTAPE F : POSITIONNEMENT FINAL RÉEL ---
-            if abs(x_pre_end - current_x) > 0.0001:
-                if not use_s_mode:
-                    gcode.append(f"M67 E{e_num} Q0.00 G1 X{x_pre_end:.4f}")
-                else:
-                    gcode.append(f"G1 X{x_pre_end:.4f} S0")
+            # 4. Overscan final
+            pre_end = (real_scan_dist if is_fwd else 0) + scan_offset + (pre * scan_dir)
+            gcode.append(move_template.format(axis, pre_end))
 
         return gcode
 
@@ -252,6 +244,8 @@ class GCodeEngine:
         Centralise la génération finale du fichier G-Code.
         """
         # 1. Préparation des réglages G-Code
+        latency_mm = (settings_raw['feedrate'] * settings_raw['m67_delay']) / 60000 
+
         gc_settings = {
             'e_num': settings_raw['e_num'],
             'use_s_mode': settings_raw['use_s_mode'],
@@ -259,7 +253,9 @@ class GCodeEngine:
             'ctrl_max': settings_raw['ctrl_max'],
             'premove': settings_raw['premove'],
             'feedrate': settings_raw['feedrate'],
-            'offset_latence': (settings_raw['feedrate'] * settings_raw['m67_delay']) / 60000 
+            'offset_latence': latency_mm,
+            # On récupère le sens (par défaut Horizontal si non défini)
+            'raster_mode': settings_raw.get('raster_mode', "Horizontal")
         }
 
         # 2. Génération du corps
@@ -268,13 +264,15 @@ class GCodeEngine:
         gcode_body = self.generate_gcode_list(matrix, h_px, w_px, l_step, x_st, offX, offY, gc_settings)
 
         # 3. Assemblage avec Header/Footer
-        return self.assemble_gcode(
+        final_text = self.assemble_gcode(
             gcode_body, 
             text_blocks['header'],
             text_blocks['footer'],
             gc_settings,
             metadata_raw
         )
+
+        return final_text, latency_mm
 
     def calculate_offsets(self, selected_origin, real_w, real_h, custom_x=0, custom_y=0):
         offX, offY = 0, 0

@@ -45,7 +45,7 @@ class SimulationView(ctk.CTkFrame):
         # 2. États
         self.sim_running = False
         self.animation_job = None
-        self.points_list = None
+        self.points_list = [] 
         self.current_point_idx = 0
         self.last_mouse_coords = (0, 0)
         self.sim_speed = 1.0 
@@ -103,106 +103,91 @@ class SimulationView(ctk.CTkFrame):
         import threading
         threading.Thread(target=self._async_generation, daemon=True).start()
 
-    def _async_generation(self): 
-        try: 
-            import time
-            import numpy as np
-            start_global = time.perf_counter()
+    def _async_generation(self):
+        try:
+            # 1. PRÉPARATION DES PARAMÈTRES
+            params = self.payload['params']
+            g_steps = params.get('gray_steps')
+            use_s_mode = params.get('use_s_mode')
 
-            # 1. PRÉPARATION DES PARAMÈTRES 
-            params = self.payload['params'] 
-            g_steps = params.get('gray_steps') 
-            use_s_mode = params.get('use_s_mode') 
-            raster_mode = params.get('raster_mode', 'horizontal') 
+            self.payload['framing']['gray_steps'] = g_steps
+            self.payload['framing']['use_s_mode'] = use_s_mode
 
-            # A. Génération du G-Code de Cadrage 
-            t_start = time.perf_counter()
-            self.framing_gcode = self.engine.prepare_framing( 
-                self.payload['framing'],  
-                (self.payload['metadata']['real_w'], self.payload['metadata']['real_h']),  
-                self.payload['offsets'] 
-            ) 
-            print(f"[BENCH] A. Framing G-Code: {time.perf_counter() - t_start:.4f}s")
+            # A. Génération du G-Code de Cadrage
+            self.framing_gcode = self.engine.prepare_framing(
+                self.payload['framing'], 
+                (self.payload['metadata']['real_w'], self.payload['metadata']['real_h']), 
+                self.payload['offsets']
+            )
 
-            # B. Métadonnées
-            full_metadata = self.payload['metadata'].copy() 
-            full_metadata.update({
-                'framing_code': self.framing_gcode,
-                'gray_steps': g_steps,
-                'use_s_mode': use_s_mode,
-                'raster_mode': raster_mode
-            })
-            self.full_metadata = full_metadata 
+            # B. Métadonnées complètes
+            full_metadata = self.payload['metadata'].copy()
+            full_metadata['framing_code'] = self.framing_gcode
+            full_metadata['gray_steps'] = g_steps
+            full_metadata['use_s_mode'] = use_s_mode
+            self.full_metadata = full_metadata # Stockage pour _on_gen_done
 
-            # C. Génération du G-Code Final
-            t_start = time.perf_counter()
-            # On récupère determined_latence_mm ici
-            self.final_gcode, determined_latence_mm = self.engine.build_final_gcode( 
-                self.payload['matrix'], self.payload['dims'], 
-                self.payload['offsets'], params, 
-                self.payload['text_blocks'], full_metadata 
-            ) 
+            # C. Génération du G-Code Final (Récupération du G-Code ET de la latence)
+            # On déstructure le tuple retourné par le moteur
+            self.final_gcode, determined_latence_mm = self.engine.build_final_gcode(
+                self.payload['matrix'], self.payload['dims'],
+                self.payload['offsets'], params,
+                self.payload['text_blocks'], full_metadata
+            )
+
+            # On injecte la valeur dans le payload pour que SimulationView la lise
+            params['offset_latence'] = determined_latence_mm
+
+            # D. PARSING ET CALCUL DU TEMPS (Logique temporelle)
+            # 1. On parse pour avoir la liste de points brute
+            f_points_tmp, f_dur = self.parser.parse(self.framing_gcode)
+            framing_end_idx = len(f_points_tmp)
+
+            all_points_raw, total_dur_estimated = self.parser.parse(self.final_gcode)
             
-            # ON FIGE LA VALEUR ICI pour la simulation
-            self.latence_mm = float(determined_latence_mm)
+            # 2. INJECTION DES TIMESTAMPS
+            # On recalcule le temps cumulé pour chaque point pour l'interpolation
+            points_with_time = []
+            cumulative_time = 0.0
             
-            print(f"[DEBUG] Latence figée pour la simulation : {self.latence_mm} mm")
-            print(f"[BENCH] C. Final G-Code Build: {time.perf_counter() - t_start:.4f}s")
-
-            # D. PARSING (Maintenant beaucoup plus rapide)
-            t_start = time.perf_counter()
-            f_points_array, f_dur = self.parser.parse(self.framing_gcode) 
-            framing_end_idx = len(f_points_array) if f_points_array is not None else 0
-
-            # all_points_raw est déjà un tableau NumPy (N, 5)
-            pts_array, _ = self.parser.parse(self.final_gcode) 
-            
-
-            print(f"[BENCH] D. Parsing G-Code ({len(pts_array) if pts_array is not None else 0} pts): {time.perf_counter() - t_start:.4f}s")
-             
-            # E. CALCUL DES TIMESTAMPS (Très léger car pts_array est déjà un array)
-            t_start = time.perf_counter()
-            
-            if pts_array is not None and len(pts_array) > 1:
-                # Calcul des distances
-                deltas = np.diff(pts_array[:, :2], axis=0) 
-                distances = np.sqrt(np.sum(deltas**2, axis=1))
+            for i in range(len(all_points_raw)):
+                p = list(all_points_raw[i]) # (x, y, pwr, line_idx, f_rate)
                 
-                # Calcul des durées (Feedrate est en index 4)
-                f_rates_sec = pts_array[1:, 4] / 60.0
-                durations = np.divide(distances, f_rates_sec, out=np.zeros_like(distances), where=f_rates_sec > 0)
+                if i > 0:
+                    prev = all_points_raw[i-1]
+                    # Distance entre les deux points (X, Y)
+                    dist = ((p[0]-prev[0])**2 + (p[1]-prev[1])**2)**0.5
+                    
+                    # RÉCUPÉRATION DE LA VITESSE DU PARSER (p[4])
+                    # Si le parser n'a pas trouvé de F, on utilise base_feed par sécurité
+                    f_rate = p[4] if len(p) > 4 else params.get('feedrate', 3000)
+                    f_sec = f_rate / 60.0
+                    
+                    # Temps pour parcourir cette distance à la vitesse G-Code
+                    duration = dist / f_sec if f_sec > 0 else 0
+                    cumulative_time += duration
                 
-                # Remplacement de la colonne Feedrate par le temps cumulé
-                # On crée une copie pour éviter de modifier les données sources si nécessaire
-                pts_array[0, 4] = 0.0
-                pts_array[1:, 4] = np.cumsum(durations)
-                final_dur = pts_array[-1, 4]
-            else:
-                final_dur = 0.0
+                # On garde la structure : (x, y, pwr, line_idx, timestamp)
+                # On remplace l'élement de vitesse par le temps cumulé
+                points_with_time.append((p[0], p[1], p[2], p[3], cumulative_time))
 
-            print(f"[BENCH] E. Timestamps calculation (NumPy): {time.perf_counter() - t_start:.4f}s")
-
-            # F. PRÉPARATION DU RETOUR 
-            self.raw_sim_data = { 
-                'points_list': pts_array, 
-                'framing_end_idx': framing_end_idx, 
-                'f_dur': f_dur, 
-                'total_dur': final_dur, 
-                'full_metadata': full_metadata,
-                'latence_mm': self.latence_mm  # On peut aussi la passer ici par sécurité
+            # E. PRÉPARATION DU RETOUR
+            self.raw_sim_data = {
+                'points_list': points_with_time,
+                'framing_end_idx': framing_end_idx,
+                'f_dur': f_dur,
+                'total_dur': cumulative_time,
+                'full_metadata': full_metadata 
             }
             
-            print(f"[BENCH] TOTAL GENERATION: {time.perf_counter() - start_global:.4f}s")
-             
-            if self.winfo_exists(): 
-                self.after(0, self._on_gen_done) 
-             
-        except Exception as e: 
-            print(f"[DEBUG ERROR] Erreur thread: {e}") 
-            import traceback
-            traceback.print_exc()
-            if self.winfo_exists(): 
-                self.after(0, lambda: self._handle_gen_error(str(e)))
+            if self.winfo_exists():
+                self.after(0, self._on_gen_done)
+            
+        except Exception as e:
+            print(f"[DEBUG ERROR] Erreur thread: {e}")
+            if self.winfo_exists():
+                error_msg = str(e)
+                self.after(0, lambda msg=error_msg: self._handle_gen_error(msg))
 
     def _handle_gen_error(self, msg):
         messagebox.showerror("Engine Error", f"Failed to generate G-code:\n{msg}")
@@ -533,7 +518,7 @@ class SimulationView(ctk.CTkFrame):
 
         # --- 1. RÉCUPÉRATION DES DONNÉES ---
         self.points_list = self.raw_sim_data.get('points_list', [])
-        if self.points_list is None or (isinstance(self.points_list, np.ndarray) and self.points_list.size == 0):
+        if not self.points_list:
             return
 
         # On récupère les infos essentielles via .get pour éviter les KeyError
@@ -541,6 +526,8 @@ class SimulationView(ctk.CTkFrame):
         self.total_sim_seconds = self.raw_sim_data.get('total_dur', 0.0)
         self.total_sim_dur = self.total_sim_seconds 
         
+        # Préparation des timestamps pour la recherche rapide (bisect)
+        self.timestamps = [p[4] for p in self.points_list]
 
         # --- 2. LIMITES MACHINE ---
         raw_x = [p[0] for p in self.points_list]
@@ -624,7 +611,7 @@ class SimulationView(ctk.CTkFrame):
         self.current_sim_time = 0.0
         self.last_frame_time = 0.0 # Important pour le prochain "Play"
         
-        if self.points_list is not None and self.points_list.size > 0:
+        if self.points_list:
             mx, my = self.points_list[0][0], self.points_list[0][1]
             self.curr_x, self.curr_y = self.machine_to_screen(mx, my)
             # Pour éviter un trait fantôme au début
@@ -793,7 +780,7 @@ class SimulationView(ctk.CTkFrame):
       
 
     def toggle_pause(self):
-        if self.points_list is None or self.points_list.size == 0:
+        if not self.points_list:
             return
 
         # 1. SI MODE REJOUER
@@ -847,7 +834,7 @@ class SimulationView(ctk.CTkFrame):
             self.display_data.fill(255)
         
         # 3. Reset de la position du laser
-        if self.points_list is not None:
+        if self.points_list:
             p0 = self.points_list[0]
             self.curr_x, self.curr_y = self.machine_to_screen(p0[0], p0[1])
             
@@ -865,7 +852,7 @@ class SimulationView(ctk.CTkFrame):
         self.gcode_view.see("1.0")
         self.gcode_view.tag_remove("active", "1.0", "end")
         # Ajout : On surligne la première ligne si elle existe
-        if self.points_list is not None:
+        if self.points_list:
              self.update_gcode_highlight(0)
         
         # Rafraîchissement graphique
@@ -886,7 +873,7 @@ class SimulationView(ctk.CTkFrame):
             self.animation_job = None
             return
 
-        if self.points_list is None or len(self.points_list) < 2:
+        if not self.points_list or len(self.points_list) < 2:
             self.sim_running = False
             self.animation_job = None
             return
@@ -901,13 +888,13 @@ class SimulationView(ctk.CTkFrame):
         self.last_frame_time = now
         self.current_sim_time += dt
 
-        # On utilise l’état figé si présent
+        # 🔒 On utilise l’état figé si présent
         is_switch_on = getattr(self, "active_latence",
                             self.latence_switch.get())
 
         latence_mm = getattr(
             self,
-            "latence_mm",
+            "active_latence_mm",
             float(self.payload.get('params', {}).get('offset_latence', 0))
         )
 
@@ -915,7 +902,7 @@ class SimulationView(ctk.CTkFrame):
 
         # --- DESSIN INCRÉMENTAL STABLE ---
         while self.current_point_idx < last_index:
-            # On récupère le point suivant (index 4 = timestamp)
+
             next_point = self.points_list[self.current_point_idx + 1]
 
             # On sort si le prochain point n'est pas encore atteint temporellement
@@ -925,11 +912,11 @@ class SimulationView(ctk.CTkFrame):
             p1 = self.points_list[self.current_point_idx]
             p2 = next_point
 
-            # On ne dessine que si on a fini le framing (cadrage)
-            if self.current_point_idx >= self.framing_end_idx:
-                # On passe bien is_switch_on et latence_mm récupérés plus haut dans animate_loop
-                # _draw_segment s'occupe de vérifier si p1 != p2 et si p2[2] > 0
-                self._draw_segment(p1, p2, is_switch_on, latence_mm)
+            # 🔥 Ignore segments nuls
+            if not (p1[0] == p2[0] and p1[1] == p2[1]):
+
+                if self.current_point_idx >= self.framing_end_idx:
+                    self._draw_segment(p1, p2, is_switch_on, latence_mm)
 
             self.current_point_idx += 1
 
@@ -968,7 +955,7 @@ class SimulationView(ctk.CTkFrame):
 
     def sync_sim_to_index(self, target_idx):
         """Met à jour l'UI, le temps et le laser pour un index donné."""
-        if self.points_list is None or target_idx >= len(self.points_list):
+        if not self.points_list or target_idx >= len(self.points_list):
             return
 
         # 1. Mise à jour des coordonnées du laser (Position RÉELLE machine)
@@ -991,80 +978,81 @@ class SimulationView(ctk.CTkFrame):
         self.update_gcode_highlight(target_idx)
 
     def update_gcode_highlight(self, target_idx):
-        """Met à jour la ligne surlignée dans l'éditeur G-code en fonction de l'index du point."""
-        if self.points_list is None or target_idx >= len(self.points_list):
-            return
-        
-        # On évite de mettre à jour si la simulation est en pause et qu'on ne déplace pas le curseur manuellement
-        if not self.sim_running and target_idx != self.current_point_idx:
-            return
+            """Met à jour la ligne surlignée dans l'éditeur G-code en fonction de l'index du point."""
+            if not self.sim_running and target_idx != self.current_point_idx:
+                return
+            if not self.points_list or target_idx >= len(self.points_list):
+                return
 
-        try:
-            # 1. RECUPERATION ET FORCE EN ENTIER (Crucial pour NumPy)
-            # pts_array[:, 3] contient les numéros de ligne G-Code
-            line_number = int(self.points_list[target_idx][3])
-            
-            # 2. MISE EN COULEUR
-            self.gcode_view.tag_remove("active", "1.0", "end")
-            
-            # On construit l'index "Ligne.0" proprement
-            start_idx = f"{line_number}.0"
-            end_idx = f"{line_number}.end"
-            
-            self.gcode_view.tag_add("active", start_idx, end_idx)
-            self.gcode_view.tag_config("active", background="#2c3e50", foreground="#ecf0f1")
+            try:
+                # Récupérer l'index de la ligne G-code stocké dans le point
+                point_data = self.points_list[target_idx]
+                
+                # Sécurité : on vérifie que le tuple contient bien 4 éléments
+                if len(point_data) < 4:
+                    return
+                    
+                line_number = point_data[3]
 
-            # 3. CENTRAGE VERTICAL
-            # see() rend la ligne visible, mais elle est souvent en bas ou en haut.
-            self.gcode_view.see(start_idx)
-            
-            # Pour un centrage plus précis, on utilise yview_scroll après un see
-            # Ou plus simplement, on ajuste l'index de vue :
-            self.gcode_view.yview(max(0, line_number - 10)) # -10 lignes pour centrer environ
-            
-        except Exception as e:
-            # Affiche l'erreur en console sans bloquer le thread de simulation
-            print(f"GCode highlight error: {e}")
+                line_number = self.points_list[target_idx][3]
+    
+                # 1. Mise en couleur
+                self.gcode_view.tag_remove("active", "1.0", "end")
+                start_idx = f"{line_number}.0"
+                self.gcode_view.tag_add("active", start_idx, f"{line_number}.end")
+                self.gcode_view.tag_config("active", background="#2c3e50", foreground="#ecf0f1")
+
+                # 2. Centrage vertical parfait
+                # '0.5' indique qu'on veut placer la ligne à 50% de la hauteur du widget
+                self.gcode_view.yview_moveto(0) # Reset scroll pour le calcul
+                self.gcode_view.see(start_idx)  # On rend la ligne visible
+                
+                # On ajuste pour que la ligne soit au centre
+                # On déplace la vue de sorte que la ligne 'line_number' soit au milieu
+                self.gcode_view.yview_scroll(0, 'units') # Force update
+                # Approche simple : scroller pour que la ligne soit au milieu
+                # On calcule l'offset pour 50% de la hauteur
+                self.gcode_view.yview(int(line_number) - 10) # 10 est environ la moitié des lignes visibles
+                
+            except Exception as e:
+                # On évite de crash la simulation pour une erreur d'affichage de texte
+                print(f"GCode highlight error: {e}")
 
     def _on_gcode_click(self, event):
         try:
-            # 1. Trouver la ligne cliquée dans le widget texte
+            # Trouver la ligne cliquée dans le widget texte
             index = self.gcode_view.index(f"@{event.x},{event.y}")
             line_clicked = int(index.split('.')[0])
 
-            # 2. Recherche ultra-rapide avec NumPy
-            # On cherche tous les indices où la colonne 3 (numéro de ligne) 
-            # correspond à la ligne cliquée.
-            indices = np.where(self.points_list[:, 3].astype(int) == line_clicked)[0]
-
-            if indices.size > 0:
-                # On prend le premier point trouvé pour cette ligne G-Code
-                target_idx = int(indices[0])
-
+            # Chercher le point correspondant
+            target_idx = None
+            for i, p in enumerate(self.points_list):
+                # p[3] est l'index de ligne G-Code
+                if p[3] == line_clicked:
+                    target_idx = i
+                    break
+            
+            if target_idx is not None:
                 # 1. On fige la simulation
                 self.sim_running = False
                 self.btn_play_pause.configure(text="▶", fg_color="#27ae60")
 
-                # 2. SYNCHRONISATION TEMPORELLE
+                # 2. SYNCHRONISATION TEMPORELLE (Crucial !)
+                # On récupère le timestamp (p[4]) associé à ce point
                 self.current_point_idx = target_idx
-                # Récupération du timestamp (colonne 4)
-                self.current_sim_time = float(self.points_list[target_idx][4])
+                self.current_sim_time = self.points_list[target_idx][4]
 
                 # 3. MISE À JOUR VISUELLE
-                self.sync_sim_to_index(target_idx)
-                self._redraw_up_to(target_idx)
+                self.sync_sim_to_index(target_idx) # Met à jour labels et barre
+                self._redraw_up_to(target_idx)      # Redessine la matrice jusqu'à ce point
                 self.update_gcode_highlight(target_idx)
-                
-                # Mise à jour graphique immédiate
-                self.update_graphics()
                 
         except Exception as e:
             print(f"GCode selection error: {e}")
 
     def _on_progress_click(self, event):
         """Déplace la simulation sans freezer l'UI."""
-        # Sécurité NumPy
-        if self.points_list is None or self.total_sim_seconds <= 0:
+        if not self.points_list or self.total_sim_seconds <= 0:
             return
 
         try:
@@ -1072,28 +1060,23 @@ class SimulationView(ctk.CTkFrame):
             bar_width = self.progress_bar.winfo_width()
             ratio = max(0, min(event.x / bar_width, 1.0))
             
-            # 2. Suspension de l'animation
+            # 2. Suspension de l'animation pour éviter les conflits
             was_running = self.sim_running
             self.sim_running = False 
             if self.animation_job:
                 self.after_cancel(self.animation_job)
                 self.animation_job = None
             
-            # 3. Calcul du nouveau point (Ultra-rapide avec NumPy)
-            self.current_sim_time = float(ratio * self.total_sim_seconds)
+            # 3. Calcul du nouveau point (Temporel)
+            self.current_sim_time = ratio * self.total_sim_seconds
+            self.current_point_idx = bisect.bisect_left(self.timestamps, self.current_sim_time)
+            self.current_point_idx = max(0, min(self.current_point_idx, len(self.points_list) - 1))
             
-            # Recherche binaire sur la colonne 4 (timestamps)
-            idx = np.searchsorted(self.points_list[:, 4], self.current_sim_time)
-            self.current_point_idx = int(max(0, min(idx, len(self.points_list) - 1)))
-            
-            # 4. Rendu et Synchronisation
+            # 4. Rendu (La partie qui peut prendre du temps)
             self._redraw_up_to(self.current_point_idx)
             self.sync_sim_to_index(self.current_point_idx)
             
-            # AJOUT : Synchroniser le surlignage du texte G-Code
-            self.update_gcode_highlight(self.current_point_idx)
-            
-            # 5. Reprise ou rafraîchissement
+            # 5. Reprise après un court délai pour laisser l'UI respirer
             if was_running:
                 self.sim_running = True
                 self.last_frame_time = time.time()
@@ -1106,90 +1089,99 @@ class SimulationView(ctk.CTkFrame):
 
 
     def _recalibrate_index_from_time(self):
-        """Trouve l'index du point G-Code le plus proche du temps actuel via NumPy."""
-        if self.points_list is None or self.points_list.size == 0:
+        """Trouve l'index du point G-Code le plus proche du temps actuel via recherche binaire."""
+        if not self.points_list:
             return
         
-        # NumPy effectue la recherche binaire directement sur la colonne 4 (timestamps)
-        # C'est instantané, même avec 2 millions de points.
-        found_idx = np.searchsorted(self.points_list[:, 4], self.current_sim_time)
+        # On crée ou récupère la liste des timestamps (le 5ème élément de chaque point)
+        # Note : pour optimiser encore plus, tu peux stocker cette liste de timestamps 
+        # une fois pour toutes dans _on_gen_done
+        timestamps = [p[4] for p in self.points_list]
         
+        # Trouve l'index d'insertion pour maintenir l'ordre
+        # C'est l'équivalent ultra-rapide de ta boucle for
+        found_idx = bisect.bisect_left(timestamps, self.current_sim_time)
+        
+        # Sécurité pour ne pas dépasser la liste
         self.current_point_idx = min(found_idx, len(self.points_list) - 1)
         
+        # Synchronisation UI
         self.sync_sim_to_index(self.current_point_idx)
 
     def _redraw_up_to(self, target_idx):
-        """Redessine tout avec la latence capturée lors de la génération."""
-        if self.points_list is None or len(self.points_list) < 2:
+
+        if not self.points_list or len(self.points_list) < 2:
             return
 
-        # Sécurité sur l'index
-        last_idx = len(self.points_list) - 1
-        target_idx = min(target_idx, last_idx)
+        target_idx = min(target_idx, len(self.points_list) - 1)
 
-        # 1. Reset complet de l'image (Fond blanc)
+        # Reset complet
         self.display_data.fill(255)
 
-        # 2. On lit l'état RÉEL du bouton
-        is_switch_on = self.latence_switch.get()
-        
-        # On récupère la valeur FIGÉE lors de la génération (active_latence_mm)
-        # On utilise getattr par sécurité pour éviter un crash si la variable n'existe pas
+        is_switch_on = getattr(
+            self,
+            "active_latence",
+            self.latence_switch.get()
+        )
 
+        latence_mm = getattr(
+            self,
+            "active_latence_mm",
+            float(self.payload.get('params', {}).get('offset_latence', 0))
+        )
 
-        # DEBUG : Pour confirmer que la valeur n'est plus à 0
-        # print(f"DEBUG REDRAW: Latence={latence_mm}mm, ON={is_switch_on}")
+        # On reproduit EXACTEMENT la même logique que animate_loop
+        for i in range(0, target_idx):
 
-        # 3. Boucle de dessin optimisée
-        start_scan = self.framing_end_idx
-        
-        for i in range(start_scan, target_idx):
+            if i >= len(self.points_list) - 1:
+                break
+
+            if i < self.framing_end_idx:
+                continue
+
             p1 = self.points_list[i]
             p2 = self.points_list[i + 1]
 
-            # On passe la valeur récupérée à draw_segment
-            self._draw_segment(p1, p2, is_switch_on, self.latence_mm)
+            # 🔥 Ignore segments nuls
+            if p1[0] == p2[0] and p1[1] == p2[1]:
+                continue
 
-        # 4. Mise à jour de l'affichage
+            self._draw_segment(p1, p2, is_switch_on, latence_mm)
+
         self.update_graphics()
 
+
+                
     def _draw_segment(self, p1, p2, is_switch_on, latence_mm):
-        """
-        Unique fonction de dessin compatible NumPy.
-        p1, p2 : colonnes [0:X, 1:Y, 2:Power, 3:LineIdx, 4:Timestamp]
-        """
-        # 1. Vérification : pas de mouvement ou laser éteint
-        if (p1[0] == p2[0] and p1[1] == p2[1]) or p2[2] <= 0:
+        if p1[0] == p2[0] and p1[1] == p2[1]:
             return
 
-        # 2. Correction de latence (Offset horizontal dynamique)
+        if p2[2] <= 0:
+            return
+
+        """Unique fonction de dessin pour toute la classe."""
+        if p2[2] <= 0: return # Laser éteint
+
         corr_x = 0
         if is_switch_on:
             dx = p2[0] - p1[0]
             if abs(dx) > 1e-5:
-                # Si on va vers la droite (dx > 0), on décale vers la gauche (-latence)
                 corr_x = -latence_mm if dx > 0 else latence_mm
 
-        # 3. Conversion en pixels (screen_index gère déjà l'échelle et l'origine)
         ix1, iy1 = self.screen_index(p1[0] + corr_x, p1[1])
         ix2, iy2 = self.screen_index(p2[0] + corr_x, p2[1])
 
-        # 4. Calcul de la couleur (0=Noir, 255=Blanc)
         ratio = max(0.0, min(1.0, float(p2[2]) / self.ctrl_max))
         color = int(255 * (1.0 - ratio))
 
-        # 5. Rendu OpenCV
-        cv2.line(
-            self.display_data, 
-            (ix1, iy1), 
-            (ix2, iy2), 
-            (color, color, color), 
-            thickness=max(1, self.laser_width_px)
-        )
+        cv2.line(self.display_data, (ix1, iy1), (ix2, iy2), color, 
+                 thickness=max(1, self.laser_width_px))
+        #print("DRAW", p1[3], "->", p2[3])
+
 
     def skip_to_end(self):
         """Termine instantanément la simulation avec un rendu optimisé."""
-        if not self.winfo_exists() or self.points_list is None:
+        if not self.winfo_exists() or not self.points_list:
             return
 
         # 1. Arrêt immédiat de l'animation

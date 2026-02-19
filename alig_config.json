@@ -1,22 +1,6 @@
 {
-    "window_settings": {
-        "is_maximized": true,
-        "geometry": "1300x724+156+137"
-    },
-    "machine_settings": {
-        "theme": "Dark",
-        "language": "English",
-        "cmd_mode": "M67 (Analog)",
-        "firing_mode": "M3/M5",
-        "m67_e_num": 0,
-        "ctrl_max": 100,
-        "m67_delay": 11.5,
-        "premove": 10.0,
-        "custom_header": "",
-        "custom_footer": ""
-    },
     "raster_settings": {
-        "width": 30.0,
+        "width": 100.0,
         "line_step": 0.1307,
         "dpi": 254,
         "custom_x": 0.0,
@@ -33,24 +17,22 @@
         "m67_e_num": 0,
         "ctrl_max": 100,
         "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/IMG_3938.jpeg",
-        "output_dir": "C:/Users/momof/SynologyDrive/Python/CNC",
+        "output_dir": "c:\\Users\\momof\\SynologyDrive\\Python\\CNC\\ALIG_Project",
         "custom_header": "",
         "custom_footer": "",
         "origin_mode": "Lower-Left",
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
-        "include_frame": true,
-        "include_pointer": true,
+        "include_frame": false,
+        "include_pointer": false,
         "frame_power": "0",
         "custom_pause_cmd": "M0",
         "framing_ratio": "20%",
         "force_width": false,
         "invert_relief": false
     },
-    "stats": {
-        "total_lines": 224797,
-        "total_gcodes": 3,
-        "total_time_seconds": 881.9901320003178,
-        "last_project_time": 320.3500700000183
+    "window_settings": {
+        "is_maximized": true,
+        "geometry": "1300x900+50+50"
     }
 }

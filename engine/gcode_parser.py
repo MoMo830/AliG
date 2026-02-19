@@ -1,11 +1,7 @@
-import re
 import numpy as np
 
 class GCodeParser: 
     def __init__(self, stats): 
-        """ 
-        :param stats: Dictionnaire contenant offX, offY, min_power, rect_h 
-        """ 
         self.stats = stats 
         self.offX = stats.get("offX", 0) 
         self.offY = stats.get("offY", 0) 
@@ -14,68 +10,83 @@ class GCodeParser:
 
     def parse(self, gcode_text): 
         if not gcode_text: 
-            return [], 0.0 
+            return None, 0.0 
              
-        points = [] 
-        duration_total = 0.0 
-         
-        curr_x, curr_y = None, None  
-        current_f = 1000.0    
-        current_pwr = 0.0     
+        lines = gcode_text.splitlines()
+        points = []
+        
+        # États persistants
+        curr_x, curr_y = 0.0, 0.0
+        curr_f = 1000.0
+        curr_pwr = 0.0
 
-        lines = gcode_text.split('\n') 
-         
-        for line_idx, line in enumerate(lines, start=1): 
-            line_u = line.strip().upper() 
-             
-            if not line_u or line_u.startswith(';') or line_u.startswith('('): 
-                continue 
+        for line_idx, line in enumerate(lines, start=1):
+            line = line.strip().upper()
+            if not line or line.startswith(('(', ';')): continue
 
-            # 1. Extraction des paramètres 
-            match_f = re.search(r'F(\d+)', line_u) 
-            if match_f:  
-                current_f = float(match_f.group(1)) 
+            changed = False
+            
+            # --- 1. Extraction de la PUISSANCE (S ou Q) ---
+            # On cherche Q (M67) ou S (Standard)
+            for char_p in ('Q', 'S'):
+                pos = line.find(char_p)
+                if pos != -1:
+                    start = pos + 1
+                    end = start
+                    while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
+                        end += 1
+                    try:
+                        curr_pwr = float(line[start:end])
+                        break # On a trouvé la puissance
+                    except: pass
 
-            match_p = re.search(r'[SQ]([-+]?\d*\.\d+|\d+)', line_u) 
-            if match_p:  
-                current_pwr = float(match_p.group(1)) 
+            # --- 2. Extraction du FEEDRATE (F) ---
+            pos_f = line.find('F')
+            if pos_f != -1:
+                start = pos_f + 1
+                end = start
+                while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
+                    end += 1
+                try: curr_f = float(line[start:end])
+                except: pass
 
-            # 2. Extraction des coordonnées 
-            mx = re.search(r'X([-+]?\d*\.\d+|\d+)', line_u) 
-            my = re.search(r'Y([-+]?\d*\.\d+|\d+)', line_u) 
+            # --- 3. Extraction des COORDONNÉES (X et Y) ---
+            # Extraction X
+            pos_x = line.find('X')
+            if pos_x != -1:
+                start = pos_x + 1
+                end = start
+                while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
+                    end += 1
+                try:
+                    curr_x = float(line[start:end])
+                    changed = True
+                except: pass
 
-            if mx or my: 
-                target_x = float(mx.group(1)) if mx else (curr_x if curr_x is not None else 0.0) 
-                target_y = float(my.group(1)) if my else (curr_y if curr_y is not None else 0.0) 
-                 
-                if curr_x is None: 
-                    curr_x, curr_y = target_x, target_y 
-                    continue 
+            # Extraction Y
+            pos_y = line.find('Y')
+            if pos_y != -1:
+                start = pos_y + 1
+                end = start
+                while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
+                    end += 1
+                try:
+                    curr_y = float(line[start:end])
+                    changed = True
+                except: pass
+            
+            # On n'ajoute un point que si un mouvement (X ou Y) est détecté
+            if changed:
+                pwr_to_store = curr_pwr if curr_pwr > self.min_pwr else 0.0
+                
+                # Conversion directe en coordonnées écran (Pixel)
+                px = curr_x - self.offX
+                py = self.rect_h - (curr_y - self.offY)
+                
+                points.append((px, py, pwr_to_store, float(line_idx), curr_f))
 
-                pwr_to_store = current_pwr if current_pwr > self.min_pwr else 0.0 
+        if not points:
+            return None, 0.0
 
-                # Logique conservée sans le multiplicateur scale
-                s_px = (curr_x - self.offX)
-                t_px = (target_x - self.offX)
-                s_py = self.rect_h - (curr_y - self.offY)
-                t_py = self.rect_h - (target_y - self.offY)
-                 
-                dist = np.hypot(target_x - curr_x, target_y - curr_y) 
-                 
-                if dist > 0.001: 
-                    seg_duration = dist / (current_f / 60.0) 
-                    duration_total += seg_duration 
-                     
-                    num_steps = max(2, int(seg_duration * 60))  
-                    for j in range(num_steps): 
-                        ratio = j / num_steps 
-                        points.append((s_px + (t_px - s_px) * ratio,  
-                                       s_py + (t_py - s_py) * ratio,  
-                                       pwr_to_store, 
-                                       line_idx,
-                                       current_f))  
-                 
-                points.append((t_px, t_py, pwr_to_store, line_idx, current_f)) 
-                curr_x, curr_y = target_x, target_y 
-
-        return points, duration_total
+        # Conversion unique en NumPy array (le secret de la performance)
+        return np.array(points, dtype=np.float32), 0.0

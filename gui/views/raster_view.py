@@ -272,8 +272,25 @@ class RasterView(ctk.CTkFrame):
         self.create_input_pair(t_geo, "Line Step / Resolution (mm)", 0.01, 1.0, 0.1307, "line_step", precision=4)
         self.create_input_pair(t_geo, "Resolution (DPI)", 10, 1200, 254, "dpi", is_int=True)
         
+        # --- AJOUT DU SENS DU RASTER (Intégré dans l'onglet Geometry) ---
+        raster_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
+        raster_frame.pack(fill="x", padx=10, pady=(10, 5))
         
+        ctk.CTkLabel(raster_frame, text="Raster mode", font=("Segoe UI", 11)).pack(side="left")
+        
+        self.raster_dir_var = ctk.StringVar(value="Horizontal")
+        self.raster_dir_btn = ctk.CTkSegmentedButton(
+            t_geo, 
+            values=["Horizontal", "Vertical"],
+            variable=self.raster_dir_var,
+            command=lambda _: self.update_preview(),
+            height=28,
+        )
+        self.raster_dir_btn.pack(pady=(0, 10), padx=10, fill="x")
+        
+        # --- SUITE DE LA GÉOMÉTRIE ---
         self.create_dropdown_pair(t_geo, "Origin Point", ["Lower-Left", "Upper-Left", "Lower-Right", "Upper-Right", "Center", "Custom"], "origin_mode")
+        
         self.custom_offset_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
         self.create_simple_input(self.custom_offset_frame, "Custom Offset X (mm)", 0.0, "custom_x")
         self.create_simple_input(self.custom_offset_frame, "Custom Offset Y (mm)", 0.0, "custom_y")
@@ -656,12 +673,10 @@ class RasterView(ctk.CTkFrame):
 
 
     def process_logic(self):
-        if not self.input_image_path:
-            return None, 0, 0, 0, 0, 0
         if not self.input_image_path or not os.path.isfile(self.input_image_path):
             print(f"DEBUG: Chemin invalide détecté -> {self.input_image_path}")
-            # On retourne des valeurs vides pour que l'interface ne crash pas
             return None, 0, 0, 0, 0, 0
+
         # 1. On prépare les réglages dans un dictionnaire
         settings = {
             "width": self.get_val(self.controls["width"]),
@@ -676,15 +691,16 @@ class RasterView(ctk.CTkFrame):
             "premove": self.get_val(self.controls["premove"]),
             "feedrate": self.get_val(self.controls["feedrate"]),
             "invert": self.invert_var.get(),
-            "force_width": self.force_width_var.get()
+            "force_width": self.force_width_var.get(),
+            "raster_mode": self.raster_dir_var.get() 
         }
 
         # 2. GESTION DU CACHE
         current_cache = None
         if hasattr(self, '_source_img_path') and self._source_img_path == self.input_image_path:
-           current_cache = getattr(self, '_source_img_cache', None)
+            current_cache = getattr(self, '_source_img_cache', None)
 
-        # 3. APPEL DU MOTEUR VIA L'INSTANCE self.engine
+        # 3. APPEL DU MOTEUR
         try:
             results = self.engine.process_image_logic(
                   self.input_image_path, 
@@ -692,23 +708,26 @@ class RasterView(ctk.CTkFrame):
                   source_img_cache=current_cache
             )
             
-            # Récupération des 8 valeurs retournées par la méthode de la classe
-            matrix, h_px, w_px, l_step, x_st, est_min, mem_warn, img_obj = results
+            # Récupération des 9 valeurs (incluant latency_mm à la fin)
+            # matrix, h_px, w_px, l_step_val, x_step, est_min, mem_warn, img_obj, lat = results
+            matrix, h_px, w_px, l_step, x_st, est_min, mem_warn, img_obj, _ = results
             
             if hasattr(self, 'label_matrix_size'):
                 color = "#e74c3c" if mem_warn else "#aaaaaa"
                 self.label_matrix_size.configure(text_color=color)
 
-            # 4. MISE À JOUR DU CACHE DANS SELF
+            # 4. MISE À JOUR DU CACHE
             self._source_img_cache = img_obj
             self._source_img_path = self.input_image_path
 
-            # On retourne les 6 valeurs attendues par le reste de l'interface
+            # Stockage du résultat pour generate_gcode
+            self._last_result = (matrix, h_px, w_px, l_step, x_st, est_min)
+
             return matrix, h_px, w_px, l_step, x_st, est_min
 
         except Exception as e:
             import traceback
-            traceback.print_exc() # Très utile pour voir si l'erreur vient d'un paramètre manquant
+            traceback.print_exc()
             print(f"Preview Error: {e}")
             return None, 0, 0, 0, 0, 0
 
@@ -851,17 +870,21 @@ class RasterView(ctk.CTkFrame):
 
 
     def generate_gcode(self):
-        self.save_settings() #Sauvegarde paramètres
+        self.save_settings() # Sauvegarde paramètres
         # --- 0. CAPTURE SÉCURISÉE DES WIDGETS ---
         try:
             current_cmd_mode = self.cmd_mode.get()
             current_firing_mode = self.firing_mode.get()
             current_origin_mode = self.origin_mode.get()
+            # Capture du nouveau paramètre de sens
+            current_raster_mode = self.raster_dir_var.get() 
         except AttributeError: return
 
         # --- 1. RÉCUPÉRATION / CALCUL DES DONNÉES DE BASE ---
         if hasattr(self, '_last_result'):
-            matrix, h_px, w_px, l_step, x_st, est_min = self._last_result
+            # Note : assurez-vous que process_logic() a été appelé avec le bon raster_mode
+            # pour que l'estimation de temps (est_min) soit déjà correcte ici.
+            matrix, h_px, w_px, l_step, x_st, est_min = self._last_result[0:6]
         else:
             res = self.process_logic()
             if not res: return
@@ -888,7 +911,8 @@ class RasterView(ctk.CTkFrame):
                 'feedrate': self.get_val(self.controls["feedrate"]),
                 'm67_delay': self.get_val(self.controls["m67_delay"]),
                 'gray_scales': int(self.get_val(self.controls["gray_steps"])),
-                'gray_steps': int(self.get_val(self.controls["gray_steps"])) 
+                'gray_steps': int(self.get_val(self.controls["gray_steps"])),
+                'raster_mode': current_raster_mode 
             },
             'framing': {
                 'is_pointing': self.origin_pointer_var.get(),
@@ -912,7 +936,9 @@ class RasterView(ctk.CTkFrame):
                 'output_dir': self.output_dir, 
                 'origin_mode': current_origin_mode,
                 'real_w': real_w, 'real_h': real_h,
-                'est_sec': int(est_min * 60)
+                'est_sec': int(est_min * 60),
+                # Optionnel : pour info dans les logs
+                'raster_direction': current_raster_mode 
             }
         }
 
