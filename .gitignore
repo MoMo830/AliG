@@ -18,3 +18,6 @@ build/
 # --- Local Config / Logs ---
 *.log
 alig_config.json
+
+# --- G-code ---
+*.nc

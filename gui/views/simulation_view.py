@@ -536,11 +536,8 @@ class SimulationView(ctk.CTkFrame):
         if self.points_list is None or (isinstance(self.points_list, np.ndarray) and self.points_list.size == 0):
             return
 
-        # On récupère les infos essentielles via .get pour éviter les KeyError
         self.framing_end_idx = self.raw_sim_data.get('framing_end_idx', 0)
         self.total_sim_seconds = self.raw_sim_data.get('total_dur', 0.0)
-        self.total_sim_dur = self.total_sim_seconds 
-        
 
         # --- 2. LIMITES MACHINE ---
         raw_x = [p[0] for p in self.points_list]
@@ -552,9 +549,10 @@ class SimulationView(ctk.CTkFrame):
         self.total_mouvement_h = max(raw_y) - self.min_y_machine
 
         # --- 3. ÉCHELLE ET DIMENSIONS ---
+        # On garde une marge de 15% pour laisser la place aux chiffres de la grille
         self.scale = min(
-            (c_w * 0.85) / max(1, self.total_mouvement_w),
-            (c_h * 0.8) / max(1, self.total_mouvement_h)
+            (c_w * 0.80) / max(1, self.total_mouvement_w),
+            (c_h * 0.75) / max(1, self.total_mouvement_h)
         )
 
         self.total_px_w = self.total_mouvement_w * self.scale
@@ -566,54 +564,46 @@ class SimulationView(ctk.CTkFrame):
         self.y0 = (c_h - self.total_px_h) / 2
 
         # --- 4. CRÉATION DE LA MATRICE DE TRAVAIL ---
-        # On crée une matrice NumPy remplie de 255 (blanc) aux dimensions réelles de l'image
         self.display_data = np.full((max(1, self.rect_h), max(1, self.rect_w)), 255, dtype=np.uint8)
         
-        # Épaisseur du laser scalée
         l_step = self.payload.get('dims', [0, 0, 0.1])[2]
         self.laser_width_px = max(1, int(l_step * self.scale))
 
         # --- 5. INITIALISATION DU CANVAS ---
         self.preview_canvas.delete("all")
-        vis_pad = 10
 
-        # Le fond blanc de la zone de travail
+        # STYLE RASTER : Pas de vis_pad sur le rectangle de fond. 
+        # On dessine le rectangle blanc aux dimensions EXACTES de l'image.
         self.preview_canvas.create_rectangle(
-            self.x0 - vis_pad, 
-            self.y0 - vis_pad, 
-            self.x0 + self.total_px_w + vis_pad, 
-            self.y0 + self.total_px_h + vis_pad, 
+            self.x0, 
+            self.y0, 
+            self.x0 + self.total_px_w, 
+            self.y0 + self.total_px_h, 
             fill="white", 
-            outline="#d1d1d1", 
+            outline="#cccccc", # Gris clair pour la bordure
             width=1,
             tags="bg_rect"
         )
 
-        # Coordonnées de l'origine de l'image pour screen_index()
-        # On se cale sur x0, y0 car l'image commence là
-        self.img_sx = self.x0
-        self.img_sy = self.y0
-
         # Création du conteneur d'image dans le Canvas
         self.tk_img = ImageTk.PhotoImage(Image.fromarray(self.display_data))
         self.img_container = self.preview_canvas.create_image(
-            self.img_sx,
-            self.img_sy,
+            self.x0,
+            self.y0,
             anchor="nw",
             image=self.tk_img,
             tags="main_image"
         )
 
-        # Dessin de la grille (mm)
+        # Dessin de la grille (elle utilisera x0 et y0 avec overflow)
         self.draw_grid()
 
-        # Création graphique du laser (Halo + Tête)
-        self.laser_halo = self.preview_canvas.create_oval(
-            0, 0, 0, 0, fill="#1a75ff", outline="#3385ff", width=1, tags="laser", stipple="gray50"
-        )
-        self.laser_head = self.preview_canvas.create_oval(
-            0, 0, 0, 0, fill="#00ffff", outline="white", width=1, tags="laser"
-        )
+        # Recalage de la pile d'affichage : L'image par dessus le rectangle, mais sous le laser
+        self.preview_canvas.tag_raise("main_image", "bg_rect")
+
+        # Création graphique du laser
+        self.laser_halo = self.preview_canvas.create_oval(0, 0, 0, 0, fill="#1a75ff", outline="#3385ff", width=1, tags="laser", stipple="gray50")
+        self.laser_head = self.preview_canvas.create_oval(0, 0, 0, 0, fill="#00ffff", outline="white", width=1, tags="laser")
         
         # Éléments de la loupe
         self.loupe_container = self.preview_canvas.create_image(0, 0, anchor="center", state="hidden", tags="loupe")
@@ -1299,40 +1289,54 @@ class SimulationView(ctk.CTkFrame):
         return f"{int(s//3600):02d}:{int((s%3600)//60):02d}:{int(s%60):02d}"
 
    
-
     def draw_grid(self):
-        """Dessine la grille millimétrée (tous les 10mm) basée sur les coordonnées machine."""
+        """Dessine la grille millimétrée strictement limitée à la zone de gravure."""
         col, txt_col, dash = "#e0e0e0", "#888888", (2, 4)
         self.preview_canvas.delete("grid")
 
-        vis_pad = 10
-
-        # 1. DÉFINITION DES BORNES RÉELLES (en mm)
-        
-        x_start_mm = self.min_x_machine - (vis_pad / self.scale)
-        x_end_mm = self.min_x_machine + self.total_mouvement_w + (vis_pad / self.scale)
-        y_start_mm = self.min_y_machine - (vis_pad / self.scale)
-        y_end_mm = self.min_y_machine + self.total_mouvement_h + (vis_pad / self.scale)
+        # 1. BORNES STRICTES (en mm)
+        # On utilise directement les dimensions de mouvement sans padding
+        x_start_mm = self.min_x_machine
+        x_end_mm = self.min_x_machine + self.total_mouvement_w
+        y_start_mm = self.min_y_machine
+        y_end_mm = self.min_y_machine + self.total_mouvement_h
 
         step = 10
 
         # 2. LIGNES VERTICALES (Axe X)
-        for vx in range(int(np.floor(x_start_mm/step)*step), int(np.ceil(x_end_mm/step)*step) + step, step):
+        # On commence au premier multiple de 10 après ou égal au début
+        start_vx = int(np.ceil(x_start_mm / step) * step)
+        for vx in range(start_vx, int(x_end_mm) + 1, step):
             sx, _ = self.machine_to_screen(vx, self.min_y_machine)
-            # Ligne de haut en bas du canvas (ou limites du rect)
-            self.preview_canvas.create_line(sx, self.y0 - vis_pad, sx, self.y0 + self.total_px_h + vis_pad, 
-                                            fill=col, dash=dash, tags="grid")
-            self.preview_canvas.create_text(sx, self.y0 + self.total_px_h + vis_pad + 15, 
-                                            text=str(vx), fill=txt_col, font=("Arial", 14), tags="grid")
+            
+            # On dessine la ligne SEULEMENT entre y0 et y0 + hauteur
+            self.preview_canvas.create_line(
+                sx, self.y0, 
+                sx, self.y0 + self.total_px_h, 
+                fill=col, dash=dash, tags="grid"
+            )
+            # Texte placé juste en dessous de la bordure basse
+            self.preview_canvas.create_text(
+                sx, self.y0 + self.total_px_h + 15, 
+                text=str(vx), fill=txt_col, font=("Arial", 14), tags="grid"
+            )
 
-        for vy in range(int(np.floor(y_start_mm/step)*step), int(np.ceil(y_end_mm/step)*step) + step, step):
+        # 3. LIGNES HORIZONTALES (Axe Y)
+        start_vy = int(np.ceil(y_start_mm / step) * step)
+        for vy in range(start_vy, int(y_end_mm) + 1, step):
             _, sy = self.machine_to_screen(self.min_x_machine, vy)
-            self.preview_canvas.create_line(self.x0 - vis_pad, sy, self.x0 + self.total_px_w + vis_pad, sy, 
-                                            fill=col, dash=dash, tags="grid")
-            self.preview_canvas.create_text(self.x0 - vis_pad - 20, sy, 
-                                            text=str(vy), fill=txt_col, font=("Arial", 14), tags="grid")
-
-            #self.preview_canvas.tag_raise("grid", "bg_rect") # Juste au dessus du fond blanc
+            
+            # On dessine la ligne SEULEMENT entre x0 et x0 + largeur
+            self.preview_canvas.create_line(
+                self.x0, sy, 
+                self.x0 + self.total_px_w, sy, 
+                fill=col, dash=dash, tags="grid"
+            )
+            # Texte placé juste à gauche de la bordure gauche
+            self.preview_canvas.create_text(
+                self.x0 - 25, sy, 
+                text=str(vy), fill=txt_col, font=("Arial", 14), tags="grid"
+            )
 
 
 
