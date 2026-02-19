@@ -121,13 +121,25 @@ A.L.I.G. is a free project, developed during their spare time by a world-class t
 ---
 
 ## ⚠️ WARNING & SAFETY DISCLAIMER
+> [!CAUTION]
+> ALIG is a G-code generator (CAM). It does not control your machine.
 
+> Laser engraving involves real physical risks. Always:
+> - Wear certified safety goggles
+> - Verify your machine is in Laser Mode
+> - Check overscan travel limits
+> - Inspect generated G-code before execution
+
+> Full safety documentation is available in the Wiki.
+
+
+## ⚠️ WARNING & SAFETY DISCLAIMER
 > [!CAUTION]
 > **NOT A CONTROL SOFTWARE:** This application is a **G-Code Generator (CAM)**. It does not connect to or control your CNC machine directly. It is designed to process images and export `.nc` files. You must use a dedicated controller software (like Mach4, UGS, or LaserGRBL) to run the generated files.
 > 
 > **LASER SAFETY:** This software generates G-Code utilizing `M3` by default and `M67/S` commands. **`M3` is used to arm the laser**, but on certain CNC configurations, it may trigger a spindle motor instead.
 > 
-> **HARDWARE COMPATIBILITY:** Always verify your G-Code and ensure your controller is explicitly set to **Laser Mode** before execution. Use this program at your own risk. The author assumes no liability for hardware damage or personal injury.
+> **HARDWARE COMPATIBILITY:** Always verify your G-Code and ensure your controller is explicitly set to **Laser Mode** before execution. Use this program at your own risk. The author cannot be held responsible for hardware damage, material loss, or personal injury resulting from improper use.
 > 
 > **BETA SOFTWARE:** This application is currently in **Beta**. While it has been tested, bugs may still exist. **Always perform a manual inspection of the generated G-Code text** (check for unexpected values or command syntax) before running it on your CNC machine.
 
