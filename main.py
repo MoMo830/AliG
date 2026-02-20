@@ -25,22 +25,14 @@ from utils.config_manager import ConfigManager
 def main():
     setup_app_id()
     
-<<<<<<< HEAD
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(base_dir, "alig_config.json")
     config_manager = ConfigManager(config_path)
-=======
-    config_manager = ConfigManager("alig_config.json")
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
     
     theme = config_manager.get_item("machine_settings", "theme", "System")
     ctk.set_appearance_mode(theme)
     
-<<<<<<< HEAD
-=======
-    # On définit le thème de couleur (Blue, Green, etc. - optionnel)
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
     ctk.set_default_color_theme("blue")
 
     app = LaserGeneratorApp(config_manager=config_manager)
