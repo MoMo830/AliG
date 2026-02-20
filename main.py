@@ -2,7 +2,7 @@
 """
 A.L.I.G. - Advanced Laser Imaging Generator
 ===========================================
-Version: 0.9781b
+Version: 0.9783b
 Author: Alexandre "MoMo"
 License: MIT
 Description: 
@@ -14,25 +14,28 @@ Description:
 GitHub: https://github.com/MoMo830/ALIG
 """
 
-
 import json
 import os
 import customtkinter as ctk
 from gui.main_window import LaserGeneratorApp
+from utils.gui_utils import setup_app_id
+from utils.config_manager import ConfigManager
 
-def load_user_theme():
-    config_path = "alig_config.json" # Adaptez selon votre gestion de fichiers
-    if os.path.exists(config_path):
-        with open(config_path, "r") as f:
-            data = json.load(f)
-            return data.get("theme", "Dark") # "Dark" par défaut
-    return "Dark"
 
 def main():
-    theme = load_user_theme()
-    ctk.set_appearance_mode(theme) 
+    setup_app_id()
     
-    app = LaserGeneratorApp()
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(base_dir, "alig_config.json")
+    config_manager = ConfigManager(config_path)
+    
+    theme = config_manager.get_item("machine_settings", "theme", "System")
+    ctk.set_appearance_mode(theme)
+    
+    ctk.set_default_color_theme("blue")
+
+    app = LaserGeneratorApp(config_manager=config_manager)
     app.mainloop()
 
 if __name__ == "__main__":
