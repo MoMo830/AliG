@@ -64,10 +64,7 @@ class SimulationView(ctk.CTkFrame):
         self.loupe_zoom = 3.0    
         self.raw_sim_data = None    
         self.origin_mode = payload["metadata"].get("origin_mode", "Lower-Left")
-<<<<<<< HEAD
 
-=======
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         self.full_metadata = {}
 
 
@@ -140,17 +137,12 @@ class SimulationView(ctk.CTkFrame):
 
             # C. Génération du G-Code Final
             t_start = time.perf_counter()
-<<<<<<< HEAD
-=======
-            # On récupère determined_latence_mm ici
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
             self.final_gcode, determined_latence_mm = self.engine.build_final_gcode( 
                 self.payload['matrix'], self.payload['dims'], 
                 self.payload['offsets'], params, 
                 self.payload['text_blocks'], full_metadata 
             ) 
             
-<<<<<<< HEAD
             self.latence_mm = float(determined_latence_mm)
             print(f"[DEBUG] Latence figée pour la simulation : {self.latence_mm} mm")
             print(f"[BENCH] C. Final G-Code Build: {time.perf_counter() - t_start:.4f}s")
@@ -184,50 +176,13 @@ class SimulationView(ctk.CTkFrame):
                 f_rates_sec = pts_array[1:, 4] / 60.0
                 durations = np.divide(distances, f_rates_sec, out=np.zeros_like(distances), where=f_rates_sec > 0)
                 
-=======
-            # ON FIGE LA VALEUR ICI pour la simulation
-            self.latence_mm = float(determined_latence_mm)
-            
-            print(f"[DEBUG] Latence figée pour la simulation : {self.latence_mm} mm")
-            print(f"[BENCH] C. Final G-Code Build: {time.perf_counter() - t_start:.4f}s")
-
-            # D. PARSING (Maintenant beaucoup plus rapide)
-            t_start = time.perf_counter()
-            f_points_array, f_dur = self.parser.parse(self.framing_gcode) 
-            framing_end_idx = len(f_points_array) if f_points_array is not None else 0
-
-            # all_points_raw est déjà un tableau NumPy (N, 5)
-            pts_array, _ = self.parser.parse(self.final_gcode) 
-            
-
-            print(f"[BENCH] D. Parsing G-Code ({len(pts_array) if pts_array is not None else 0} pts): {time.perf_counter() - t_start:.4f}s")
-             
-            # E. CALCUL DES TIMESTAMPS (Très léger car pts_array est déjà un array)
-            t_start = time.perf_counter()
-            
-            if pts_array is not None and len(pts_array) > 1:
-                # Calcul des distances
-                deltas = np.diff(pts_array[:, :2], axis=0) 
-                distances = np.sqrt(np.sum(deltas**2, axis=1))
-                
-                # Calcul des durées (Feedrate est en index 4)
-                f_rates_sec = pts_array[1:, 4] / 60.0
-                durations = np.divide(distances, f_rates_sec, out=np.zeros_like(distances), where=f_rates_sec > 0)
-                
-                # Remplacement de la colonne Feedrate par le temps cumulé
-                # On crée une copie pour éviter de modifier les données sources si nécessaire
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
                 pts_array[0, 4] = 0.0
                 pts_array[1:, 4] = np.cumsum(durations)
                 final_dur = pts_array[-1, 4]
             else:
                 final_dur = 0.0
 
-<<<<<<< HEAD
             print(f"[BENCH] E. Timestamps calculation: {time.perf_counter() - t_start:.4f}s")
-=======
-            print(f"[BENCH] E. Timestamps calculation (NumPy): {time.perf_counter() - t_start:.4f}s")
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
 
             # F. PRÉPARATION DU RETOUR 
             self.raw_sim_data = { 
@@ -236,12 +191,8 @@ class SimulationView(ctk.CTkFrame):
                 'f_dur': f_dur, 
                 'total_dur': final_dur, 
                 'full_metadata': full_metadata,
-<<<<<<< HEAD
                 'latence_mm': self.latence_mm,
                 'machine_bounds': (all_min_x, all_max_x, all_min_y, all_max_y) # Nouveau !
-=======
-                'latence_mm': self.latence_mm  # On peut aussi la passer ici par sécurité
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
             }
             
             print(f"[BENCH] TOTAL GENERATION: {time.perf_counter() - start_global:.4f}s")
@@ -264,7 +215,6 @@ class SimulationView(ctk.CTkFrame):
         if not self.raw_sim_data:
             return
 
-<<<<<<< HEAD
         # 1. Récupération des données du Parser
         self.points_list = self.raw_sim_data['points_list']
         self.total_sim_seconds = self.raw_sim_data.get('total_dur', 0.0)
@@ -279,12 +229,6 @@ class SimulationView(ctk.CTkFrame):
         self.total_mouvement_h = max(0.1, self.max_y_machine - self.min_y_machine)
 
         # 4. Injection du texte dans le widget G-Code
-=======
-        self.points_list = self.raw_sim_data['points_list']
-        self.total_sim_seconds = self.raw_sim_data.get('total_dur', 0.0)
-        
-        # Injection du texte dans le widget
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         if hasattr(self, 'final_gcode') and self.final_gcode:
             self.gcode_view.configure(state="normal")
             self.gcode_view.delete("1.0", "end")
@@ -293,17 +237,11 @@ class SimulationView(ctk.CTkFrame):
         else:
             print("[DEBUG WARNING] Aucun G-Code à afficher dans le widget")
 
-<<<<<<< HEAD
         # 5. Nettoyage de l'interface de chargement
         if hasattr(self, 'loading_frame'):
             self.loading_frame.destroy()
 
         # 6. Lancement du dessin initial
-=======
-        if hasattr(self, 'loading_frame'):
-            self.loading_frame.destroy()
-
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         self._prepare_and_draw()
 
 
@@ -752,14 +690,7 @@ class SimulationView(ctk.CTkFrame):
         ey = self.preview_canvas.canvasy(self.last_mouse_coords[1])
         
         # 1. CALCUL DES INDEX MATRICE (ix, iy)
-<<<<<<< HEAD
         ix = ex - self.x0
-=======
-        if "Right" in self.origin_mode:
-            ix = (self.x0 + self.total_px_w) - ex
-        else:
-            ix = ex - self.x0
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         iy = ey - self.y0
 
         # 2. VÉRIFICATION DE COLLISION
@@ -803,12 +734,6 @@ class SimulationView(ctk.CTkFrame):
                 crop = bg.crop((int(left), int(top), int(right), int(bottom)))
                 
                 # --- GESTION DU MODE RIGHT ---
-<<<<<<< HEAD
-=======
-                # On inverse l'image de la loupe seulement si on est en mode Right
-                if "Right" in self.origin_mode:
-                    crop = crop.transpose(Image.FLIP_LEFT_RIGHT)
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
 
                 zoom_img = crop.resize((self.loupe_size, self.loupe_size), Image.NEAREST)
                 
@@ -945,16 +870,7 @@ class SimulationView(ctk.CTkFrame):
         # Rafraîchissement graphique
         self.update_graphics()
 
-<<<<<<< HEAD
 
-=======
-    def screen_index(self, mx, my):
-        """mm -> pixels avec arrondi au plus proche."""
-        px = (mx - self.min_x_machine) * self.scale
-        py = (my - self.min_y_machine) * self.scale
-        # Utiliser round() est crucial. int(9.9) donne 9, round(9.9) donne 10.
-        return int(round(px)), int(round(py))
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
 
 
     def animate_loop(self):
@@ -1378,7 +1294,6 @@ class SimulationView(ctk.CTkFrame):
 
    
     def draw_grid(self):
-<<<<<<< HEAD
         self.preview_canvas.delete("grid")
         step = 10 # mm
         
@@ -1398,60 +1313,10 @@ class SimulationView(ctk.CTkFrame):
             
             self.preview_canvas.create_line(self.x0, sy, self.x0 + self.total_px_w, sy, fill="#e0e0e0", dash=(2,4), tags="grid")
             self.preview_canvas.create_text(self.x0 - 25, sy, text=str(my), fill="#888888", tags="grid")
-=======
-        """Dessine la grille millimétrée strictement limitée à la zone de gravure."""
-        col, txt_col, dash = "#e0e0e0", "#888888", (2, 4)
-        self.preview_canvas.delete("grid")
-
-        # 1. BORNES STRICTES (en mm)
-        # On utilise directement les dimensions de mouvement sans padding
-        x_start_mm = self.min_x_machine
-        x_end_mm = self.min_x_machine + self.total_mouvement_w
-        y_start_mm = self.min_y_machine
-        y_end_mm = self.min_y_machine + self.total_mouvement_h
-
-        step = 10
-
-        # 2. LIGNES VERTICALES (Axe X)
-        # On commence au premier multiple de 10 après ou égal au début
-        start_vx = int(np.ceil(x_start_mm / step) * step)
-        for vx in range(start_vx, int(x_end_mm) + 1, step):
-            sx, _ = self.machine_to_screen(vx, self.min_y_machine)
-            
-            # On dessine la ligne SEULEMENT entre y0 et y0 + hauteur
-            self.preview_canvas.create_line(
-                sx, self.y0, 
-                sx, self.y0 + self.total_px_h, 
-                fill=col, dash=dash, tags="grid"
-            )
-            # Texte placé juste en dessous de la bordure basse
-            self.preview_canvas.create_text(
-                sx, self.y0 + self.total_px_h + 15, 
-                text=str(vx), fill=txt_col, font=("Arial", 14), tags="grid"
-            )
-
-        # 3. LIGNES HORIZONTALES (Axe Y)
-        start_vy = int(np.ceil(y_start_mm / step) * step)
-        for vy in range(start_vy, int(y_end_mm) + 1, step):
-            _, sy = self.machine_to_screen(self.min_x_machine, vy)
-            
-            # On dessine la ligne SEULEMENT entre x0 et x0 + largeur
-            self.preview_canvas.create_line(
-                self.x0, sy, 
-                self.x0 + self.total_px_w, sy, 
-                fill=col, dash=dash, tags="grid"
-            )
-            # Texte placé juste à gauche de la bordure gauche
-            self.preview_canvas.create_text(
-                self.x0 - 25, sy, 
-                text=str(vy), fill=txt_col, font=("Arial", 14), tags="grid"
-            )
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
 
 
 
     def machine_to_screen(self, mx, my):
-<<<<<<< HEAD
         """
         mx, my : Coordonnées brutes lues dans le G-Code.
         """
@@ -1466,22 +1331,10 @@ class SimulationView(ctk.CTkFrame):
         sx = self.x0 + (dist_x * self.scale)
         # 3. Inversion Y Tkinter (On part du bas du rectangle blanc et on remonte)
         sy = (self.y0 + self.total_px_h) - (dist_y * self.scale)
-=======
-        px = (mx - self.min_x_machine) * self.scale
-        py = (my - self.min_y_machine) * self.scale
-
-        if "Right" in self.origin_mode:
-            sx = self.x0 + self.total_px_w - px
-        else:
-            sx = self.x0 + px
-
-        sy = self.y0 + py
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
 
         return sx, sy
 
 
-<<<<<<< HEAD
     def screen_index(self, mx, my):
         """mm machine -> pixels relatifs à la matrice display_data."""
         # On calcule la position par rapport au coin minimum du mouvement (incluant premove)
@@ -1495,9 +1348,6 @@ class SimulationView(ctk.CTkFrame):
     
         return ix, iy
     
-=======
-
->>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
 
 
     def estimate_file_size(self, matrix):
