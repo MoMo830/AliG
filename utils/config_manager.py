@@ -38,10 +38,15 @@ class ConfigManager:
 
     def save(self):
         try:
+<<<<<<< HEAD
             os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
             
             with open(self.file_path, 'w', encoding='utf-8') as f:
                 json.dump(self.full_config, f, indent=4, default=lambda o: float(o) if hasattr(o, '__float__') else str(o))
+=======
+            with open(self.file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.full_config, f, indent=4)
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
             return True
         except Exception as e:
             print(f"Erreur sauvegarde : {e}")

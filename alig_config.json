@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
     "machine_settings": {
         "theme": "System",
         "language": "Fran\u00e7ais",
@@ -13,6 +14,14 @@
     },
     "raster_settings": {
         "width": 50.0,
+=======
+    "window_settings": {
+        "is_maximized": true,
+        "geometry": "1300x900+88+140"
+    },
+    "raster_settings": {
+        "width": 30.0,
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         "line_step": 0.1307,
         "dpi": 254,
         "custom_x": 0.0,
@@ -32,7 +41,11 @@
         "output_dir": "c:\\Users\\momof\\SynologyDrive\\Python\\CNC\\ALIG_Project",
         "custom_header": "",
         "custom_footer": "",
+<<<<<<< HEAD
         "origin_mode": "Upper-Right",
+=======
+        "origin_mode": "Lower-Left",
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
         "include_frame": false,
@@ -42,9 +55,12 @@
         "framing_ratio": "20%",
         "force_width": false,
         "invert_relief": false
+<<<<<<< HEAD
     },
     "window_settings": {
         "is_maximized": true,
         "geometry": "1300x900+50+50"
+=======
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
     }
 }

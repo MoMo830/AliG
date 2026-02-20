@@ -134,7 +134,11 @@ class SettingsView(ctk.CTkFrame):
         self.sw_thumbnails.select() # On par défaut
 
         # --- SECTION MAINTENANCE ---
+<<<<<<< HEAD
         self.create_section(self.right_col, self.texts["maintenance_data"])
+=======
+        self.create_section(self.right_col, "MAINTENANCE & DONNÉES")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         
         # Container pour les boutons d'action dans la section
         action_frame = ctk.CTkFrame(self.current_sec, fg_color="transparent")
@@ -143,24 +147,40 @@ class SettingsView(ctk.CTkFrame):
         # Bouton Effacer Vignettes
         self.btn_clear_data = ctk.CTkButton(
             action_frame, 
+<<<<<<< HEAD
             text=self.texts["erase_thumbnails"], 
             fg_color="#444", 
             hover_color=self.color_danger,
             height=32,
             command=lambda: ask_confirmation(self, self.texts["erase_thumbnails_confirm"], self.clear_thumbnails_and_stats)
+=======
+            text="Effacer les vignettes", 
+            fg_color="#444", 
+            hover_color=self.color_danger,
+            height=32,
+            command=lambda: ask_confirmation(self, "Effacer les vignettes ?", self.clear_thumbnails_and_stats)
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         )
         self.btn_clear_data.pack(fill="x", pady=(0, 10))
 
         # Bouton Reset Paramètres
         self.btn_reset_all = ctk.CTkButton(
             action_frame, 
+<<<<<<< HEAD
             text=self.texts["reset_all_parameters"], 
+=======
+            text="Réinitialiser tous les paramètres", 
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
             fg_color="transparent", 
             border_width=1,
             border_color=self.color_danger,
             text_color=("gray10", "gray90"),
             height=32,
+<<<<<<< HEAD
             command=lambda: ask_confirmation(self, self.texts["reset_all_parameters_confirm"], self.reset_settings)
+=======
+            command=lambda: ask_confirmation(self, "Réinitialiser tout ?", self.reset_settings)
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         )
         self.btn_reset_all.pack(fill="x")
    
@@ -290,7 +310,11 @@ class SettingsView(ctk.CTkFrame):
             
             # Feedback visuel
             self.btn_clear_data.configure(
+<<<<<<< HEAD
                 text=self.texts["erase_thumbnails_done"], 
+=======
+                text="Vignettes & Stats effacées !", 
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
                 fg_color=self.color_saved
             )
         except Exception as e:
@@ -305,6 +329,7 @@ class SettingsView(ctk.CTkFrame):
 
     def load_settings(self):
         data = self.app.config_manager.get_section("machine_settings")
+<<<<<<< HEAD
         
         self.appearance_mode.set(data.get("theme", "System"))
         self.app_language.set(data.get("language", "English"))
@@ -317,6 +342,17 @@ class SettingsView(ctk.CTkFrame):
             return
 
     
+=======
+        if not data: return
+        
+        # Le flag self.loading bloque déjà mark_as_changed
+        
+        if "theme" in data: self.appearance_mode.set(data["theme"])
+        if "language" in data: self.app_language.set(data["language"])
+        if "cmd_mode" in data: self.cmd_mode.set(data["cmd_mode"])
+        if "firing_mode" in data: self.firing_mode.set(data["firing_mode"])
+        
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         for key in ["m67_e_num", "ctrl_max"]:
             if key in data and key in self.controls:
                 self.controls[key]["entry"].delete(0, tk.END)
@@ -330,6 +366,7 @@ class SettingsView(ctk.CTkFrame):
                 self.controls[key]["entry"].insert(0, f"{val:.2f}")
         
         if "custom_header" in data:
+<<<<<<< HEAD
             self.txt_header.delete("1.0", tk.END)
             self.txt_header.insert("1.0", data["custom_header"])
         if "custom_footer" in data:
@@ -339,6 +376,11 @@ class SettingsView(ctk.CTkFrame):
         if "enable_thumbnails" in data:
             if data["enable_thumbnails"]: self.sw_thumbnails.select()
             else: self.sw_thumbnails.deselect()
+=======
+            self.txt_header.delete("1.0", tk.END); self.txt_header.insert("1.0", data["custom_header"])
+        if "custom_footer" in data:
+            self.txt_footer.delete("1.0", tk.END); self.txt_footer.insert("1.0", data["custom_footer"])
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
 
     def save_all_settings(self):
         try:
@@ -390,7 +432,11 @@ class SettingsView(ctk.CTkFrame):
         """Appelle le manager pour tout effacer et recharge l'UI"""
         if self.app.config_manager.reset_all():
             self.btn_reset_all.configure(
+<<<<<<< HEAD
                 text=self.texts["reset_all_parameters_done"], 
+=======
+                text="Configuration réinitialisée !", 
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
                 fg_color=self.color_saved
             )
             # On recharge la vue après 1 seconde
@@ -398,4 +444,8 @@ class SettingsView(ctk.CTkFrame):
             # et les widgets garderont leurs valeurs par défaut "usine".
             self.after(1000, lambda: self.app.show_settings_mode())
         else:
+<<<<<<< HEAD
             self.btn_reset_all.configure(text=self.texts["reset_all_parameters_error"], fg_color=self.color_error)
+=======
+            self.btn_reset_all.configure(text="Erreur Reset", fg_color=self.color_error)
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8

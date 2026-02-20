@@ -202,7 +202,11 @@ class RasterView(ctk.CTkFrame):
         self.origin_dot = None
         
         # Placeholder
+<<<<<<< HEAD
         self.placeholder_text = self.ax_img.text(0.5, 0.5, self.common["choose_image"], 
+=======
+        self.placeholder_text = self.ax_img.text(0.5, 0.5, "PLEASE SELECT AN IMAGE\nTO BEGIN", 
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
                                               color='#444444', fontsize=12, fontweight='bold',
                                               ha='center', va='center', transform=self.ax_img.transAxes)
 
@@ -260,23 +264,40 @@ class RasterView(ctk.CTkFrame):
 
         # --- TAB 1: GEOMETRY ---
         t_geo = prepare_tab(self.tab_geom_name)
+<<<<<<< HEAD
         self.create_input_pair(t_geo, self.common["target_width"], 5, 400, 30.0, "width")
         
         force_w_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
         force_w_frame.pack(fill="x", padx=10, pady=(0, 10))
         ctk.CTkLabel(force_w_frame, text=self.common["force_width"], font=("Segoe UI", 11)).pack(side="left")
+=======
+        self.create_input_pair(t_geo, "Target Width (mm)", 5, 400, 30.0, "width")
+        
+        force_w_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
+        force_w_frame.pack(fill="x", padx=10, pady=(0, 10))
+        ctk.CTkLabel(force_w_frame, text="Force Exact Width", font=("Segoe UI", 11)).pack(side="left")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         self.force_width_var = ctk.BooleanVar(value=False)
         self.sw_force_width = ctk.CTkSwitch(force_w_frame, text="", variable=self.force_width_var, width=45, command=self.update_preview)
         self.sw_force_width.pack(side="right")
 
+<<<<<<< HEAD
         self.create_input_pair(t_geo, self.common["line_step"], 0.01, 1.0, 0.1307, "line_step", precision=4)
         self.create_input_pair(t_geo, self.common["dpi_resolution"], 10, 1200, 254, "dpi", is_int=True)
+=======
+        self.create_input_pair(t_geo, "Line Step / Resolution (mm)", 0.01, 1.0, 0.1307, "line_step", precision=4)
+        self.create_input_pair(t_geo, "Resolution (DPI)", 10, 1200, 254, "dpi", is_int=True)
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         
         # --- AJOUT DU SENS DU RASTER (Intégré dans l'onglet Geometry) ---
         raster_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
         raster_frame.pack(fill="x", padx=10, pady=(10, 5))
         
+<<<<<<< HEAD
         ctk.CTkLabel(raster_frame, text=self.common["raster_mode"], font=("Segoe UI", 11)).pack(side="left")
+=======
+        ctk.CTkLabel(raster_frame, text="Raster mode", font=("Segoe UI", 11)).pack(side="left")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         
         self.raster_dir_var = ctk.StringVar(value="Horizontal")
         self.raster_dir_btn = ctk.CTkSegmentedButton(
@@ -289,44 +310,77 @@ class RasterView(ctk.CTkFrame):
         self.raster_dir_btn.pack(pady=(0, 10), padx=10, fill="x")
         
         # --- SUITE DE LA GÉOMÉTRIE ---
+<<<<<<< HEAD
         self.create_dropdown_pair(t_geo, self.common["origin_point"], ["Lower-Left", "Upper-Left", "Lower-Right", "Upper-Right", "Center", "Custom"], "origin_mode")
         
         self.custom_offset_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
         self.create_simple_input(self.custom_offset_frame, self.common["custom_offset_x"], 0.0, "custom_x")
         self.create_simple_input(self.custom_offset_frame, self.common["custom_offset_y"], 0.0, "custom_y")
+=======
+        self.create_dropdown_pair(t_geo, "Origin Point", ["Lower-Left", "Upper-Left", "Lower-Right", "Upper-Right", "Center", "Custom"], "origin_mode")
+        
+        self.custom_offset_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
+        self.create_simple_input(self.custom_offset_frame, "Custom Offset X (mm)", 0.0, "custom_x")
+        self.create_simple_input(self.custom_offset_frame, "Custom Offset Y (mm)", 0.0, "custom_y")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
 
                 # --- TAB 2: IMAGE ---
         t_img = prepare_tab(self.tab_img_name)
 
+<<<<<<< HEAD
         self.create_input_pair(t_img, self.common["contrast"], -1.0, 1.0, 0.0, "contrast")
         self.create_input_pair(t_img, self.common["gamma"], 0.1, 6.0, 1.0, "gamma")
         self.create_input_pair(t_img, self.common["thermal"], 0.1, 3.0, 1.5, "thermal")
+=======
+        self.create_input_pair(t_img, "Contrast (-1.0 to 1.0)", -1.0, 1.0, 0.0, "contrast")
+        self.create_input_pair(t_img, "Gamma Correction", 0.1, 6.0, 1.0, "gamma")
+        self.create_input_pair(t_img, "Thermal Correction", 0.1, 3.0, 1.5, "thermal")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         
         self.invert_var = ctk.BooleanVar(value=False)
         invert_frame = ctk.CTkFrame(t_img, fg_color="transparent")
         invert_frame.pack(fill="x", padx=10, pady=5)
+<<<<<<< HEAD
         ctk.CTkLabel(invert_frame, text=self.common["invert_color"], font=("Segoe UI", 11)).pack(side="left")
+=======
+        ctk.CTkLabel(invert_frame, text="Invert Relief (Black ↔ White)", font=("Segoe UI", 11)).pack(side="left")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         self.switch_invert = ctk.CTkSwitch(invert_frame, text="", variable=self.invert_var, width=45, command=self.update_preview)
         self.switch_invert.pack(side="right")
 
         # --- TAB 3: LASER ---
         t_laser = prepare_tab(self.tab_laser_name)
+<<<<<<< HEAD
         self.create_input_pair(t_laser, self.common["feedrate"], 500, 20000, 3000, "feedrate", is_int=True)
         self.create_input_pair(t_laser, self.common["overscan"], 0, 50, 10.0, "premove")
+=======
+        self.create_input_pair(t_laser, "Feedrate (F)", 500, 20000, 3000, "feedrate", is_int=True)
+        self.create_input_pair(t_laser, "Overscan (mm)", 0, 50, 10.0, "premove")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         
         
         p_cont = ctk.CTkFrame(t_laser, fg_color="transparent")
         p_cont.pack(fill="x", padx=10, pady=5)
         p_inputs = ctk.CTkFrame(p_cont, fg_color="transparent")
         p_inputs.pack(side="left", fill="x", expand=True)
+<<<<<<< HEAD
         self.create_simple_input(p_inputs, self.common["max_power"], 40.0, "max_p")
         self.create_simple_input(p_inputs, self.common["min_power"], 10.0, "min_p")
+=======
+        self.create_simple_input(p_inputs, "Max Power (%)", 40.0, "max_p")
+        self.create_simple_input(p_inputs, "Min Power (%)", 10.0, "min_p")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         
         self.power_viz = PowerRangeVisualizer(p_cont, self.controls["min_p"]["entry"], self.controls["max_p"]["entry"], self.update_preview)
         self.power_viz.pack(side="right", padx=(5, 0))
 
+<<<<<<< HEAD
         self.create_input_pair(t_laser, self.common["laser_latency"], 0, 50, 11.5, "m67_delay")
         self.create_input_pair(t_laser, self.common["gray_steps"], 2, 256, 256, "gray_steps", is_int=True)
+=======
+        self.create_input_pair(t_laser, "Laser Latency (ms)", 0, 50, 11.5, "m67_delay")
+        self.create_input_pair(t_laser, "Grayscale Steps", 2, 256, 256, "gray_steps", is_int=True)
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
 
         # --- TAB 4: G-CODE ---
         t_gc = prepare_tab(self.tab_gcode_name)
@@ -336,29 +390,49 @@ class RasterView(ctk.CTkFrame):
         self.frame_var = tk.BooleanVar(value=False)
 
         # 1. Mode de commande (M67 / Spindle) avec style unifié
+<<<<<<< HEAD
         self.create_dropdown_pair(t_gc, self.common["cmd_mode"], ["M67 (Analog)", "S (Spindle)"], "cmd_mode")
+=======
+        self.create_dropdown_pair(t_gc, "Laser Command Mode:", ["M67 (Analog)", "S (Spindle)"], "cmd_mode")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         self.cmd_mode.set("M67 (Analog)")
 
         # M67 E 
         row_e = ctk.CTkFrame(t_gc, fg_color="transparent")
         row_e.pack(fill="x", padx=10, pady=2)
+<<<<<<< HEAD
         self.create_simple_input(row_e, self.common["m67_output"], 0, "m67_e_num", precision=0)
+=======
+        self.create_simple_input(row_e, "M67 Output Number (E):", 0, "m67_e_num", precision=0)
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
 
         # Controller Max 
         row_max = ctk.CTkFrame(t_gc, fg_color="transparent")
         row_max.pack(fill="x", padx=10, pady=2)
+<<<<<<< HEAD
         self.create_simple_input(row_max, self.common["ctrl_max_value"], 100, "ctrl_max", precision=0)
 
         # 2. Firing mode (M3/M4)
         self.create_dropdown_pair(t_gc, self.common["firing_mode"], ["M3/M5", "M4/M5"], "firing_mode")
+=======
+        self.create_simple_input(row_max, "Controller Max Value:", 100, "ctrl_max", precision=0)
+
+        # 2. Firing mode (M3/M4)
+        self.create_dropdown_pair(t_gc, "Firing Mode:", ["M3/M5", "M4/M5"], "firing_mode")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         self.firing_mode.set("M3/M5")
 
         # 3. Textboxes Header/Footer avec Labels descriptifs
         # Header
         h_label_frame = ctk.CTkFrame(t_gc, fg_color="transparent")
         h_label_frame.pack(fill="x", padx=10, pady=(5, 0))
+<<<<<<< HEAD
         ctk.CTkLabel(h_label_frame, text=self.common["gcode_header"], font=("Arial", 11, "bold")).pack(side="left")
         ctk.CTkLabel(h_label_frame, text=self.common["at_start"], font=("Arial", 10, "italic"), text_color="#888888").pack(side="left")
+=======
+        ctk.CTkLabel(h_label_frame, text="Header G-Code", font=("Arial", 11, "bold")).pack(side="left")
+        ctk.CTkLabel(h_label_frame, text=" (at start)", font=("Arial", 10, "italic"), text_color="#888888").pack(side="left")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         
         self.txt_header = ctk.CTkTextbox(t_gc, font=("Consolas", 11), height=40, border_width=1, border_color="#444444")
         self.txt_header.pack(fill="x", padx=10, pady=(2, 5))
@@ -366,31 +440,52 @@ class RasterView(ctk.CTkFrame):
         # Footer
         f_label_frame = ctk.CTkFrame(t_gc, fg_color="transparent")
         f_label_frame.pack(fill="x", padx=10, pady=(5, 0))
+<<<<<<< HEAD
         ctk.CTkLabel(f_label_frame, text=self.common["gcode_footer"], font=("Arial", 11, "bold")).pack(side="left")
         ctk.CTkLabel(f_label_frame, text=self.common["before_m30"], font=("Arial", 10, "italic"), text_color="#888888").pack(side="left")
+=======
+        ctk.CTkLabel(f_label_frame, text="Footer G-Code", font=("Arial", 11, "bold")).pack(side="left")
+        ctk.CTkLabel(f_label_frame, text=" (before M30)", font=("Arial", 10, "italic"), text_color="#888888").pack(side="left")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         
         self.txt_footer = ctk.CTkTextbox(t_gc, font=("Consolas", 11), height=40, border_width=1, border_color="#444444")
         self.txt_footer.pack(fill="x", padx=10, pady=(2, 5))
 
         # --- SECTION FRAMING ---
+<<<<<<< HEAD
         ctk.CTkLabel(t_gc, text=self.common["point_fram_options"], font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
+=======
+        ctk.CTkLabel(t_gc, text="Pointing & Framing options:", font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         
         # 1. Ligne Pause + Hint à droite
         pause_frame = ctk.CTkFrame(t_gc, fg_color="transparent")
         pause_frame.pack(fill="x", padx=10, pady=2)
+<<<<<<< HEAD
         self.lbl_pause_cmd = ctk.CTkLabel(pause_frame, text=self.common["pause_command"], font=("Arial", 11))
+=======
+        self.lbl_pause_cmd = ctk.CTkLabel(pause_frame, text="Pause Command:", font=("Arial", 11))
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         self.lbl_pause_cmd.pack(side="left")
         self.pause_cmd_entry = ctk.CTkEntry(pause_frame, width=60, height=25)
         self.pause_cmd_entry.insert(0, "M0")
         self.pause_cmd_entry.pack(side="left", padx=10)
         # Hint déplacé ici
+<<<<<<< HEAD
         self.lbl_pause_hint = ctk.CTkLabel(pause_frame, text=self.common["void_pause"], font=("Arial", 10, "italic"), text_color="#888888")
+=======
+        self.lbl_pause_hint = ctk.CTkLabel(pause_frame, text="(empty for no pause)", font=("Arial", 10, "italic"), text_color="#888888")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         self.lbl_pause_hint.pack(side="right")
 
         # 2. Switch Pointer + Hint à droite
         ptr_frame = ctk.CTkFrame(t_gc, fg_color="transparent")
         ptr_frame.pack(fill="x", padx=10, pady=2)
+<<<<<<< HEAD
         ctk.CTkLabel(ptr_frame, text=self.common["origin_pointing"], font=("Arial", 11)).pack(side="left")
+=======
+        ctk.CTkLabel(ptr_frame, text="Point Origin (Low power pointer)", font=("Arial", 11)).pack(side="left")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         self.sw_pointer = ctk.CTkSwitch(ptr_frame, text="", variable=self.origin_pointer_var, width=45, progress_color="#1f538d", command=self.toggle_framing_options)
         self.sw_pointer.pack(side="right")
         # Note: Dans ce cas précis, le switch est déjà à droite, on peut ajouter un petit texte avant si besoin
@@ -398,13 +493,18 @@ class RasterView(ctk.CTkFrame):
         # 3. Switch Include Framing + Hint à droite
         frm_frame = ctk.CTkFrame(t_gc, fg_color="transparent")
         frm_frame.pack(fill="x", padx=10, pady=2)
+<<<<<<< HEAD
         ctk.CTkLabel(frm_frame, text=self.common["framing_option"], font=("Arial", 11)).pack(side="left")
+=======
+        ctk.CTkLabel(frm_frame, text="Include Framing", font=("Arial", 11)).pack(side="left")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         self.sw_frame = ctk.CTkSwitch(frm_frame, text="", variable=self.frame_var, width=45, progress_color="#1f538d", command=self.toggle_framing_options)
         self.sw_frame.pack(side="right")
 
         # 4. Ligne Power seule + Hint à droite
         pwr_frame = ctk.CTkFrame(t_gc, fg_color="transparent")
         pwr_frame.pack(fill="x", padx=10, pady=2)
+<<<<<<< HEAD
 
         top_row = ctk.CTkFrame(pwr_frame, fg_color="transparent")
         top_row.pack(fill="x")
@@ -426,6 +526,19 @@ class RasterView(ctk.CTkFrame):
 
         # 5. Speed Ratio seul (Utilisation de create_dropdown_pair)
         self.create_dropdown_pair(t_gc, self.common["framing_ratio"], ["5%", "10%", "20%", "30%", "50%", "80%", "100%"], "frame_feed_ratio_menu")
+=======
+        self.lbl_frame_p = ctk.CTkLabel(pwr_frame, text="Frame Power:", font=("Arial", 11))
+        self.lbl_frame_p.pack(side="left")
+        self.frame_power_entry = ctk.CTkEntry(pwr_frame, width=60, height=25)
+        self.frame_power_entry.insert(0, "0")
+        self.frame_power_entry.pack(side="left", padx=10)
+        # Hint de sécurité déplacé ici
+        self.lbl_plow_power_hint = ctk.CTkLabel(pwr_frame, text="(Keep low to avoid marking)", font=("Arial", 10, "italic"), text_color="#888888")
+        self.lbl_plow_power_hint.pack(side="right")
+
+        # 5. Speed Ratio seul (Utilisation de create_dropdown_pair)
+        self.create_dropdown_pair(t_gc, "Framing Speed Ratio:", ["5%", "10%", "20%", "30%", "50%", "80%", "100%"], "frame_feed_ratio_menu")
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         self.frame_feed_ratio_menu.set("20%")
         # Pour le griser correctement dans toggle_framing_options, on récupère le label si besoin
         # Note: create_dropdown_pair pack déjà le label et le menu dans t_gc

@@ -26,9 +26,19 @@ class LaserGeneratorApp(ctk.CTk):
         self._setup_icon()
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
+<<<<<<< HEAD
         # 3. Layout Principal
         self.setup_top_bar()
 
+=======
+
+
+        # 3. Layout Principal
+        # La barre supérieure reste fixe
+        self.setup_top_bar()
+
+        # Le conteneur qui accueillera dynamiquement les différentes vues
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         self.container = ctk.CTkFrame(self, fg_color="transparent")
         self.container.pack(fill="both", expand=True)
 
@@ -139,12 +149,20 @@ class LaserGeneratorApp(ctk.CTk):
         lang = self.config_manager.get_item("machine_settings", "language", "English")
         self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
         
+<<<<<<< HEAD
+=======
+        # On recharge aussi le titre spécifique aux paramètres
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
         title_text = TRANSLATIONS.get(lang, TRANSLATIONS["English"])["settings"]["title"]
         self.view_title.configure(text=title_text)
         
         # Mettre à jour les boutons de la top_bar si nécessaire (ex: Support)
         self.btn_support.configure(text=self.texts.get("support", "Support"))
+<<<<<<< HEAD
         self.dev_label.configure(text=self.texts.get("credits", "By MoMo"))
+=======
+        # ------------------------------------------------------------------
+>>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
 
         from gui.views.settings_view import SettingsView 
         self.current_view = SettingsView(self.container, self, just_saved=just_saved)
