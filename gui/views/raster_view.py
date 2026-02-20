@@ -683,8 +683,12 @@ class RasterView(ctk.CTkFrame):
 
 
     def process_logic(self):
-        if not self.input_image_path or not os.path.isfile(self.input_image_path):
-            print(f"DEBUG: Chemin invalide détecté -> {self.input_image_path}")
+        if not self.input_image_path:
+            print("DEBUG: En attente du chargement d'une image...")
+            return None, 0, 0, 0, 0, 0
+            
+        if not os.path.isfile(self.input_image_path):
+            print(f"DEBUG: ERREUR - Le fichier image est introuvable ou a été déplacé -> {self.input_image_path}")
             return None, 0, 0, 0, 0, 0
 
         # 1. On prépare les réglages dans un dictionnaire

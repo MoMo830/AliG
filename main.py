@@ -25,7 +25,6 @@ from utils.config_manager import ConfigManager
 def main():
     setup_app_id()
     
-
     base_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(base_dir, "alig_config.json")
     config_manager = ConfigManager(config_path)
