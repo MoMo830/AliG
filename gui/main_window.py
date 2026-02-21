@@ -39,22 +39,23 @@ class LaserGeneratorApp(ctk.CTk):
     # --- Gestion de l'Interface Système ---
 
     def _setup_icon(self):
-        """Configure l'icône de la fenêtre et de la barre des tâches."""
+        """Configure l'icône de la fenêtre et force l'affichage en barre des tâches."""
         if os.path.exists(LOGO_ALIG):
             try:
-                # 1. Dire à Windows que c'est une application distincte (AppUserModelID)
-                # Format: 'MaSociete.MonProduit.SousProduit.Version'
-                myappid = f'momo.alig.generator.{self.version}' 
+                # ÉTAPE CRUCIALE POUR WINDOWS :
+                # On définit un identifiant unique pour le processus.
+                # Cela détache le script de l'icône "Python" (ou la plume Tkinter).
+                myappid = f'momo.alig.lasergenerator.{self.version}' 
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
                 
-                # 2. Définir l'icône de la fenêtre
+                # Appliquer l'icône à la fenêtre
                 self.iconbitmap(LOGO_ALIG)
                 
             except Exception as e:
                 print(f"DEBUG: Icon error: {e}")
         else:
             print(f"DEBUG: Icon not found at: {LOGO_ALIG}")
-
+            
     def load_window_config(self):
         """Initialise la taille et la position de la fenêtre via le ConfigManager."""
         data = self.config_manager.get_section("window_settings")
