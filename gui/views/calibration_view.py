@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw
 from core.utils import get_app_paths
 from engine.calibrate_engine import CalibrateEngine
 from core.translations import TRANSLATIONS
-from utils.paths import LATENCY_LIGHT, LATENCY_DARK
+from utils.paths import LATENCY_LIGHT, LATENCY_DARK, LATENCY_EXPLAIN_LIGHT, LATENCY_EXPLAIN_DARK
 
 class CalibrationView(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -37,7 +37,6 @@ class CalibrationView(ctk.CTkFrame):
         self.left_column.grid_columnconfigure(0, weight=1)
         self.left_column._scrollbar.configure(width=0) 
 
-        # Titre de la colonne (Traduit)
         ctk.CTkLabel(self.left_column, text=self.texts["sidebar_title"], 
                      font=("Arial", 18, "bold"), text_color=self.accent_color, anchor="w").grid(row=0, column=0, sticky="ew", pady=(0, 15), padx=15)
 
@@ -45,63 +44,73 @@ class CalibrationView(ctk.CTkFrame):
         self.cards_container.grid(row=1, column=0, sticky="nsew")
         self.cards_container.grid_columnconfigure(0, weight=1)
 
-        # --- COLONNE DROITE ---
+        # --- COLONNE DROITE (DÉTAILS) ---
         self.right_column = ctk.CTkFrame(self.main_grid, fg_color=["#EBEBEB", "#202020"], corner_radius=15)
         self.right_column.grid(row=0, column=1, sticky="nsew")
         
-        # Titre dynamique (Traduit par défaut)
         self.desc_title = ctk.CTkLabel(self.right_column, text=self.texts["default_title"], font=("Arial", 30, "bold"), text_color=self.accent_color)
         self.desc_title.pack(pady=(40, 10), padx=40, anchor="w")
 
-        # Description dynamique (Traduite par défaut)
+        # --- CONTAINER 1 : DESCRIPTION + IMAGE ---
+        self.desc_info_row = ctk.CTkFrame(self.right_column, fg_color="transparent")
+        self.desc_info_row.pack(fill="x", padx=40, pady=10)
+
         self.desc_text = ctk.CTkLabel(
-            self.right_column, 
+            self.desc_info_row, 
             text=self.texts["default_desc"], 
             font=("Arial", 15), 
-            wraplength=500, 
             justify="left", 
             anchor="nw"
         )
-        self.desc_text.pack(fill="both", expand=True, padx=40, pady=10)
-        #self.desc_text.bind("<Configure>", lambda e: self.desc_text.configure(wraplength=e.width - 10))
+        self.desc_text.pack(side="left", fill="both", expand=True)
+        self.desc_text.bind("<Configure>", lambda e: self.desc_text.configure(wraplength=self.desc_text.winfo_width() - 10))
 
-        # Bouton (Traduit)
+        self.illustration_label = ctk.CTkLabel(self.desc_info_row, text="", width=150)
+        self.illustration_label.pack(side="right", padx=(20, 0))
+
+        # --- CONTAINER 2 : PARAMÈTRES INTERACTIFS ---
+        self.settings_container = ctk.CTkFrame(self.right_column, fg_color=["#DCE4EE", "#2B2B2B"], corner_radius=10)
+        self.settings_container.pack(fill="x", padx=40, pady=20)
+        
+        self.settings_header = ctk.CTkLabel(self.settings_container, text="G-Code Generation Settings:", font=("Arial", 13, "bold"), text_color=self.accent_color)
+        self.settings_header.pack(padx=15, pady=(10, 10), anchor="w")
+
+        # Frame pour aligner les champs de saisie
+        self.params_grid = ctk.CTkFrame(self.settings_container, fg_color="transparent")
+        self.params_grid.pack(fill="x", padx=15, pady=(0, 10))
+
+        # Champ Vitesse
+        ctk.CTkLabel(self.params_grid, text="Feedrate (mm/min):", font=("Arial", 12)).grid(row=0, column=0, padx=(0, 10), pady=5, sticky="w")
+        self.speed_entry = ctk.CTkEntry(self.params_grid, width=100)
+        self.speed_entry.grid(row=0, column=1, padx=(0, 30), pady=5, sticky="w")
+
+        # Champ Latence
+        ctk.CTkLabel(self.params_grid, text="Latency (ms):", font=("Arial", 12)).grid(row=0, column=2, padx=(0, 10), pady=5, sticky="w")
+        self.latency_entry = ctk.CTkEntry(self.params_grid, width=100)
+        self.latency_entry.grid(row=0, column=3, pady=5, sticky="w")
+
+        # infos latence in mm
+        self.mm_info_label = ctk.CTkLabel(self.params_grid, text="= 0.000 mm", 
+                                          font=("Arial", 12, "bold"), text_color="#1f538d")
+        self.mm_info_label.grid(row=0, column=4, padx=(15, 0), pady=5, sticky="w")
+
+        self.speed_entry.bind("<KeyRelease>", lambda e: self.update_mm_display())
+        self.latency_entry.bind("<KeyRelease>", lambda e: self.update_mm_display())
+
+        # Information sur le mode de feu
+        self.fire_mode_info = ctk.CTkLabel(self.settings_container, text="Fire mode: Auto-detected from system settings", 
+                                           font=("Arial", 11, "italic"), text_color="gray")
+        self.fire_mode_info.pack(padx=15, pady=(0, 10), anchor="w")
+
+        self.settings_container.pack_forget()
+
+        # --- BOUTON D'ACTION ---
         self.action_btn = ctk.CTkButton(self.right_column, text=self.texts["btn_prepare"], font=("Arial", 16, "bold"),
                                         fg_color=self.accent_color, hover_color="#d35400", height=52,
                                         command=None, state="disabled")
         self.action_btn.pack(side="bottom", pady=40, padx=40, fill="x")
 
         self.setup_calibration_data()
-
-    def setup_calibration_data(self):
-        # On prépare l'image de latence avec tes imports de utils.paths
-        latency_img = ctk.CTkImage(
-            light_image=LATENCY_LIGHT,
-            dark_image=LATENCY_DARK,
-            size=(35, 35) # Ajuste la taille selon tes besoins
-        )
-
-        self.test_list = [
-            {
-                "title": self.texts["latency_title"],
-                "short": self.texts["latency_short"],
-                "long": self.texts["latency_long"],
-                "icon": latency_img,  # On remplace "⏱️" par l'objet image
-                "is_image": True,     # Flag pour savoir comment l'afficher
-                "callback": self.run_latency_test
-            },
-            {
-                "title": self.texts["power_title"],
-                "short": self.texts["power_short"],
-                "long": self.texts["power_long"],
-                "icon": "🔥",          # On peut garder l'emoji pour celui-ci
-                "is_image": False,
-                "callback": self.run_power_test
-            }
-        ]
-
-        for i, test in enumerate(self.test_list):
-            self.create_calibration_card(test, i)
 
     def create_calibration_card(self, test, index):
         card = ctk.CTkFrame(self.cards_container, corner_radius=15, border_width=2, 
@@ -148,7 +157,39 @@ class CalibrationView(ctk.CTkFrame):
             w.bind("<Leave>", on_leave)
             w.bind("<Button-1>", lambda e, t=test: self.update_detail_view(t))
 
+    def setup_calibration_data(self):
+        latency_img = ctk.CTkImage(light_image=LATENCY_LIGHT, dark_image=LATENCY_DARK, size=(35, 35))
+        # Image plus grande pour la description
+        latency_preview = ctk.CTkImage(light_image=LATENCY_EXPLAIN_LIGHT, dark_image=LATENCY_EXPLAIN_DARK, size=(400, 120))
+
+        self.test_list = [
+            {
+                "title": self.texts["latency_title"],
+                "short": self.texts["latency_short"],
+                "long": self.texts["latency_long"],
+                "params": "• Square Size: 20x10mm\n• Center Origin (G54)\n• Variable: m67_delay",
+                "icon": latency_img,
+                "preview": latency_preview,
+                "is_image": True,
+                "callback": self.run_latency_test
+            },
+            {
+                "title": self.texts["power_title"],
+                "short": self.texts["power_short"],
+                "long": self.texts["power_long"],
+                "params": "• Steps: 10 levels\n• Power Range: 0-100%\n• Variable: S-Mode / M67",
+                "icon": "🔥",
+                "preview": None,
+                "is_image": False,
+                "callback": self.run_power_test
+            }
+        ]
+
+        for i, test in enumerate(self.test_list):
+            self.create_calibration_card(test, i)
+
     def update_detail_view(self, test):
+        # 1. Gestion de l'état visuel de la carte sélectionnée
         if hasattr(self, "selected_test"):
             self.selected_test["card_widget"].configure(
                 fg_color=self.color_normal, 
@@ -161,54 +202,115 @@ class CalibrationView(ctk.CTkFrame):
             border_color=self.accent_color 
         )
 
+        # 2. Mise à jour des textes et du titre
         self.desc_title.configure(text=test["title"])
         self.desc_text.configure(text=test["long"])
+
+        # 3. LOGIQUE D'AFFICHAGE DU CONTAINER DE PARAMÈTRES
+        # On affiche le container uniquement pour le test de latence
+        if test["title"] == self.texts["latency_title"]:
+            # On utilise pack pour le réafficher proprement
+            self.settings_container.pack(fill="x", padx=40, pady=20, after=self.desc_info_row)
+            
+            # Remplissage des champs (Vitesse et Latence)
+            cfg = self.controller.config_manager
+            default_speed = test.get("default_speed", cfg.get_item("machine_settings", "base_feedrate", 3000))
+            self.speed_entry.delete(0, "end")
+            self.speed_entry.insert(0, str(default_speed))
+
+            default_lat = test.get("default_latency", 0.0)
+            self.latency_entry.delete(0, "end")
+            self.latency_entry.insert(0, str(default_lat))
+            
+            # Mise à jour de l'info du mode de feu
+            fire_mode = "S-Mode" if cfg.get_item("machine_settings", "use_s_mode", False) else "M67/M3"
+            self.fire_mode_info.configure(text=f"Fire mode active: {fire_mode} (from machine settings)")
+        else:
+            # On cache le container pour les autres tests
+            self.settings_container.pack_forget()
+
+        # 4. Mise à jour de l'image d'illustration
+        if test.get("preview"):
+            self.illustration_label.configure(image=test["preview"], text="")
+        else:
+            self.illustration_label.configure(image=None, text="[No Preview]")
+
+        # 5. Adaptation dynamique de la largeur du texte (Wraplength)
+        self.update_idletasks()
+        new_wrap = self.desc_text.winfo_width() - 10
+        if new_wrap > 0:
+            self.desc_text.configure(wraplength=new_wrap)
+
+        # 6. Activation du bouton d'action
         self.action_btn.configure(state="normal", command=test["callback"])
 
     def run_latency_test(self):
-        """Génère et propose d'enregistrer le test de latence"""
         try:
-            # 1. Récupération des réglages via le config_manager
-            # On utilise des valeurs par défaut sécurisées si rien n'est défini
+            # 1. Récupération des valeurs saisies par l'utilisateur
+            user_speed = float(self.speed_entry.get())
+            user_latency = float(self.latency_entry.get())
+            
+            # 2. Récupération automatique du mode de feu (Settings)
             cfg = self.controller.config_manager
+            use_s_mode = cfg.get_item("machine_settings", "use_s_mode", False)
             
             settings = {
                 "power": cfg.get_item("calibration", "test_power", 30.0),
-                "feedrate": cfg.get_item("machine_settings", "base_feedrate", 3000),
-                "use_s_mode": cfg.get_item("machine_settings", "use_s_mode", False),
+                "feedrate": user_speed, # Valeur choisie par l'user
+                "latency": user_latency, # Valeur choisie par l'user
+                "use_s_mode": use_s_mode, # Pris dans les settings auto
                 "e_num": cfg.get_item("machine_settings", "e_num", 0),
                 "header": cfg.get_item("gcode_options", "header", ""),
                 "footer": cfg.get_item("gcode_options", "footer", "M30")
             }
 
-            # 2. Appel de l'engine de calibration
-            # On suppose que self.calibrate_engine est initialisé dans le __init__
-            from engine.calibrate_engine import CalibrateEngine
+            # 3. Génération (Engine)
             engine = CalibrateEngine()
-            
             gcode_content = engine.generate_latency_calibration(settings)
 
-            # 3. Demander à l'utilisateur où sauvegarder le fichier
+            # 4. Sauvegarde
             from tkinter import filedialog
             file_path = filedialog.asksaveasfilename(
                 defaultextension=".nc",
-                filetypes=[("G-Code", "*.nc"), ("All files", "*.*")],
-                initialfile="latency_test_ALIG.nc",
-                title="Enregistrer le test de latence"
+                initialfile=f"test_latence_{user_latency}ms.nc",
+                title="Enregistrer le G-Code"
             )
 
             if file_path:
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(gcode_content)
                 
-                # Optionnel : Notification de succès
-                print(f"Test de latence généré avec succès : {file_path}")
-                
+        except ValueError:
+            # Si l'utilisateur a tapé des lettres au lieu de chiffres
+            print("Erreur : Veuillez entrer des nombres valides pour la vitesse et la latence.")
         except Exception as e:
-            # Gestion d'erreur (tu peux utiliser une boîte de dialogue CTkMessagebox si installée)
-            print(f"Erreur lors de la génération du test : {e}")
+            print(f"Erreur lors de la génération : {e}")
             
-
+    def update_mm_display(self):
+        """Calcule et affiche dynamiquement le décalage en mm."""
+        try:
+            # On récupère les valeurs, défaut à 0.0 si vide ou invalide
+            raw_speed = self.speed_entry.get().strip()
+            raw_latency = self.latency_entry.get().strip()
+            
+            speed = float(raw_speed) if raw_speed else 0.0
+            latency = float(raw_latency) if raw_latency else 0.0
+            
+            # Formule : (Feed * Latency) / 60000
+            offset_mm = (speed * latency) / 60000.0
+            
+            # Mise à jour du texte avec 3 décimales
+            self.mm_info_label.configure(text=f"= {offset_mm:.3f} mm")
+            
+            # Optionnel : changer la couleur si l'offset est très grand (alerte)
+            if abs(offset_mm) > 2.0:
+                self.mm_info_label.configure(text_color="#e74c3c") # Rouge
+            else:
+                self.mm_info_label.configure(text_color="#1f538d") # Bleu standard
+                
+        except ValueError:
+            # En cas d'erreur de saisie (ex: "12.5.2")
+            self.mm_info_label.configure(text="= --- mm", text_color="gray")
 
     def run_power_test(self):
         block_size, num_steps = 50, 10

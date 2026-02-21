@@ -183,28 +183,18 @@ class GCodeEngine:
         # =====================================================
 
         for outer_idx in range(outer_range):
-
             is_fwd = (outer_idx % 2 == 0)
-
             scan_dir = 1 if is_fwd else -1
-
             corr = - offset_latence * scan_dir
 
             if raster_mode == "Horizontal":
-
                 main_pos = outer_idx * step_main + offY
-
                 row_data = p_matrix[(h_px - 1) - outer_idx, :]
-
                 axis = "X"
                 scan_offset = offX
-
             else:
-
                 main_pos = outer_idx * step_main + offX
-
                 row_data = p_matrix[::-1, outer_idx]
-
                 axis = "Y"
                 scan_offset = offY
 

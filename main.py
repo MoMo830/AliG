@@ -20,7 +20,6 @@ import customtkinter as ctk
 from gui.main_window import LaserGeneratorApp
 from utils.gui_utils import setup_app_id
 from utils.config_manager import ConfigManager
-from utils.paths import LOGO_ALIG, IMAGES_DIR
 
 
 def main():

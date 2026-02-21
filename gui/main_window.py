@@ -5,6 +5,8 @@ from tkinter import messagebox
 from core.translations import TRANSLATIONS
 import webbrowser
 from PIL import Image
+from utils.paths import LOGO_ALIG, HOME_DARK, HOME_LIGHT
+import ctypes
 
 class LaserGeneratorApp(ctk.CTk):
     def __init__(self, config_manager):
@@ -17,10 +19,8 @@ class LaserGeneratorApp(ctk.CTk):
         self.version = "0.9783b"
         self.title(f"A.L.I.G. - Advanced Laser Imaging Generator v{self.version}")
         self.current_view = None
-        #   Chemins
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        self.assets_dir = os.path.normpath(os.path.join(current_dir, "..", "assets"))
-        self.icon_path = os.path.join(self.assets_dir, "icone_alig.ico")
+
+
         # 2. Configuration Système (Fenêtre & Icône)
         self.load_window_config()
         self._setup_icon()
@@ -39,12 +39,21 @@ class LaserGeneratorApp(ctk.CTk):
     # --- Gestion de l'Interface Système ---
 
     def _setup_icon(self):
-        """Configure l'icône de la fenêtre principale."""
-        if os.path.exists(self.icon_path):
+        """Configure l'icône de la fenêtre et de la barre des tâches."""
+        if os.path.exists(LOGO_ALIG):
             try:
-                self.iconbitmap(self.icon_path)
+                # 1. Dire à Windows que c'est une application distincte (AppUserModelID)
+                # Format: 'MaSociete.MonProduit.SousProduit.Version'
+                myappid = f'momo.alig.generator.{self.version}' 
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+                
+                # 2. Définir l'icône de la fenêtre
+                self.iconbitmap(LOGO_ALIG)
+                
             except Exception as e:
                 print(f"DEBUG: Icon error: {e}")
+        else:
+            print(f"DEBUG: Icon not found at: {LOGO_ALIG}")
 
     def load_window_config(self):
         """Initialise la taille et la position de la fenêtre via le ConfigManager."""
@@ -176,8 +185,8 @@ class LaserGeneratorApp(ctk.CTk):
 
         # Bouton Home
         home_image = ctk.CTkImage(
-            light_image=Image.open(os.path.join(self.assets_dir, "home_black.png")),
-            dark_image=Image.open(os.path.join(self.assets_dir, "home_white.png")),
+            light_image=HOME_LIGHT,
+            dark_image=HOME_DARK,
             size=(20, 20) # Ajuste la taille selon tes besoins
         )
         self.home_btn = ctk.CTkButton(

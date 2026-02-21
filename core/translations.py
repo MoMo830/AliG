@@ -60,8 +60,8 @@ TRANSLATIONS = {
             "btn_prepare": "PREPARE TEST",
             "latency_title": "LASER LATENCY TEST",
             "latency_short": "Test beam alignment & internal delays.",
-            "latency_long": "This test calibrates internal system delays by drawing a central vertical reference line and alternating horizontal lines on both sides. \n\nGoal:\nIf the horizontal lines stop exactly on the vertical line, your latency setting is perfect.\n\nInstructions:\n1. The test uses a 20x10mm area with the origin (G54) at the center.\n2. Run the generated G-Code at high speed.\n3. Observe the junction points: if lines overlap or leave a gap at the vertical bar, adjust 'm67_delay' in Global Settings.\n4. Repeat until the horizontal strokes perfectly 'kiss' the vertical reference.",
-            "power_title": "POWER SCALE GRID",
+            "latency_long": "This test calibrates internal system delays by drawing a central vertical reference line and alternating horizontal lines on both sides. \n\nGoal:\nIf the horizontal lines stop exactly on the vertical line, your latency setting is perfect.\n\nInstructions:\n1. The test uses a 30x10mm area with the origin (G54) at the center.\n2. Choose your feedrate. Start with 0 if you are calibrating for the first time.\n3. Observe the junction points: \n   - Gap (too short): Move towards a more negative value (ex: -10 to -15).\n   - Overlap (too long): Move towards zero (ex: -10 to -5).\n4. Repeat until the horizontal strokes perfectly 'kiss' the vertical reference.",
+            "power_title": "POWER SCALE GRID  (!! WIP !!)",
             "power_short": "Intensity ramp from 0% to 100%.",
             "power_long": "Generates 10 squares with varying gray levels.\n\nGoal:\n- Observe how your material reacts to different power percentages.\n- Identify the threshold where the material starts to mark.\n- Determine the maximum effective black level."
         },
@@ -178,11 +178,11 @@ TRANSLATIONS = {
             "default_desc": "Cliquez sur une carte de calibrage à gauche pour afficher les instructions détaillées et préparer la génération laser.",
             "btn_prepare": "PRÉPARER LE TEST",
             "latency_title": "TEST DE LATENCE LASER",
-            "latency_short": "Teste l'alignement et le m67_delay.",
-            "latency_long": "Ce test génère un carré noir de 30x30mm pour vérifier la synchronisation entre le mouvement et le déclenchement laser.\n\nInstructions :\n1. Lancez à haute vitesse.\n2. Si les bords paraissent dentelés ou doublés, ajustez votre 'm67_delay' dans les réglages globaux.\n3. Répétez jusqu'à ce que le carré soit parfaitement net.",
-            "power_title": "GRILLE DE PUISSANCE",
+            "latency_short": "Teste l'alignement du faisceau et les délais internes.",
+            "latency_long": "Ce test calibre les délais internes du système en traçant une ligne de référence verticale centrale et des lignes horizontales alternées de chaque côté.\n\nObjectif :\nSi les lignes horizontales s'arrêtent exactement sur la ligne verticale, votre réglage de latence est parfait.\n\nInstructions :\n1. Le test utilise une zone de 30x10mm avec l'origine (G54) au centre.\n2. Choisissez votre vitesse. Commencez à 0 si vous calibrez pour la première fois.\n3. Observez les points de jonction :\n   - Écart (trop court) : Allez vers une valeur plus négative (ex: -10 vers -15).\n   - Chevauchement (trop long) : Allez vers zéro (ex: -10 vers -5).\n4. Répétez jusqu'à ce que les traits horizontaux viennent 'effleurer' parfaitement la référence verticale.",
+            "power_title": "GRILLE D'ÉCHELLE DE PUISSANCE (!! TRAVAIL EN COURS !!)",
             "power_short": "Rampe d'intensité de 0% à 100%.",
-            "power_long": "Génère une grille horizontale de 10 carrés avec des niveaux de gris variables.\n\nObjectif :\n- Observer comment votre matériau réagit aux différents pourcentages de puissance.\n- Identifier le seuil où le matériau commence à marquer.\n- Déterminer le niveau de noir maximum efficace."
+            "power_long": "Génère 10 carrés avec des niveaux de gris variables.\n\nObjectif :\n- Observer comment votre matériau réagit aux différents pourcentages de puissance.\n- Identifier le seuil où le matériau commence à être marqué.\n- Déterminer le niveau de noir maximal effectif."
         },
         "topbar": {
             "support": "☕ Soutenir le projet",
