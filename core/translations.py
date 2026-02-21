@@ -32,7 +32,6 @@ TRANSLATIONS = {
             "reset_all_parameters_confirm": "Sure ?",
             "reset_all_parameters_done": "Reset done !",
             "reset_all_parameters_error": "Reset error"
-
         },
         "dashboard": {
             "raster_title": "IMAGE RASTERING",
@@ -54,6 +53,18 @@ TRANSLATIONS = {
             "gcode_saved": "G-Codes Saved",
             "total_engraving_time": "Total Engraving Time"
         },
+        "calibration": {
+            "sidebar_title": "CALIBRATION TESTS",
+            "default_title": "Select a test",
+            "default_desc": "Click on a calibration card on the left to display detailed instructions and prepare the laser generation.",
+            "btn_prepare": "PREPARE TEST",
+            "latency_title": "LASER LATENCY TEST",
+            "latency_short": "Test beam alignment & m67_delay.",
+            "latency_long": "This test generates a 30x30mm black square. Designed to verify synchronization.\n\nInstructions:\n1. Run at high speed.\n2. If the edges appear jagged or double, adjust your 'm67_delay' in Global Settings.\n3. Repeat until the square is perfectly sharp.",
+            "power_title": "POWER SCALE GRID",
+            "power_short": "Intensity ramp from 0% to 100%.",
+            "power_long": "Generates 10 squares with varying gray levels.\n\nGoal:\n- Observe how your material reacts to different power percentages.\n- Identify the threshold where the material starts to mark.\n- Determine the maximum effective black level."
+        },
         "topbar": {
             "support": "☕ Support the project",
             "credits": "Developed by Alexandre 'MoMo'",
@@ -71,7 +82,6 @@ TRANSLATIONS = {
             "Gcode": "G-code",
             "target_width" :"Target Width (mm)",
             "generate_gcode": "GENERATE",
-            "target_width": "Target Width (mm)",
             "line_step": "Line Step / Resolution (mm)",
             "force_width": "Force Exact Width",
             "dpi_resolution": "Resolution (DPI)",
@@ -114,7 +124,7 @@ TRANSLATIONS = {
     },
     "Français": {
         "settings": {
-            "title": "RÉGLAGES", # Changé
+            "title": "RÉGLAGES",
             "sec_appearance": "LOGICIEL & INTERFACE", 
             "label_theme": "Mode d'apparence :",
             "label_lang": "Langue :",
@@ -129,7 +139,7 @@ TRANSLATIONS = {
             "sec_scripts": "SCRIPTS SYSTÈME",
             "label_header": "G-Code d'en-tête global",
             "label_footer": "G-Code de fin global",
-            "btn_save": "SAUVEGARDER", # Plus court
+            "btn_save": "SAUVEGARDER",
             "msg_success": "Configuration enregistrée avec succès !",
             "msg_error_num": "Veuillez vérifier que les champs numériques sont valides.",
             "enable_thumbnails": "Autoriser la création de vignettes",
@@ -162,6 +172,18 @@ TRANSLATIONS = {
             "gcode_saved": "G-Codes sauvegardés",
             "total_engraving_time": "Temps total de gravure"
         },
+        "calibration": {
+            "sidebar_title": "TESTS DE CALIBRAGE",
+            "default_title": "Sélectionnez un test",
+            "default_desc": "Cliquez sur une carte de calibrage à gauche pour afficher les instructions détaillées et préparer la génération laser.",
+            "btn_prepare": "PRÉPARER LE TEST",
+            "latency_title": "TEST DE LATENCE LASER",
+            "latency_short": "Teste l'alignement et le m67_delay.",
+            "latency_long": "Ce test génère un carré noir de 30x30mm pour vérifier la synchronisation entre le mouvement et le déclenchement laser.\n\nInstructions :\n1. Lancez à haute vitesse.\n2. Si les bords paraissent dentelés ou doublés, ajustez votre 'm67_delay' dans les réglages globaux.\n3. Répétez jusqu'à ce que le carré soit parfaitement net.",
+            "power_title": "GRILLE DE PUISSANCE",
+            "power_short": "Rampe d'intensité de 0% à 100%.",
+            "power_long": "Génère une grille horizontale de 10 carrés avec des niveaux de gris variables.\n\nObjectif :\n- Observer comment votre matériau réagit aux différents pourcentages de puissance.\n- Identifier le seuil où le matériau commence à marquer.\n- Déterminer le niveau de noir maximum efficace."
+        },
         "topbar": {
             "support": "☕ Soutenir le projet",
             "credits": "Développé par Alexandre 'MoMo'",
@@ -179,7 +201,6 @@ TRANSLATIONS = {
             "Gcode": "G-code",
             "target_width" :"Largeur cible (mm)",
             "generate_gcode": "GENERER",
-            "target_width": "Largeur cible (mm)",
             "line_step": "Résolution inter-lignes (mm)",
             "force_width": "Forcer largeur exacte",
             "dpi_resolution": "Résolution (DPI)",
@@ -202,9 +223,9 @@ TRANSLATIONS = {
             "choose_image": "VEUILLEZ SELECTIONNER UNE IMAGE\nPOUR COMMENCER",
             "ctrl_max_value": "Pleine échelle de controleur :",
             "firing_mode": "Mode de commande :",
-            "gcode_header": "entête de G-Code", #accent
+            "gcode_header": "En-tête de G-Code",
             "at_start": " (au début)",
-            "gcode_footer": "Pied de  G-Code",
+            "gcode_footer": "Pied de G-Code",
             "before_m30": " (avant M30)",
             "point_fram_options": "Option de pointage & cadrage :",
             "pause_command": "Commande de pause :",
@@ -218,6 +239,6 @@ TRANSLATIONS = {
             "confirm_subtitle": "Cette action est irréversible.",
             "btn_cancel": "Annuler",
             "btn_confirm": "Confirmer"
-            }
+        }
     }
 }

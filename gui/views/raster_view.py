@@ -335,40 +335,86 @@ class RasterView(ctk.CTkFrame):
         self.origin_pointer_var = tk.BooleanVar(value=False)
         self.frame_var = tk.BooleanVar(value=False)
 
-        # 1. Mode de commande (M67 / Spindle) avec style unifié
-        self.create_dropdown_pair(t_gc, self.common["cmd_mode"], ["M67 (Analog)", "S (Spindle)"], "cmd_mode")
-        self.cmd_mode.set("M67 (Analog)")
+        # --- ENCADRÉ GLOBAL MACHINE PARAMETERS ---
+        # On crée un cadre avec une bordure pour marquer la zone sensible
+        global_frame = ctk.CTkFrame(t_gc, fg_color="transparent", border_width=1, border_color="#555555")
+        global_frame.pack(fill="x", padx=10, pady=10)
 
-        # M67 E 
-        row_e = ctk.CTkFrame(t_gc, fg_color="transparent")
-        row_e.pack(fill="x", padx=10, pady=2)
-        self.create_simple_input(row_e, self.common["m67_output"], 0, "m67_e_num", precision=0)
+        # Titre et Bouton Cadenas
+        header_row = ctk.CTkFrame(global_frame, fg_color="transparent")
+        header_row.pack(fill="x", padx=10, pady=5)
+        
+        ctk.CTkLabel(header_row, text="⚠️ GLOBAL MACHINE PARAMETERS", 
+                     font=("Arial", 11, "bold"), text_color="#FF9500").pack(side="left")
+        
+        # Le bouton cadenas (Toggle)
+        self.is_locked = True
+        self.lock_btn = ctk.CTkButton(
+            header_row, 
+            text="🔒", 
+            width=30, 
+            height=25, # Augmenter un peu la hauteur aide à l'alignement
+            anchor="center", # Force le centrage du contenu
+            fg_color="#444444", 
+            hover_color="#666666",
+            command=self.toggle_machine_lock
+        )
+        self.lock_btn.pack(side="right")
 
-        # Controller Max 
-        row_max = ctk.CTkFrame(t_gc, fg_color="transparent")
-        row_max.pack(fill="x", padx=10, pady=2)
-        self.create_simple_input(row_max, self.common["ctrl_max_value"], 100, "ctrl_max", precision=0)
+        # Conteneur pour les réglages (qu'on pourra griser)
+        self.machine_controls_container = ctk.CTkFrame(global_frame, fg_color="transparent")
+        self.machine_controls_container.pack(fill="x", padx=5, pady=5)
+
+        # 1. Mode de commande (M67 / Spindle)
+        self.create_dropdown_pair(self.machine_controls_container, self.common["cmd_mode"], 
+                                  ["M67 (Analog)", "S (Spindle)"], "cmd_mode")
+        
+        # M67 E & Controller Max (Regroupés sur une ligne pour gagner de la place)
+        row_e_max = ctk.CTkFrame(self.machine_controls_container, fg_color="transparent")
+        row_e_max.pack(fill="x", padx=0, pady=2)
+        self.create_simple_input(row_e_max, self.common["m67_output"], 0, "m67_e_num", precision=0)
+        self.create_simple_input(row_e_max, self.common["ctrl_max_value"], 100, "ctrl_max", precision=0)
 
         # 2. Firing mode (M3/M4)
-        self.create_dropdown_pair(t_gc, self.common["firing_mode"], ["M3/M5", "M4/M5"], "firing_mode")
-        self.firing_mode.set("M3/M5")
+        self.create_dropdown_pair(self.machine_controls_container, self.common["firing_mode"], 
+                                  ["M3/M5", "M4/M5"], "firing_mode")
+
+        # Initialisation de l'état (verrouillé par défaut)
+        self.apply_lock_state()
 
         # 3. Textboxes Header/Footer avec Labels descriptifs
-        # Header
+        # --- HEADER SECTION ---
         h_label_frame = ctk.CTkFrame(t_gc, fg_color="transparent")
         h_label_frame.pack(fill="x", padx=10, pady=(5, 0))
         ctk.CTkLabel(h_label_frame, text=self.common["gcode_header"], font=("Arial", 11, "bold")).pack(side="left")
-        ctk.CTkLabel(h_label_frame, text=self.common["at_start"], font=("Arial", 10, "italic"), text_color="#888888").pack(side="left")
         
+        # Petit indicateur "Machine Global" grisé (Preview seulement)
+        self.txt_global_header_preview = ctk.CTkTextbox(t_gc, font=("Consolas", 10), height=30, 
+                                                        fg_color="#222222", text_color="#666666",
+                                                        border_width=0, activate_scrollbars=False)
+        self.txt_global_header_preview.pack(fill="x", padx=10, pady=0)
+        self.txt_global_header_preview.insert("1.0", "(Machine Settings Header...)")
+        self.txt_global_header_preview.configure(state="disabled")
+
+        # Ton champ spécifique au Raster (celui qui est éditable et sauvegardé)
         self.txt_header = ctk.CTkTextbox(t_gc, font=("Consolas", 11), height=40, border_width=1, border_color="#444444")
         self.txt_header.pack(fill="x", padx=10, pady=(2, 5))
 
-        # Footer
+
+        # --- FOOTER SECTION ---
         f_label_frame = ctk.CTkFrame(t_gc, fg_color="transparent")
         f_label_frame.pack(fill="x", padx=10, pady=(5, 0))
         ctk.CTkLabel(f_label_frame, text=self.common["gcode_footer"], font=("Arial", 11, "bold")).pack(side="left")
-        ctk.CTkLabel(f_label_frame, text=self.common["before_m30"], font=("Arial", 10, "italic"), text_color="#888888").pack(side="left")
-        
+
+        # Petit indicateur "Machine Global" grisé
+        self.txt_global_footer_preview = ctk.CTkTextbox(t_gc, font=("Consolas", 10), height=30, 
+                                                        fg_color="#222222", text_color="#666666",
+                                                        border_width=0, activate_scrollbars=False)
+        self.txt_global_footer_preview.pack(fill="x", padx=10, pady=0)
+        self.txt_global_footer_preview.insert("1.0", "(Machine Settings Footer...)")
+        self.txt_global_footer_preview.configure(state="disabled")
+
+        # Ton champ spécifique au Raster
         self.txt_footer = ctk.CTkTextbox(t_gc, font=("Consolas", 11), height=40, border_width=1, border_color="#444444")
         self.txt_footer.pack(fill="x", padx=10, pady=(2, 5))
 
@@ -884,20 +930,20 @@ class RasterView(ctk.CTkFrame):
 
 
     def generate_gcode(self):
-        self.save_settings() # Sauvegarde paramètres
+        """Prépare le payload complet (fusion Global + Raster) et lance la simulation."""
+        self.save_settings() # Sauvegarde automatique des paramètres actuels
+        
         # --- 0. CAPTURE SÉCURISÉE DES WIDGETS ---
         try:
             current_cmd_mode = self.cmd_mode.get()
             current_firing_mode = self.firing_mode.get()
             current_origin_mode = self.origin_mode.get()
-            # Capture du nouveau paramètre de sens
             current_raster_mode = self.raster_dir_var.get() 
-        except AttributeError: return
+        except AttributeError: 
+            return
 
         # --- 1. RÉCUPÉRATION / CALCUL DES DONNÉES DE BASE ---
         if hasattr(self, '_last_result'):
-            # Note : assurez-vous que process_logic() a été appelé avec le bon raster_mode
-            # pour que l'estimation de temps (est_min) soit déjà correcte ici.
             matrix, h_px, w_px, l_step, x_st, est_min = self._last_result[0:6]
         else:
             res = self.process_logic()
@@ -910,7 +956,22 @@ class RasterView(ctk.CTkFrame):
         real_h = (h_px - 1) * l_step
         offX, offY = self.calculate_offsets(real_w, real_h)
 
-        # --- 2. PACKAGING DU PAYLOAD ---
+        # --- 2. GESTION DES BLOCS DE TEXTE (FUSION GLOBAL + RASTER) ---
+        # On récupère les valeurs globales stockées dans la machine
+        global_h = self.app.config_manager.get_item("machine_settings", "custom_header", "").strip()
+        global_f = self.app.config_manager.get_item("machine_settings", "custom_footer", "").strip()
+        
+        # On récupère les valeurs spécifiques à cet onglet Raster
+        raster_h = self.txt_header.get("1.0", "end-1c").strip()
+        raster_f = self.txt_footer.get("1.0", "end-1c").strip()
+
+        # Concaténation avec saut de ligne uniquement si nécessaire
+        # Header : Global en premier (setup machine), puis Raster
+        full_header = f"{global_h}\n{raster_h}".strip() if global_h and raster_h else (global_h or raster_h)
+        # Footer : Raster en premier (fin de job), puis Global (M30, etc.)
+        full_footer = f"{raster_f}\n{global_f}".strip() if global_f and raster_f else (global_f or raster_f)
+
+        # --- 3. PACKAGING DU PAYLOAD ---
         payload = {
             'matrix': matrix,
             'dims': (h_px, w_px, l_step, x_st),
@@ -939,24 +1000,23 @@ class RasterView(ctk.CTkFrame):
                 'base_feedrate': self.get_val(self.controls["feedrate"])
             },
             'text_blocks': {
-                'header': self.txt_header.get("1.0", "end-1c").strip(),
-                'footer': self.txt_footer.get("1.0", "end-1c").strip()
+                'header': full_header,
+                'footer': full_footer
             },
             'metadata': {
                 'version': self.version,
                 'mode': current_cmd_mode.split(' ')[0],
                 'firing_cmd': current_firing_mode.split('/')[0],
-                'file_name': os.path.basename(self.input_image_path).split('.')[0] + ".nc",
+                'file_name': os.path.basename(self.input_image_path).split('.')[0] + ".nc" if self.input_image_path else "export.nc",
                 'output_dir': self.output_dir, 
                 'origin_mode': current_origin_mode,
                 'real_w': real_w, 'real_h': real_h,
                 'est_sec': int(est_min * 60),
-                # Optionnel : pour info dans les logs
                 'raster_direction': current_raster_mode 
             }
         }
 
-        # --- 3. LANCEMENT DE LA VUE SIMULATION ---
+        # --- 4. LANCEMENT DE LA VUE SIMULATION ---
         self.app.show_simulation(
             self.engine, 
             payload, 
@@ -1021,44 +1081,71 @@ class RasterView(ctk.CTkFrame):
         return data
 
     def save_settings(self):
-        """Sauvegarde automatique via le gestionnaire de configuration global."""
-        # 1. On récupère toutes les données de l'interface
-        data = self.get_all_settings_data()
+        """Sauvegarde les réglages en respectant la séparation Machine/Raster."""
+        # 1. On récupère le dictionnaire à plat (contient tout l'onglet Raster)
+        all_data = self.get_all_settings_data()
         
-        # 2. On met à jour la section dédiée dans le manager central
-        self.app.config_manager.set_section("raster_settings", data)
+        # 2. On définit les clés qui appartiennent à la configuration GLOBALE MACHINE
+        machine_keys = ["cmd_mode", "firing_mode", "m67_e_num", "ctrl_max", "m67_delay"]
         
-        # 3. On demande au manager de sauvegarder physiquement le fichier
+        # On extrait ces clés du dictionnaire (elles disparaissent de all_data)
+        machine_updates = {}
+        for k in machine_keys:
+            if k in all_data:
+                machine_updates[k] = all_data.pop(k)
+        
+        # 3. Ce qui reste dans all_data est le pur "raster_settings"
+        # On y trouve : input_path, custom_header (spécifique), width, etc.
+        raster_data = all_data 
+
+        # 4. MISE À JOUR SÉCURISÉE (On ne touche pas au header global ici !)
+        # On récupère l'existant pour ne pas supprimer theme/language/global_header
+        current_machine = self.app.config_manager.get_section("machine_settings")
+        current_machine.update(machine_updates) # On ne met à jour que les 5 clés de pilotage
+        
+        # 5. On renvoie les deux blocs au manager
+        self.app.config_manager.set_section("machine_settings", current_machine)
+        self.app.config_manager.set_section("raster_settings", raster_data)
+        
+        # 6. Sauvegarde sur disque
         if not self.app.config_manager.save():
-            print("Auto-save error: Failed to write global config file.")
+            print("ERREUR : Impossible d'écrire le fichier de config.")
             
     def load_settings(self):
-        """Chargement automatique depuis le manager centralisé au démarrage."""
-        # On récupère la section "raster_settings" depuis le manager
-        data = self.app.config_manager.get_section("raster_settings")
+        machine_data = self.app.config_manager.get_section("machine_settings")
+        raster_data = self.app.config_manager.get_section("raster_settings")
         
-        if data:
-            # On applique les données à l'interface
-            self.apply_settings_data(data)
+        if machine_data:
+            # Correction du nom de l'argument ici
+            self.apply_settings_data(machine_data, is_machine_config=True) 
+            
+        if raster_data:
+            # Et ici (optionnel car False est la valeur par défaut)
+            self.apply_settings_data(raster_data, is_machine_config=False)
             
 
-
     def export_profile(self):
-        """Export manuel vers un fichier choisi."""
+        """Export manuel : On recrée la structure hiérarchique pour le fichier JSON."""
         file_path = filedialog.asksaveasfilename(
             initialdir=self.application_path,
-            title="Export Profile As",
             defaultextension=".json",
             filetypes=[("JSON files", "*.json")],
-            initialfile="my_laser_settings.json"
+            initialfile="alig_full_profile.json"
         )
         if file_path:
-            data = self.get_all_settings_data()
-            success, err = save_json_file(file_path, data)
+            all_data = self.get_all_settings_data()
+            
+            # On structure le JSON d'export comme le fichier de config principal
+            machine_keys = ["cmd_mode", "firing_mode", "m67_e_num", "ctrl_max", "m67_delay"]
+            
+            export_structure = {
+                "machine_settings": {k: all_data.pop(k) for k in machine_keys if k in all_data},
+                "raster_settings": all_data
+            }
+            
+            success, err = save_json_file(file_path, export_structure)
             if success:
-                messagebox.showinfo("Export Success", "Profile saved!")
-            else:
-                messagebox.showerror("Export Error", f"Failed: {err}")
+                messagebox.showinfo("Export Success", "Full profile saved!")
 
     def load_profile_from(self):
         """Import manuel depuis un fichier choisi."""
@@ -1075,8 +1162,11 @@ class RasterView(ctk.CTkFrame):
             else:
                 messagebox.showerror("Error", f"Could not load profile: {err}")
 
-    def apply_settings_data(self, data):
-        """Applique intelligemment les réglages à l'interface."""
+    def apply_settings_data(self, data, is_machine_config=False):
+        """
+        Applique intelligemment les réglages à l'interface.
+        Si is_machine_config est True, on ignore les headers/footers pour éviter les doublons.
+        """
         # 1. BOUCLE AUTOMATIQUE (Sliders & Entries)
         for k, v in data.items():
             if k in self.controls:
@@ -1105,7 +1195,7 @@ class RasterView(ctk.CTkFrame):
             if key in data:
                 var.set(data[key])
 
-        # 3. ÉTATS DES WIDGETS ET COULEURS (Les cas particuliers)
+        # 3. ÉTATS DES WIDGETS ET CAS PARTICULIERS
         
         # Gestion de l'image d'entrée
         raw_path = data.get("input_path", "")
@@ -1123,27 +1213,91 @@ class RasterView(ctk.CTkFrame):
         out_text = f"OUT: {os.path.basename(self.output_dir).upper()}/" if is_custom_out else "SELECT OUTPUT DIRECTORY"
         self._update_button_style(self.btn_output, out_text, is_custom_out)
 
-        # Champs textes libres
-        self._set_text_widget(self.txt_header, data.get("custom_header"))
-        self._set_text_widget(self.txt_footer, data.get("custom_footer"))
+        # --- FILTRAGE DES TEXTBOXES ---
+        # On ne met à jour les zones de texte blanches QUE si ce n'est PAS de la config machine
+        if not is_machine_config:
+            if "custom_header" in data:
+                self._set_text_widget(self.txt_header, data.get("custom_header"))
+            if "custom_footer" in data:
+                self._set_text_widget(self.txt_footer, data.get("custom_footer"))
+
+        # Champs spécifiques
         self._set_entry_val(self.frame_power_entry, data.get("frame_power"))
         self._set_entry_val(self.pause_cmd_entry, data.get("custom_pause_cmd"))
 
         # Rafraîchissement de l'affichage
         self.toggle_framing_options()
+        
         # Forcer l'affichage du menu Custom si nécessaire
         if data.get("origin_mode") == "Custom":
             self.custom_offset_frame.pack(fill="x", padx=10, pady=5)
         else:
             self.custom_offset_frame.pack_forget()
-            
+
+        # Update les zones grisées (lecture directe depuis le manager)
+        self.refresh_global_previews() 
         self.update_preview()
+
+    def toggle_machine_lock(self):
+        """Bascule l'état du verrouillage."""
+        self.is_locked = not self.is_locked
+        self.apply_lock_state()
+
+    def apply_lock_state(self):
+        """Applique l'état visuel complet (verrouillage + grisage des textes et chiffres)."""
+        new_state = "disabled" if self.is_locked else "normal"
+        new_text = "🔒" if self.is_locked else "🔓"
+        
+        # Couleurs
+        btn_color = "#444444" if self.is_locked else "#D32F2F"
+        label_color = "#666666" if self.is_locked else "#FFFFFF" 
+        # Pour les entrées : on grise le chiffre lui-même
+        entry_text_color = "#888888" if self.is_locked else "#FFFFFF" 
+
+        self.lock_btn.configure(text=new_text, fg_color=btn_color)
+
+        def walk_and_lock(parent):
+            for child in parent.winfo_children():
+                # 1. Gestion des Entrées (Chiffres dans create_simple_input)
+                if isinstance(child, ctk.CTkEntry):
+                    child.configure(state=new_state, text_color=entry_text_color)
+                
+                # 2. Gestion des Menus Déroulants
+                elif isinstance(child, (ctk.CTkOptionMenu, ctk.CTkComboBox)):
+                    child.configure(state=new_state)
+
+                # 3. Gestion des Labels (Grisage du texte descriptif)
+                elif isinstance(child, ctk.CTkLabel):
+                    if "GLOBAL" not in child.cget("text").upper():
+                        child.configure(text_color=label_color)
+
+                # 4. On descend dans les sous-frames (Récursivité)
+                if child.winfo_children():
+                    walk_and_lock(child)
+
+        walk_and_lock(self.machine_controls_container)
 
     def _update_button_style(self, btn, text, is_active):
         """Change la couleur d'un bouton selon s'il a une valeur ou non."""
         color = "#2d5a27" if is_active else ctk.ThemeManager.theme["CTkButton"]["fg_color"]
         hover = "#367a31" if is_active else ctk.ThemeManager.theme["CTkButton"]["hover_color"]
         btn.configure(text=text, fg_color=color, hover_color=hover)
+
+    def refresh_global_previews(self):
+        """Met à jour les zones grisées avec les valeurs de la config machine."""
+        # Header
+        h_glob = self.app.config_manager.get_item("machine_settings", "custom_header", "")
+        self.txt_global_header_preview.configure(state="normal")
+        self.txt_global_header_preview.delete("1.0", "end")
+        self.txt_global_header_preview.insert("1.0", h_glob if h_glob else "(No Global Header)")
+        self.txt_global_header_preview.configure(state="disabled")
+
+        # Footer
+        f_glob = self.app.config_manager.get_item("machine_settings", "custom_footer", "")
+        self.txt_global_footer_preview.configure(state="normal")
+        self.txt_global_footer_preview.delete("1.0", "end")
+        self.txt_global_footer_preview.insert("1.0", f_glob if f_glob else "(No Global Footer)")
+        self.txt_global_footer_preview.configure(state="disabled")
 
     def _set_text_widget(self, widget, text):
         """Remplit un widget de texte CTkTextbox s'il y a une valeur."""
