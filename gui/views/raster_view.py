@@ -164,11 +164,11 @@ class RasterView(ctk.CTkFrame):
 
         self._setup_tabs_content()
 
-        # -------- Generate Button --------
+        # -------- sim Button --------
 
         self.btn_gen = ctk.CTkButton(
             self.sidebar,
-            text=self.common["generate_gcode"],
+            text=self.common["simulate_gcode"],
             fg_color="#1f538d",
             hover_color="#2a6dbd",
             height=50,
@@ -1019,12 +1019,6 @@ class RasterView(ctk.CTkFrame):
 
             self.ax_img.plot(0, 0, 'ro', markersize=6, zorder=20)
 
-            self.ax_img.set_title(
-                "PATH PREVIEW",
-                color='white',
-                fontsize=20,
-                fontweight='bold'
-            )
 
             self._update_dashboard_stats(
                 w_px,

@@ -3,6 +3,7 @@ import customtkinter as ctk
 import os
 from PIL import Image
 from core.translations import TRANSLATIONS
+from utils.paths import RASTER_LIGHT, RASTER_DARK
 
 class DashboardView(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -32,15 +33,11 @@ class DashboardView(ctk.CTkFrame):
         self.modes_container.grid_columnconfigure(0, weight=1)
 
         # --- CHARGEMENT DES ICONES ---
-        current_file_path = os.path.dirname(os.path.realpath(__file__))
-        project_root = os.path.abspath(os.path.join(current_file_path, "..", ".."))
-        assets_path = os.path.join(project_root, "assets")
-
         raster_img = ctk.CTkImage(
-            light_image=Image.open(os.path.join(assets_path, "raster_black.png")),
-            dark_image=Image.open(os.path.join(assets_path, "raster_white.png")),
+            light_image=RASTER_LIGHT,
+            dark_image=RASTER_DARK,
             size=(45, 45) # Taille de l'icône dans la carte
-)
+        )
 
         modes_list = [
             (self.texts["raster_title"], self.texts["raster_desc"], self.controller.show_raster_mode, raster_img, "normal"),

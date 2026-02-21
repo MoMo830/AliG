@@ -2,7 +2,9 @@ import customtkinter as ctk
 import os
 from PIL import Image, ImageDraw
 from core.utils import get_app_paths
+from engine.calibrate_engine import CalibrateEngine
 from core.translations import TRANSLATIONS
+from utils.paths import LATENCY_LIGHT, LATENCY_DARK
 
 class CalibrationView(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -72,20 +74,28 @@ class CalibrationView(ctk.CTkFrame):
         self.setup_calibration_data()
 
     def setup_calibration_data(self):
-        """Initialise les données en utilisant les clés du fichier de traduction"""
+        # On prépare l'image de latence avec tes imports de utils.paths
+        latency_img = ctk.CTkImage(
+            light_image=LATENCY_LIGHT,
+            dark_image=LATENCY_DARK,
+            size=(35, 35) # Ajuste la taille selon tes besoins
+        )
+
         self.test_list = [
             {
                 "title": self.texts["latency_title"],
                 "short": self.texts["latency_short"],
                 "long": self.texts["latency_long"],
-                "icon": "⏱️",
+                "icon": latency_img,  # On remplace "⏱️" par l'objet image
+                "is_image": True,     # Flag pour savoir comment l'afficher
                 "callback": self.run_latency_test
             },
             {
                 "title": self.texts["power_title"],
                 "short": self.texts["power_short"],
                 "long": self.texts["power_long"],
-                "icon": "🔥",
+                "icon": "🔥",          # On peut garder l'emoji pour celui-ci
+                "is_image": False,
                 "callback": self.run_power_test
             }
         ]
@@ -101,7 +111,14 @@ class CalibrationView(ctk.CTkFrame):
 
         test["card_widget"] = card
 
-        icon_lbl = ctk.CTkLabel(card, text=test["icon"], font=("Arial", 35))
+        # --- LOGIQUE D'AFFICHAGE DE L'ICÔNE ---
+        if test.get("is_image"):
+            # Si c'est une image (notre PNG d'Inkscape)
+            icon_lbl = ctk.CTkLabel(card, text="", image=test["icon"])
+        else:
+            # Si c'est encore un emoji
+            icon_lbl = ctk.CTkLabel(card, text=test["icon"], font=("Arial", 35))
+
         icon_lbl.grid(row=0, column=0, padx=20, pady=20)
 
         txt_frame = ctk.CTkFrame(card, fg_color="transparent")
@@ -149,10 +166,49 @@ class CalibrationView(ctk.CTkFrame):
         self.action_btn.configure(state="normal", command=test["callback"])
 
     def run_latency_test(self):
-        img = Image.new('L', (30, 30), color=0)
-        temp_path = os.path.join(self.application_path, "ALIG_LATENCY_TEST.png")
-        img.save(temp_path)
-        self.controller.show_raster_mode(image_to_load=temp_path, reset_filters=True)
+        """Génère et propose d'enregistrer le test de latence"""
+        try:
+            # 1. Récupération des réglages via le config_manager
+            # On utilise des valeurs par défaut sécurisées si rien n'est défini
+            cfg = self.controller.config_manager
+            
+            settings = {
+                "power": cfg.get_item("calibration", "test_power", 30.0),
+                "feedrate": cfg.get_item("machine_settings", "base_feedrate", 3000),
+                "use_s_mode": cfg.get_item("machine_settings", "use_s_mode", False),
+                "e_num": cfg.get_item("machine_settings", "e_num", 0),
+                "header": cfg.get_item("gcode_options", "header", ""),
+                "footer": cfg.get_item("gcode_options", "footer", "M30")
+            }
+
+            # 2. Appel de l'engine de calibration
+            # On suppose que self.calibrate_engine est initialisé dans le __init__
+            from engine.calibrate_engine import CalibrateEngine
+            engine = CalibrateEngine()
+            
+            gcode_content = engine.generate_latency_calibration(settings)
+
+            # 3. Demander à l'utilisateur où sauvegarder le fichier
+            from tkinter import filedialog
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".nc",
+                filetypes=[("G-Code", "*.nc"), ("All files", "*.*")],
+                initialfile="latency_test_ALIG.nc",
+                title="Enregistrer le test de latence"
+            )
+
+            if file_path:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(gcode_content)
+                
+                # Optionnel : Notification de succès
+                print(f"Test de latence généré avec succès : {file_path}")
+                
+        except Exception as e:
+            # Gestion d'erreur (tu peux utiliser une boîte de dialogue CTkMessagebox si installée)
+            print(f"Erreur lors de la génération du test : {e}")
+            
+
 
     def run_power_test(self):
         block_size, num_steps = 50, 10
