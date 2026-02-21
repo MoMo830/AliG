@@ -162,7 +162,19 @@ class SimulationView(ctk.CTkFrame):
             ) 
             
             self.latence_mm = float(determined_latence_mm)
-            print(f"[DEBUG] Latence figée pour la simulation : {self.latence_mm} mm")
+            
+            # --- NOUVEAU : Estimation de la taille ---
+            # On prépare les paramètres pour l'estimation
+            gc_params_est = {
+                "use_s_mode": use_s_mode,
+                "raster_mode": raster_mode,
+                "ctrl_max": params.get('ctrl_max', 255)
+            }
+            # On appelle la nouvelle fonction de l'Engine
+            est_size_str, _ = self.engine.estimate_gcode_statistics(self.payload['matrix'], params, gc_params_est)
+            # -----------------------------------------
+
+            print(f"[DEBUG] Latence : {self.latence_mm} mm | Taille estimée : {est_size_str}")
             print(f"[BENCH] C. Final G-Code Build: {time.perf_counter() - t_start:.4f}s")
 
             # D. PARSING (Récupération des limites réelles)
@@ -210,7 +222,8 @@ class SimulationView(ctk.CTkFrame):
                 'total_dur': final_dur, 
                 'full_metadata': full_metadata,
                 'latence_mm': self.latence_mm,
-                'machine_bounds': (all_min_x, all_max_x, all_min_y, all_max_y) # Nouveau !
+                'est_size_str': est_size_str, # On passe la taille à l'UI
+                'machine_bounds': (all_min_x, all_max_x, all_min_y, all_max_y)
             }
             
             print(f"[BENCH] TOTAL GENERATION: {time.perf_counter() - start_global:.4f}s")
@@ -233,12 +246,14 @@ class SimulationView(ctk.CTkFrame):
         if not self.raw_sim_data:
             return
 
-        # 🔒 Stop loading flag si tu l'utilises
+        # 🔒 Stop loading flag
         self.is_loading = False
 
-        # 1. Récupération des données du Parser
+        # 1. Récupération des données du Parser et de l'Engine
         self.points_list = self.raw_sim_data['points_list']
         self.total_sim_seconds = self.raw_sim_data.get('total_dur', 0.0)
+        self.latence_mm = self.raw_sim_data.get('latence_mm', 0.0)
+        est_size_str = self.raw_sim_data.get('est_size_str', "N/A")
 
         # 2. Limites machine
         bounds = self.raw_sim_data.get('machine_bounds', (0, 0, 0, 0))
@@ -248,9 +263,26 @@ class SimulationView(ctk.CTkFrame):
         self.total_mouvement_w = max(0.1, self.max_x_machine - self.min_x_machine)
         self.total_mouvement_h = max(0.1, self.max_y_machine - self.min_y_machine)
 
+        # --- GESTION DYNAMIQUE DE L'INTERFACE ---
+        
+        # A. Mise à jour de la taille estimée (si tu as un label prévu pour ça)
+        # Par exemple, si tu as self.stats_size_label :
+        # self.stats_size_label.configure(text=f"Size: {est_size_str}")
+        print(f"[UI] G-Code Size Estimation: {est_size_str}")
+
+        # B. Affichage conditionnel du switch de latence
+        if hasattr(self, 'latence_switch') and self.latence_switch is not None:
+            if self.latence_mm > 0:
+                # On ré-affiche le switch s'il était caché
+                self.latence_switch.pack(pady=(5, 10), padx=10)
+                # Optionnel : On le remet à OFF par défaut à chaque nouvelle génération
+                self.latence_switch.deselect()
+            else:
+                # On cache le switch car la latence est nulle
+                self.latence_switch.pack_forget()
+
         # 4. Injection G-Code
         if hasattr(self, 'final_gcode') and self.final_gcode:
-
             lines = self.final_gcode.splitlines()
             self.max_gcode_chars = max(len(l) for l in lines) if lines else 40
 
@@ -260,9 +292,7 @@ class SimulationView(ctk.CTkFrame):
             self.gcode_view.configure(state="disabled")
 
             self.update_idletasks()
-
             self._apply_dynamic_fonts(self.left_panel.winfo_width())
-
         else:
             print("[DEBUG WARNING] Aucun G-Code à afficher dans le widget")
 
@@ -271,11 +301,12 @@ class SimulationView(ctk.CTkFrame):
             self.gen_progress.stop()
 
         if hasattr(self, 'loading_frame'):
-            self.loading_frame.place_forget()   # si overlay en place()
+            self.loading_frame.place_forget()
             self.loading_frame.destroy()
 
-        #DEBUG
-        self._debug_show_parser_matrix()
+        # DEBUG
+        #self._debug_show_parser_matrix()
+        
         # 6. Dessin initial
         self._prepare_and_draw()
         
@@ -425,41 +456,63 @@ class SimulationView(ctk.CTkFrame):
         
         self.after(200, draw_power_scale)
 
+       # --- BLOC CENTRAL (G-Code View) ---
+        # On le place avant les boutons "bottom" pour qu'il occupe l'espace restant au milieu
+        ctk.CTkLabel(self.left_panel, text="LIVE G-CODE", font=("Arial", 11, "bold")).pack(pady=(10, 0))
+        
+        self.gcode_view = ctk.CTkTextbox(
+            self.left_panel, font=("Consolas", 11), fg_color="#1a1a1a", 
+            text_color="#00ff00", state="disabled", wrap="none"
+        )
+        self.gcode_view.pack(expand=True, fill="both", padx=10, pady=5)
+
         # --- BLOC BAS (Boutons et Options) ---
+        # 1. Conteneur des boutons d'action (CANCEL / EXPORT)
         btn_act = ctk.CTkFrame(self.left_panel, fg_color="transparent")
         btn_act.pack(fill="x", side="bottom", pady=(0, 15)) 
-        ctk.CTkButton(btn_act, text="CANCEL", fg_color="#333", height=30, command=self.on_cancel).pack(fill="x", side="bottom", padx=10, pady=5)
-        ctk.CTkButton(btn_act, text="EXPORT GCODE", fg_color="#27ae60", height=40, font=("Arial", 11, "bold"), command=self.on_confirm).pack(fill="x", side="bottom", padx=10, pady=5)
+        
+        ctk.CTkButton(btn_act, text="CANCEL", fg_color="#333", height=30, 
+                      command=self.on_cancel).pack(fill="x", side="bottom", padx=10, pady=5)
+        
+        ctk.CTkButton(btn_act, text="EXPORT GCODE", fg_color="#27ae60", height=40, 
+                      font=("Arial", 11, "bold"), command=self.on_confirm).pack(fill="x", side="bottom", padx=10, pady=5)
 
+        # 2. Conteneur des options (Badges et Latence)
         self.options_group_frame = ctk.CTkFrame(self.left_panel, fg_color="#222222", border_width=1, border_color="#444444")
         self.options_group_frame.pack(side="bottom", pady=10, padx=10, fill="x")
         
         ctk.CTkLabel(self.options_group_frame, text="Active Options", font=("Arial", 11, "bold")).pack(pady=(8, 2))
+        
         badge_cont = ctk.CTkFrame(self.options_group_frame, fg_color="transparent")
         badge_cont.pack(fill="x", padx=10, pady=(0, 5))
 
+        # Affichage des badges POINTING / FRAMING
         for key, text in [("is_pointing", "POINTING"), ("is_framing", "FRAMING")]:
-            active = payload.get('framing', {}).get(key, False)
+            active = self.payload.get('framing', {}).get(key, False)
             color, bg = ("#ff9f43", "#3d2b1f") if active else ("#666666", "#282828")
-            ctk.CTkLabel(badge_cont, text=text, font=("Arial", 9, "bold"), text_color=color, fg_color=bg, corner_radius=5).pack(side="left", expand=True, fill="x", padx=2)
+            ctk.CTkLabel(badge_cont, text=text, font=("Arial", 9, "bold"), 
+                         text_color=color, fg_color=bg, corner_radius=5).pack(side="left", expand=True, fill="x", padx=2)
 
+        # 3. Gestion de la latence (Switch conditionnel)
         self.vis_corr_enabled = False
-        self.latence_switch = ctk.CTkSwitch(self.options_group_frame, text="SIMULATE LATENCY", font=("Arial", 10, "bold"), progress_color="#27ae60", command=self.toggle_latency_sim)
-        self.latence_switch.pack(pady=(5, 10), padx=10)
-
-        # --- BLOC CENTRAL (G-Code View) ---
-        ctk.CTkLabel(self.left_panel, text="LIVE G-CODE", font=("Arial", 11, "bold")).pack(pady=(10, 0))
+        self.latence_switch = None # Initialisation par défaut
         
-        self.gcode_view = ctk.CTkTextbox(
-            self.left_panel, font=("Consolas", 11), fg_color="#1a1a1a", text_color="#00ff00", state="disabled", wrap="none"
-        )
-        self.gcode_view.pack(expand=True, fill="both", padx=10, pady=5)
+        latence_val = float(self.payload.get('params', {}).get('m67_delay', 0))
+        
+        if latence_val != 0:
+            self.latence_switch = ctk.CTkSwitch(
+                self.options_group_frame, 
+                text="SIMULATE LATENCY", 
+                font=("Arial", 10, "bold"), 
+                progress_color="#27ae60", 
+                command=self.toggle_latency_sim
+            )
+            self.latence_switch.pack(pady=(5, 10), padx=10)
 
-        # --- GESTION DYNAMIQUE (Debounced) ---
+        # --- GESTION DYNAMIQUE ET BINDINGS ---
         self._resize_timer = None
 
         def on_resize(event):
-            # On ne traite que si c'est le left_panel lui-même qui bouge
             if event.widget == self.left_panel:
                 if self._resize_timer:
                     self.after_cancel(self._resize_timer)
@@ -467,11 +520,11 @@ class SimulationView(ctk.CTkFrame):
 
         self.left_panel.bind("<Configure>", on_resize)
 
-        # Navigation clavier
+        # Navigation clavier pour la vue G-Code
         self.gcode_view.bind("<Up>", lambda e: self._scroll_gcode(-1))
         self.gcode_view.bind("<Down>", lambda e: self._scroll_gcode(1))
-        self.gcode_view.bind("<Left>", lambda e: self._scroll_gcode(-5))
-        self.gcode_view.bind("<Right>", lambda e: self._scroll_gcode(5))
+        self.gcode_view.bind("<Left>", lambda e: self._scroll_gcode(-10))
+        self.gcode_view.bind("<Right>", lambda e: self._scroll_gcode(10))
 
     def _apply_dynamic_fonts(self, width):
         if not self.winfo_exists():
@@ -1241,7 +1294,7 @@ class SimulationView(ctk.CTkFrame):
         self.display_data.fill(255)
 
         # 2. On lit l'état RÉEL du bouton
-        is_switch_on = self.latence_switch.get()
+        is_switch_on = self.latence_switch.get() if self.latence_switch is not None else False
         
         # On récupère la valeur FIGÉE lors de la génération (active_latence_mm)
         # On utilise getattr par sécurité pour éviter un crash si la variable n'existe pas
@@ -1264,73 +1317,80 @@ class SimulationView(ctk.CTkFrame):
         self.update_graphics()
 
     def _draw_segment(self, p1, p2, is_switch_on, latence_mm):
-        """
-        Segment renderer stable (CNC raster simulation grade).
-
-        p1, p2 : [X, Y, Power, LineIdx, Timestamp]
-        """
-
         # --- Ignore segment inutile ---
         if (p1[0] == p2[0] and p1[1] == p2[1]) or p2[2] <= 0:
             return
 
         # ---------------------------------------------------
-        # Correction latence horizontale dynamique
+        # Correction latence
         # ---------------------------------------------------
         corr_x = 0.0
-
         if is_switch_on and abs(p2[0] - p1[0]) > 1e-6:
-            dx = p2[0] - p1[0]
-
+            dx_machine = p2[0] - p1[0]
             # Convention : déplacement droite → compensation gauche
-            corr_x = latence_mm if dx > 0 else -latence_mm
-            #corr_x = -latence_mm if dx > 0 else latence_mm
+            corr_x = latence_mm if dx_machine > 0 else -latence_mm
 
         # ---------------------------------------------------
-        # Projection espace machine → écran (float safe)
+        # Projection écran (On reste en FLOAT ici)
         # ---------------------------------------------------
-        x1 = p1[0] + corr_x
-        y1 = p1[1]
+        ix1, iy1 = self.screen_index(p1[0] + corr_x, p1[1])
+        ix2, iy2 = self.screen_index(p2[0] + corr_x, p2[1])
 
-        x2 = p2[0] + corr_x
-        y2 = p2[1]
+        dx = ix2 - ix1
+        dy = iy2 - iy1
+        length = (dx**2 + dy**2)**0.5
 
-        ix1, iy1 = self.screen_index(x1, y1)
-        ix2, iy2 = self.screen_index(x2, y2)
+        if length < 0.0001:
+            return
 
-        # ⭐ Anti-jitter critique : rounding stable
-        ix1 = int(round(ix1))
-        iy1 = int(round(iy1))
-        ix2 = int(round(ix2))
-        iy2 = int(round(iy2))
+        # ---------------------------------------------------
+        # Géométrie du rectangle (Précision Sub-pixel)
+        # ---------------------------------------------------
+        thickness = max(1.0, self.laser_width_px)
+        half_th = thickness / 2.0
+
+        nx = -dy / length
+        ny = dx / length
+
+        # On calcule les coins en FLOAT
+        pts_float = np.array([
+            [ix1 + nx * half_th, iy1 + ny * half_th],
+            [ix1 - nx * half_th, iy1 - ny * half_th],
+            [ix2 - nx * half_th, iy2 - ny * half_th],
+            [ix2 + nx * half_th, iy2 + ny * half_th]
+        ], dtype=np.float32)
+
+        # ⭐ LE SECRET : Passer en coordonnées shiftées pour OpenCV
+        # On multiplie par 16 (2^4) pour garder 4 bits de précision sub-pixel
+        SHIFT = 4
+        FACTOR = 2**SHIFT
+        pts_fixed = (pts_float * FACTOR).astype(np.int32)
 
         # ---------------------------------------------------
         # Intensity mapping
         # ---------------------------------------------------
         ratio = max(0.0, min(1.0, float(p2[2]) / self.ctrl_max))
-
-        # Laser raster simulation convention :
-        # 0 → noir, puissance élevée → blanc
         color_val = int(round(255.0 * (1.0 - ratio)))
-
         color_tuple = (color_val, color_val, color_val)
 
-        # ---------------------------------------------------
-        # Thickness stable (évite shimmer zoom)
-        # ---------------------------------------------------
-        thickness = int(round(max(1.0, self.laser_width_px)))
+        # Dessin avec l'argument shift
+        # Cela force OpenCV à faire l'antialiasing interne correctement
+        cv2.fillPoly(self.display_data, [pts_fixed], color_tuple, lineType=cv2.LINE_8, shift=SHIFT)
 
-        # ---------------------------------------------------
-        # OpenCV rendering
-        # ---------------------------------------------------
-        cv2.line(
-            self.display_data,
-            (ix1, iy1),
-            (ix2, iy2),
-            color_tuple,
-            thickness=thickness,
-            lineType=cv2.LINE_AA#cv2.LINE_8
-        )
+
+    #     thickness = int(round(max(1.0, self.laser_width_px)))
+
+    #     # ---------------------------------------------------
+    #     # OpenCV rendering
+    #     # ---------------------------------------------------
+    #     cv2.line(
+    #         self.display_data,
+    #         (ix1, iy1),
+    #         (ix2, iy2),
+    #         color_tuple,
+    #         thickness=thickness,
+    #         lineType=cv2.LINE_AA#cv2.LINE_8
+    #     )
 
     def skip_to_end(self):
         """Termine instantanément la simulation avec un rendu optimisé."""
@@ -1501,17 +1561,6 @@ class SimulationView(ctk.CTkFrame):
     
 
 
-    def estimate_file_size(self, matrix):
-        if matrix is None: return "0 KB"
-        h, w = matrix.shape
-        use_s = self.payload.get("use_s_mode", False)
-        b_per_l = 22 if use_s else 28
-        n_lines = 15 + (h * 2) # Header + G0/S0 par ligne
-        for y in range(h):
-            n_lines += np.count_nonzero(np.abs(np.diff(matrix[y])) > 0.01) + 1
-        size = (n_lines * b_per_l) + 1024
-        return f"{size/1024:.0f} KB" if size < 1048576 else f"{size/1048576:.2f} MB"
-
     def on_confirm(self):
         """Action déclenchée par le bouton 'Confirm' (Save G-Code + Stats + Thumbnail via Utils)"""
         self.stop_processes()
@@ -1551,6 +1600,8 @@ class SimulationView(ctk.CTkFrame):
 
     def toggle_latency_sim(self):
         """Bascule la correction et nettoie l'affichage immédiatement."""
+        if self.latence_switch is None:
+            return
         # On redessine tout : _redraw_up_to fait déjà le fill(255)
         # ce qui élimine les pixels "sans latence" accumulés.
         self._redraw_up_to(self.current_point_idx)

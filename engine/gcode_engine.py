@@ -2,7 +2,7 @@
 A.L.I.G. Project - Core Engine
 Industrial Raster Engine Version
 """
-
+# TO DO : improve file siez estimation
 import numpy as np
 from PIL import Image
 import io
@@ -121,7 +121,17 @@ class GCodeEngine:
             s["feedrate"] * s.get("m67_delay", 0)
         ) / 60000
 
-        return matrix, h_px, w_px, l_step_val, x_step, est_min, False, img, latency_mm
+        # Préparer gc_params pour l'estimation
+        gc_params_est = {
+            "use_s_mode": s.get("use_s_mode", False),
+            "raster_mode": raster_mode,
+            "ctrl_max": s.get("max_p", 255) # ou votre variable de puissance max
+        }
+        
+        est_size_str, n_lines = self.estimate_gcode_statistics(matrix, s, gc_params_est)
+        
+        # Vous pouvez maintenant retourner cette valeur aussi
+        return matrix, h_px, w_px, l_step_val, x_step, est_min, False, img, latency_mm, est_size_str
 
     # =========================================================
     # INDUSTRIAL RASTER GCODE GENERATOR
@@ -166,7 +176,7 @@ class GCodeEngine:
             step_main = x_st
             step_scan = l_step
 
-        real_scan_dist = (inner_count - 1) * step_scan
+        real_scan_dist = inner_count * step_scan
 
         # =====================================================
         # Raster scan loop (Industrial monotonic trajectory)
@@ -223,25 +233,31 @@ class GCodeEngine:
             # --- 2. INITIALISATION DE LA BOUCLE ---
             current_pos = start_with_corr
             current_p = None
-            # On stocke group_target pour le premier segment
             group_target = start_with_corr
-            segment_indices = range(inner_count - 1) if is_fwd else range(inner_count - 2, -1, -1)
+            
+            # On parcourt TOUS les pixels (inner_count)
+            # segment_indices doit représenter l'index du pixel en cours de lecture
+            pixel_indices = range(inner_count) if is_fwd else range(inner_count - 1, -1, -1)
             
             # --- 3. BOUCLE DE PIXELS ---
-            for seg_i in segment_indices:
-                p_val = max(0.0, min(row_data[seg_i], ctrl_max))
+            for pix_idx in pixel_indices:
+                p_val = max(0.0, min(row_data[pix_idx], ctrl_max))
                 
                 if abs(p_val - hyst_p) < HYST_THRESHOLD:
                     p_val = hyst_p
                 else:
                     hyst_p = p_val
 
-                target_idx = (seg_i + 1) if is_fwd else seg_i
+                # La cible est le BORD du pixel suivant dans la direction de marche
+                # Si fwd: target est à pix_idx + 1
+                # Si rev: target est à pix_idx (le bord gauche du pixel actuel)
+                target_idx = (pix_idx + 1) if is_fwd else pix_idx
                 target_scan = (target_idx * step_scan) + scan_offset + corr
                 
                 if current_p is None:
                     current_p = p_val
 
+                # Si la puissance change, on flush le segment précédent
                 if abs(p_val - current_p) > 0.001:
                     if abs(group_target - current_pos) > 0.0001:
                         if not use_s_mode:
@@ -514,3 +530,50 @@ class GCodeEngine:
             offX, offY = -custom_x, -custom_y
 
         return offX, offY
+    
+
+    def estimate_gcode_statistics(self, matrix, s_params, gc_params):
+        if matrix is None:
+            return "0 KB", 0
+
+        h_px, w_px = matrix.shape
+        use_s = gc_params.get("use_s_mode", False)
+        raster_mode = gc_params.get("raster_mode", "Horizontal")
+        ctrl_max = gc_params.get("ctrl_max", 255)
+        
+        # --- CALIBRATION SUR TON EXEMPLE ---
+        # "M67 E0 Q15.000 G1 X0.2000" + \n = 27 octets
+        # En mode S, c'est souvent un peu plus court (ex: G1 X0.200 S15)
+        b_per_l = 22 if use_s else 27 
+        
+        HYST_THRESHOLD = max(0.02 * ctrl_max, 0.001)
+        total_lines = 30 # Header court
+        
+        analysis_matrix = matrix if raster_mode == "Horizontal" else matrix.T
+            
+        for y in range(analysis_matrix.shape[0]):
+            row = analysis_matrix[y]
+            
+            # Setup par trajet (M3, G1 F, G1 approche, etc.)
+            # Ton exemple montre environ 6 lignes de setup/transition
+            total_lines += 6 
+            
+            # Changements de puissance
+            diffs = np.abs(np.diff(row))
+            changes = np.count_nonzero(diffs > HYST_THRESHOLD)
+            
+            total_lines += changes + 1
+            
+            # Overscan (Ton exemple montre des G1 X hachés à la fin)
+            # On compte le nombre de segments de 0.4mm (selon ton log)
+            total_lines += 5
+
+        # Calcul final
+        size_bytes = total_lines * b_per_l
+        
+        if size_bytes < 1048576:
+            size_str = f"{size_bytes/1024:.1f} KB"
+        else:
+            size_str = f"{size_bytes/1048576:.2f} MB"
+            
+        return size_str, total_lines

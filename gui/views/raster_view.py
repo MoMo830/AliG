@@ -297,7 +297,7 @@ class RasterView(ctk.CTkFrame):
 
         self.stats_labels = []
 
-        for _ in range(5):
+        for _ in range(6):
 
             lbl = ctk.CTkLabel(
                 self.stats_left_frame,
@@ -921,10 +921,13 @@ class RasterView(ctk.CTkFrame):
                   source_img_cache=current_cache
             )
             
-            # Récupération des 9 valeurs (incluant latency_mm à la fin)
-            # matrix, h_px, w_px, l_step_val, x_step, est_min, mem_warn, img_obj, lat = results
-            matrix, h_px, w_px, l_step, x_st, est_min, mem_warn, img_obj, _ = results
+            # 1. Récupération des 10 valeurs
+            # On récupère bien estimated_file_size à la fin
+            matrix, h_px, w_px, l_step, x_st, est_min, mem_warn, img_obj, _, estimated_file_size = results
             
+            # 2. STOCKAGE PERSISTANT pour SimulationView
+            self.estimated_file_size = estimated_file_size 
+
             if hasattr(self, 'label_matrix_size'):
                 color = "#e74c3c" if mem_warn else "#aaaaaa"
                 self.label_matrix_size.configure(text_color=color)
@@ -933,17 +936,22 @@ class RasterView(ctk.CTkFrame):
             self._source_img_cache = img_obj
             self._source_img_path = self.input_image_path
 
-            # Stockage du résultat pour generate_gcode
-            self._last_result = (matrix, h_px, w_px, l_step, x_st, est_min)
+            # 5. Stockage du résultat pour generate_gcode 
+            # (Ajoute estimated_file_size ici si tu veux que ce soit complet)
+            self._last_result = (matrix, h_px, w_px, l_step, x_st, est_min, estimated_file_size)
+
+            # 6. Mise à jour de l'affichage des stats (Optionnel)
+            # Si tu as un label pour la taille du fichier, mets le à jour ici
+            if hasattr(self, 'label_file_size'):
+                self.label_file_size.configure(text=f"FILE SIZE: {estimated_file_size}")
 
             return matrix, h_px, w_px, l_step, x_st, est_min
-
+        
         except Exception as e:
             import traceback
             traceback.print_exc()
             print(f"Preview Error: {e}")
             return None, 0, 0, 0, 0, 0
-
 
 
     def update_preview(self):
@@ -955,35 +963,26 @@ class RasterView(ctk.CTkFrame):
             return
 
         try:
-
             res = self.process_logic()
-
             if not res or res[0] is None:
-
                 if self.img_plot:
                     self.img_plot.set_visible(False)
-
                 self.canvas_img.draw_idle()
                 return
 
             matrix = np.array(res[0], dtype=np.float32)
-
             if matrix.ndim < 2 or matrix.size == 0:
                 return
 
             h_px, w_px, l_step, x_st, est_min = res[1:6]
-
             real_w, real_h, x_st, l_step, hours, minutes, seconds = \
                 self._process_preview_geometry(matrix, res)
-
             premove_ctrl = self.controls.get("premove")
             premove = self.get_val(premove_ctrl) if premove_ctrl else 0
 
             offX, offY = self.calculate_offsets(real_w, real_h)
-
             v_min = self.get_val(self.controls.get("min_p")) \
                 if self.controls.get("min_p") else 0
-
             v_max = self.get_val(self.controls.get("max_p")) \
                 if self.controls.get("max_p") else 255
 
@@ -1036,7 +1035,8 @@ class RasterView(ctk.CTkFrame):
                 l_step,
                 hours,
                 minutes,
-                seconds
+                seconds,
+                getattr(self, 'estimated_file_size', "N/A") 
             )
 
             self._update_histogram_async(matrix, v_min, v_max)
@@ -1071,6 +1071,7 @@ class RasterView(ctk.CTkFrame):
             if not res: return
             matrix, h_px, w_px, l_step, x_st, est_min = res[0:6]
         
+        estimated_file_size = getattr(self, 'estimated_file_size', "N/A")
         if matrix is None: return
 
         # --- LOGIQUE DE DIMENSION (Synchronisée avec le switch) ---
@@ -1110,6 +1111,7 @@ class RasterView(ctk.CTkFrame):
         payload = {
             'matrix': matrix,
             'dims': (h_px, w_px, l_step, x_st),
+            'estimated_size': estimated_file_size,
             'offsets': (offX, offY),
             'params': {
                 'e_num': int(self.get_val(self.controls["m67_e_num"])),
@@ -1804,33 +1806,33 @@ class RasterView(ctk.CTkFrame):
             self.img_plot.set_visible(True)
 
     def _update_dashboard_stats(self, w_px, h_px, real_w, real_h,
-                                x_st, l_step,
-                                hours, minutes, seconds):
+                            x_st, l_step,
+                            hours, minutes, seconds, est_size="N/A"): # Ajout de est_size ici
 
         if not hasattr(self, "stats_labels"):
             return
 
         try:
-
             self.stats_frame.update_idletasks()
-
             w_px_win = self.stats_frame.winfo_width()
             h_px_win = self.stats_frame.winfo_height()
 
             dynamic_size = (w_px_win + h_px_win) / 55
             final_font_size = max(8, min(dynamic_size, 22))
-
         except:
             final_font_size = 14
 
+        # On ajoute la ligne FILE SIZE dans la liste
         stats_lines = [
             f"ESTIMATED TIME:   {hours:02d}:{minutes:02d}:{seconds:02d}",
+            f"FILE SIZE:        {est_size}", 
             f"MATRIX SIZE:      {w_px} x {h_px} px",
             f"REAL DIMENSIONS:  {real_w:.2f} x {real_h:.2f} mm",
             f"PIXEL PITCH X:    {x_st:.4f} mm",
             f"PIXEL PITCH Y:    {l_step:.4f} mm"
         ]
 
+        # Mise à jour des labels (la boucle zip s'adaptera au nombre de labels dispo)
         for lbl, txt in zip(self.stats_labels, stats_lines):
             lbl.configure(
                 text=txt,

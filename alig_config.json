@@ -8,7 +8,7 @@
         "firing_mode": "M3/M5",
         "m67_e_num": 0,
         "ctrl_max": 100,
-        "m67_delay": -11.5
+        "m67_delay": 0.0
     },
     "raster_settings": {
         "width": 40.0,
@@ -25,7 +25,7 @@
         "min_p": 10.0,
         "gray_steps": 19,
         "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/Original-image-512x512-pixels.png",
-        "output_dir": "//192.168.2.100/cnc/03_laser",
+        "output_dir": "C:/Users/momof/SynologyDrive/Python/CNC",
         "custom_header": "",
         "custom_footer": "",
         "origin_mode": "Lower-Left",
@@ -38,9 +38,9 @@
         "invert_relief": false
     },
     "stats": {
-        "total_lines": 229086,
-        "total_gcodes": 12,
-        "total_time_seconds": 4803.77392578125,
-        "last_project_time": 233.03469848632812
+        "total_lines": 303840,
+        "total_gcodes": 16,
+        "total_time_seconds": 6838.17333984375,
+        "last_project_time": 233.34144592285156
     }
 }

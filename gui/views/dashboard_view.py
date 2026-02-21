@@ -80,46 +80,81 @@ class DashboardView(ctk.CTkFrame):
             orientation="vertical"
         )
         self.scroll_thumbs.pack(fill="both", expand=True, pady=(0, 20))
+
+        self.scroll_thumbs.bind("<Configure>", self._on_resize)
+        self.current_files = [] 
+        self.last_columns = 0
+        self.all_thumbnails = [] # Liste pour stocker les images
+        self.last_width = 0
         
         self.load_thumbnails() 
 
         # 2. Statistiques Réelles (En bas)
         self.create_stats_card()
 
+    def _on_resize(self, event):
+        # On ne recalcule que si la largeur change de plus de 50 pixels
+        if abs(event.width - self.last_width) > 50:
+            self.last_width = event.width
+            self.render_grid()
+
 
     def load_thumbnails(self):
-        """Affiche les images de manière compacte sur la gauche"""
+        """Lit les fichiers sur le disque et prépare les objets images"""
         thumb_dir = "assets/thumbnails"
-        no_history_text = self.texts.get("no_history", "No projects yet")
+        self.all_thumbnails = []
         
+        if os.path.exists(thumb_dir):
+            files = [f for f in os.listdir(thumb_dir) if f.endswith(".png")]
+            files.sort(reverse=True)
+            for file in files:
+                try:
+                    path = os.path.join(thumb_dir, file)
+                    img_data = Image.open(path)
+                    ctk_img = ctk.CTkImage(light_image=img_data, dark_image=img_data, size=(200, 200))
+                    self.all_thumbnails.append(ctk_img)
+                except:
+                    continue
+        self.render_grid()
+
+    def render_grid(self):
+        """Réorganise les labels dans la grille selon la largeur disponible"""
         for widget in self.scroll_thumbs.winfo_children():
             widget.destroy()
 
-        if os.path.exists(thumb_dir):
-            files = [f for f in os.listdir(thumb_dir) if f.endswith(".png")]
-            files.sort(reverse=True) 
+        if not self.all_thumbnails:
+            lbl = ctk.CTkLabel(self.scroll_thumbs, text=self.texts.get("no_history", "No projects yet"), text_color="gray")
+            lbl.pack(pady=50)
+            return
 
-            if not files:
-                lbl = ctk.CTkLabel(self.scroll_thumbs, text=no_history_text, text_color="gray")
-                lbl.grid(row=0, column=0, columnspan=5, pady=50, sticky="ew")
-            else:
-                for i, file in enumerate(files):
-                    path = os.path.join(thumb_dir, file)
-                    try:
-                        row = i // 5 
-                        col = i % 5 
+        # On force la mise à jour pour obtenir la largeur réelle si possible
+        self.scroll_thumbs.update_idletasks()
+        container_width = self.scroll_thumbs.winfo_width()
 
-                        img_data = Image.open(path)
-                        # On peut se permettre d'augmenter un peu la taille si on réduit les marges
-                        ctk_img = ctk.CTkImage(light_image=img_data, dark_image=img_data, size=(130, 130))
-                        
-                        btn = ctk.CTkLabel(self.scroll_thumbs, image=ctk_img, text="", cursor="hand2")
-                        
-                        # padx et pady réduits à 2 ou 5 pour "coller" les images
-                        btn.grid(row=row, column=col, padx=4, pady=4)
-                        
-                    except Exception as e:
-                        print(f"Error loading {file}: {e}")
+        # Si le widget n'est pas encore affiché (largeur <= 1), 
+        # on part sur une base de 3 colonnes par défaut pour éviter la colonne unique
+        if container_width <= 1:
+            num_cols = 3
+        else:
+            cell_width = 200 + 20 # Image (130) + Padding (10 de chaque côté)
+            num_cols = max(1, (container_width - 30) // cell_width)
+
+        # IMPORTANT : On réinitialise la configuration des colonnes
+        # pour éviter que les réglages d'un ancien redimensionnement persistent
+        for i in range(20): # On nettoie les 20 premières colonnes potentielles
+            self.scroll_thumbs.grid_columnconfigure(i, weight=0)
+
+        for i in range(num_cols):
+            self.scroll_thumbs.grid_columnconfigure(i, weight=1)
+
+        # Placement
+        for i, ctk_img in enumerate(self.all_thumbnails):
+            row = i // num_cols
+            col = i % num_cols
+            
+            # Utilisation d'un bouton ou label
+            btn = ctk.CTkLabel(self.scroll_thumbs, image=ctk_img, text="", cursor="hand2")
+            btn.grid(row=row, column=col, padx=8, pady=8)
 
     def create_stats_card(self):
         stats_frame = ctk.CTkFrame(self.right_column, corner_radius=15, border_width=1, border_color=["#DCE4EE", "#3E454A"])

@@ -23,14 +23,15 @@ class GCodeParser:
         gc.disable()
 
         # Pré-allocation (X, Y, Power, LineIndex, Feedrate)
-        points_array = np.zeros((n_lines, 5), dtype=np.float32)
+        # On alloue un peu plus pour gérer les changements de puissance sans mouvement
+        points_array = np.zeros((n_lines * 2, 5), dtype=np.float32)
         idx_point = 0
 
         curr_x = curr_y = 0.0
         curr_f = 1000.0
         curr_pwr = 0.0
 
-        # Initialisation des limites avec l'infini pour capturer les premières valeurs
+        # Initialisation des limites
         min_x = min_y = float('inf')
         max_x = max_y = float('-inf')
 
@@ -40,69 +41,78 @@ class GCodeParser:
                 continue
 
             changed = False
+            power_changed = False
 
             # --- Extraction puissance (S ou Q) ---
             for char_p in ('Q', 'S'):
                 pos = line.find(char_p)
                 if pos != -1:
-                    start = pos + 1
-                    end = start
-                    while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                        end += 1
-                    try:
-                        curr_pwr = float(line[start:end])
-                        break
-                    except: pass
+                    p_start = pos + 1
+                    p_end = p_start
+                    while p_end < len(line) and (line[p_end].isdigit() or line[p_end] in '.-+'):
+                        p_end += 1
+                    if p_end > p_start:
+                        try:
+                            val = float(line[p_start:p_end])
+                            if val != curr_pwr:
+                                curr_pwr = val
+                                power_changed = True
+                            break
+                        except: pass
 
             # --- Extraction feedrate (F) ---
             pos_f = line.find('F')
             if pos_f != -1:
-                start = pos_f + 1
-                end = start
-                while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                    end += 1
-                try:
-                    curr_f = float(line[start:end])
-                except: pass
+                f_start = pos_f + 1
+                f_end = f_start
+                while f_end < len(line) and (line[f_end].isdigit() or line[f_end] in '.-+'):
+                    f_end += 1
+                if f_end > f_start:
+                    try: curr_f = float(line[f_start:f_end])
+                    except: pass
 
             # --- Extraction X ---
             pos_x = line.find('X')
             if pos_x != -1:
-                start = pos_x + 1
-                end = start
-                while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                    end += 1
-                try:
-                    curr_x = float(line[start:end])
-                    changed = True
-                except: pass
+                x_start = pos_x + 1
+                x_end = x_start
+                while x_end < len(line) and (line[x_end].isdigit() or line[x_end] in '.-+'):
+                    x_end += 1
+                if x_end > x_start:
+                    try:
+                        curr_x = float(line[x_start:x_end])
+                        changed = True
+                    except: pass
 
             # --- Extraction Y ---
             pos_y = line.find('Y')
             if pos_y != -1:
-                start = pos_y + 1
-                end = start
-                while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                    end += 1
-                try:
-                    curr_y = float(line[start:end])
-                    changed = True
-                except: pass
+                y_start = pos_y + 1
+                y_end = y_start
+                while y_end < len(line) and (line[y_end].isdigit() or line[y_end] in '.-+'):
+                    y_end += 1
+                if y_end > y_start:
+                    try:
+                        curr_y = float(line[y_start:y_end])
+                        changed = True
+                    except: pass
 
-            if changed:
-                # MISE À JOUR DES BORNES RÉELLES (Indispensable pour la simulation)
-                if curr_x < min_x: min_x = curr_x
-                if curr_x > max_x: max_x = curr_x
-                if curr_y < min_y: min_y = curr_y
-                if curr_y > max_y: max_y = curr_y
+            # --- Enregistrement du point ---
+            # On enregistre si mouvement OU si changement de puissance
+            if changed or power_changed:
+                if changed:
+                    if curr_x < min_x: min_x = curr_x
+                    if curr_x > max_x: max_x = curr_x
+                    if curr_y < min_y: min_y = curr_y
+                    if curr_y > max_y: max_y = curr_y
 
-                # Stockage des coordonnées relatives au projet
                 pwr_to_store = curr_pwr if curr_pwr > self.min_pwr else 0.0
                 px = curr_x - self.offX
-                py = curr_y - self.offY # Système cartésien pur
+                py = curr_y - self.offY
 
-                points_array[idx_point, :] = (px, py, pwr_to_store, float(line_idx), curr_f)
-                idx_point += 1
+                if idx_point < points_array.shape[0]:
+                    points_array[idx_point, :] = (px, py, pwr_to_store, float(line_idx), curr_f)
+                    idx_point += 1
 
         if gc_was_enabled:
             gc.enable()
@@ -110,9 +120,7 @@ class GCodeParser:
         if idx_point == 0:
             return None, 0.0, (0.0, 0.0, 0.0, 0.0)
 
-        # On retourne le tuple des limites : (min_x, max_x, min_y, max_y)
         limits = (min_x, max_x, min_y, max_y)
-        
         return points_array[:idx_point], 0.0, limits
 
 
