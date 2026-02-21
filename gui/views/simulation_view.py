@@ -17,7 +17,8 @@ import cv2
 import bisect
 
 from engine.gcode_parser import GCodeParser
-from core.utils import save_dashboard_data
+from core.utils import save_dashboard_data, truncate_path
+
 
 class SimulationView(ctk.CTkFrame):
     def __init__(self, parent, controller, engine, payload, return_view="dashboard"):
@@ -69,8 +70,8 @@ class SimulationView(ctk.CTkFrame):
 
 
         # 3. Configuration UI
-        self.grid_columnconfigure(0, weight=0, minsize=500) 
-        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=0, minsize=420)  # panneau stats + gcode
+        self.grid_columnconfigure(1, weight=1)               # simulation prend tout
         self.grid_rowconfigure(0, weight=1)
 
         # 4. Construction des panneaux
@@ -79,24 +80,41 @@ class SimulationView(ctk.CTkFrame):
 
 
         # 5. OVERLAY DE CHARGEMENT
-        self.loading_frame = ctk.CTkFrame(self.preview_canvas, fg_color="#2b2b2b", corner_radius=10)
-        self.loading_frame.place(relx=0.5, rely=0.5, anchor="center")
+        self.loading_frame = ctk.CTkFrame(
+            self,
+            fg_color="#2b2b2b"
+        )
+
+        # Couvre toute la vue, indépendamment du grid
+        self.loading_frame.place(
+            relx=0,
+            rely=0,
+            relwidth=1,
+            relheight=1
+        )
+
+        # Conteneur centré pour le popup
+        self.loading_box = ctk.CTkFrame(
+            self.loading_frame,
+            fg_color="#3a3a3a",
+            corner_radius=12
+        )
+        self.loading_box.place(relx=0.5, rely=0.5, anchor="center")
 
         self.loading_label = ctk.CTkLabel(
-            self.loading_frame, 
+            self.loading_box,
             text="Generating G-Code & Trajectory...",
             font=("Arial", 14, "bold"),
             text_color="white"
         )
-        self.loading_label.pack(padx=20, pady=(15, 5))
+        self.loading_label.pack(padx=30, pady=(20, 10))
 
-        self.gen_progress = ctk.CTkProgressBar(self.loading_frame, width=250)
-        self.gen_progress.pack(padx=20, pady=(5, 20))
+        self.gen_progress = ctk.CTkProgressBar(self.loading_box, width=280)
+        self.gen_progress.pack(padx=30, pady=(5, 25))
         self.gen_progress.configure(mode="indeterminate")
         self.gen_progress.start()
 
-        if self.winfo_exists():
-            self.update_idletasks() # Force l'UI à dessiner l'overlay maintenant
+        self.update_idletasks()
         # 6. LANCEMENT DU CALCUL DÉFÉRÉ
         self.after(100, self._start_thread)
 
@@ -215,36 +233,123 @@ class SimulationView(ctk.CTkFrame):
         if not self.raw_sim_data:
             return
 
+        # 🔒 Stop loading flag si tu l'utilises
+        self.is_loading = False
+
         # 1. Récupération des données du Parser
         self.points_list = self.raw_sim_data['points_list']
         self.total_sim_seconds = self.raw_sim_data.get('total_dur', 0.0)
-        
-        # 2. RÉCUPÉRATION DES LIMITES MACHINE (Source de vérité)
-        # On extrait les bornes calculées par le parser dans _async_generation
+
+        # 2. Limites machine
         bounds = self.raw_sim_data.get('machine_bounds', (0, 0, 0, 0))
         self.min_x_machine, self.max_x_machine, self.min_y_machine, self.max_y_machine = bounds
 
-        # 3. Calcul des dimensions totales du mouvement pour le futur 'scale'
+        # 3. Dimensions mouvement
         self.total_mouvement_w = max(0.1, self.max_x_machine - self.min_x_machine)
         self.total_mouvement_h = max(0.1, self.max_y_machine - self.min_y_machine)
 
-        # 4. Injection du texte dans le widget G-Code
+        # 4. Injection G-Code
         if hasattr(self, 'final_gcode') and self.final_gcode:
+
+            lines = self.final_gcode.splitlines()
+            self.max_gcode_chars = max(len(l) for l in lines) if lines else 40
+
             self.gcode_view.configure(state="normal")
             self.gcode_view.delete("1.0", "end")
             self.gcode_view.insert("1.0", self.final_gcode)
             self.gcode_view.configure(state="disabled")
+
+            self.update_idletasks()
+
+            self._apply_dynamic_fonts(self.left_panel.winfo_width())
+
         else:
             print("[DEBUG WARNING] Aucun G-Code à afficher dans le widget")
 
-        # 5. Nettoyage de l'interface de chargement
+        # 5. Nettoyage overlay (IMPORTANT : stop AVANT destroy)
+        if hasattr(self, 'gen_progress'):
+            self.gen_progress.stop()
+
         if hasattr(self, 'loading_frame'):
+            self.loading_frame.place_forget()   # si overlay en place()
             self.loading_frame.destroy()
 
-        # 6. Lancement du dessin initial
+        #DEBUG
+        self._debug_show_parser_matrix()
+        # 6. Dessin initial
         self._prepare_and_draw()
+        
+        
+
+    def _debug_show_parser_matrix(self):
+        import matplotlib.pyplot as plt
 
 
+        if not hasattr(self, "points_list") or self.points_list is None:
+            print("[DEBUG] Pas de matrice parser disponible")
+            return
+
+        try:
+            # Conversion en numpy array si ce n'est pas déjà le cas
+            pts = np.asarray(self.points_list)
+
+            # --- CORRECTION 1: Tolérance sur les arrondis ---
+            # On arrondit à 4 décimales pour éviter que 1.0000001 != 1.0000000
+            xs_rounded = np.round(pts[:, 0], 4)
+            ys_rounded = np.round(pts[:, 1], 4)
+            power = pts[:, 2]
+
+            # Détection de la grille
+            x_unique = np.sort(np.unique(xs_rounded))
+            y_unique = np.sort(np.unique(ys_rounded))
+
+            nx, ny = len(x_unique), len(y_unique)
+
+            if nx < 2 or ny < 2:
+                print(f"[DEBUG] Matrice trop petite: {nx}x{ny}")
+                return
+
+            # Création de la matrice (initialisée à 0 ou NaN selon ton besoin)
+            matrix = np.zeros((ny, nx), dtype=np.float32)
+
+            # Mapping indexé
+            x_map = {v: i for i, v in enumerate(x_unique)}
+            y_map = {v: i for i, v in enumerate(y_unique)}
+
+            # Remplissage vectorisé (plus rapide que la boucle for)
+            for i in range(len(pts)):
+                xi = x_map[xs_rounded[i]]
+                yi = y_map[ys_rounded[i]]
+                matrix[yi, xi] = power[i]
+
+            # --- CORRECTION 2: Cohérence d'affichage ---
+            # Si tu veux que l'origine (0,0) soit en BAS à gauche (standard mathématique) :
+            # On ne fait PAS de flipud, et on utilise origin="lower"
+            
+            fig, ax = plt.subplots(num="DEBUG PARSER MATRIX", figsize=(8, 6))
+            
+            im = ax.imshow(
+                matrix,
+                cmap="gray_r",
+                interpolation="none",
+                aspect="equal", # "equal" respecte le ratio réel de ton objet
+                origin="lower",  # Le Y=0 est en bas
+                extent=[x_unique.min(), x_unique.max(), y_unique.min(), y_unique.max()]
+            )
+
+            fig.colorbar(im, ax=ax, label="Laser Power (%)")
+            ax.set_title(f"Reconstruction: {nx}x{ny} points")
+            ax.set_xlabel("X (mm)")
+            ax.set_ylabel("Y (mm)")
+
+            plt.tight_layout()
+            plt.show(block=False)
+            plt.pause(0.1)
+
+        except Exception as e:
+            import traceback
+            print(f"[DEBUG MATRIX SHOW ERROR] {e}")
+            traceback.print_exc()
 
     def _build_left_panel(self, payload):
         self.left_panel = ctk.CTkFrame(self, corner_radius=0, width=300)
@@ -253,50 +358,43 @@ class SimulationView(ctk.CTkFrame):
         
         ctk.CTkLabel(self.left_panel, text="PATH SIMULATION", font=("Arial", 14, "bold")).pack(pady=15)
         
-        
-        # 1. Conteneur des infos techniques (Remplace la boucle for)
+        # 1. Conteneur des infos techniques
         info_container = ctk.CTkFrame(self.left_panel, fg_color="transparent")
         info_container.pack(fill="x", padx=10, pady=5)
 
-        # --- RÉCUPÉRATION ET AFFICHAGE DES DONNÉES CIBLÉES ---
-        
-        # 1. Extraction des données depuis le tuple 'dims'
-        # Structure : (0: h_px, 1: w_px, 2: l_step, 3: x_st)
+        # --- RÉCUPÉRATION ET AFFICHAGE DES DONNÉES ---
         dims = payload.get('dims', (0, 0, 0, 0))
         h_px, w_px, step_y, step_x = dims
-
-        # 2. Calcul et affichage de la taille finale en mm
-        # (Largeur = pixels * pas)
         w_mm = w_px * step_x
         h_mm = h_px * step_y
-        self._add_stat(info_container, "Final Size (mm):", f"{w_mm:.1f}x{h_mm:.1f}")
+        
+        self._add_stat(info_container, "Final Size (mm):", f"{w_mm:.2f}x{h_mm:.2f}")
 
-        # --- CHEMIN DE SORTIE FORMATÉ ---
+        # --- CHEMIN DE SORTIE ---
         out_dir = payload.get('metadata', {}).get('output_dir', 'C:/')
         out_name = payload.get('metadata', {}).get('file_name', 'output.nc')
         full_path = os.path.join(out_dir, out_name).replace("\\", "/")
         
+        # Note: _add_stat doit maintenant stocker le label dans self.path_label (voir modif plus bas)
         self._add_stat(info_container, "Output Path:", full_path, is_path=True)
 
-        # Échelle de Puissance
+        # --- ÉCHELLE DE PUISSANCE ---
         params = payload.get('params', {})
         p_min = float(params.get("min_power", 0))
         p_max = float(params.get("max_power", 100))
         power_scale_frame = ctk.CTkFrame(info_container, fg_color="transparent")
         power_scale_frame.pack(fill="x", pady=10, padx=5)
-        ctk.CTkLabel(power_scale_frame, text="Power Range (%)", font=("Arial", 10, "bold")).pack(anchor="w")
-        raw_color = self.left_panel.cget("fg_color")
         
+        ctk.CTkLabel(power_scale_frame, text="Power Range (%)", font=("Arial", 10, "bold")).pack(anchor="w")
+        
+        raw_color = self.left_panel.cget("fg_color")
         if isinstance(raw_color, (list, tuple)):
-            appearance_mode = ctk.get_appearance_mode() # "Light" ou "Dark"
-            bg_color = raw_color[1] if appearance_mode == "Dark" else raw_color[0]
+            bg_color = raw_color[1] if ctk.get_appearance_mode() == "Dark" else raw_color[0]
         else:
             bg_color = raw_color
+
         self.power_canvas = ctk.CTkCanvas(
-            power_scale_frame, 
-            height=63, 
-            bg=bg_color,
-            highlightthickness=0
+            power_scale_frame, height=63, bg=bg_color, highlightthickness=0
         )
         self.power_canvas.pack(fill="x", pady=5)
 
@@ -304,76 +402,35 @@ class SimulationView(ctk.CTkFrame):
             if not self.winfo_exists(): return
             self.power_canvas.update()
             w = max(self.power_canvas.winfo_width(), 180)
-            
-            # Ajustement des marges pour laisser de la place au texte plus grand
-            margin = 25
-            bar_y = 35  # Descendu pour laisser de la place aux labels Min/Max en 14pt
-            bar_h = 10  # Barre un peu plus épaisse pour l'équilibre visuel
+            margin, bar_y, bar_h = 25, 35, 10
             bar_w = w - (2 * margin)
             
-            # --- 1. DESSIN DU DÉGRADÉ DYNAMIQUE ---
             for i in range(int(bar_w)):
                 current_pct = (i / bar_w) * 100
-                if current_pct < p_min:
-                    color_val = 255 # Blanc
-                elif current_pct > p_max:
-                    color_val = 0   # Noir
+                if current_pct < p_min: color_val = 255
+                elif current_pct > p_max: color_val = 0
                 else:
-                    range_width = (p_max - p_min) if p_max > p_min else 1
-                    local_ratio = (current_pct - p_min) / range_width
-                    color_val = int((1 - local_ratio) * 255)
-                
-                color_hex = f'#{color_val:02x}{color_val:02x}{color_val:02x}'
-                self.power_canvas.create_line(margin + i, bar_y, margin + i, bar_y + bar_h, fill=color_hex)
+                    range_w = (p_max - p_min) if p_max > p_min else 1
+                    color_val = int((1 - (current_pct - p_min) / range_w) * 255)
+                self.power_canvas.create_line(margin + i, bar_y, margin + i, bar_y + bar_h, fill=f'#{color_val:02x}{color_val:02x}{color_val:02x}')
             
             self.power_canvas.create_rectangle(margin, bar_y, margin + bar_w, bar_y + bar_h, outline="#444")
+            self.power_canvas.create_text(margin, bar_y + bar_h + 12, text="0%", fill="#888888", font=("Arial", 12))
+            self.power_canvas.create_text(margin + bar_w, bar_y + bar_h + 12, text="100%", fill="#888888", font=("Arial", 12))
 
-            # --- 2. LIMITES 0% ET 100% (Police 12) ---
-            # Positionnés sous la barre
-            self.power_canvas.create_text(margin, bar_y + bar_h + 12, 
-                                          text="0%", fill="#888888", font=("Arial", 12))
-            self.power_canvas.create_text(margin + bar_w, bar_y + bar_h + 12, 
-                                          text="100%", fill="#888888", font=("Arial", 12))
-
-            # --- 3. CURSEURS ET VALEURS MIN/MAX (Police 14) ---
             for val, prefix in [(p_min, "Min: "), (p_max, "Max: ")]:
                 x = margin + (val / 100 * bar_w)
-                
-                # Triangle orange
-                self.power_canvas.create_polygon([x, bar_y-2, x-6, bar_y-12, x+6, bar_y-12], 
-                                                  fill="#ff9f43", outline="#1a1a1a")
-                
-                # Texte Min/Max en gras et taille 14
-                self.power_canvas.create_text(x, bar_y - 22, 
-                                              text=f"{prefix}{int(val)}%", 
-                                              fill="#ff9f43", 
-                                              font=("Arial", 14, "bold"))
+                self.power_canvas.create_polygon([x, bar_y-2, x-6, bar_y-12, x+6, bar_y-12], fill="#ff9f43", outline="#1a1a1a")
+                self.power_canvas.create_text(x, bar_y - 22, text=f"{prefix}{int(val)}%", fill="#ff9f43", font=("Arial", 14, "bold"))
         
         self.after(200, draw_power_scale)
 
-        # # File Name
-        # fname_frame = ctk.CTkFrame(info_container, fg_color="transparent")
-        # fname_frame.pack(fill="x", pady=2)
-        # ctk.CTkLabel(fname_frame, text="File:", font=("Arial", 10, "bold"), width=40, anchor="w").pack(side="left")
-        # ctk.CTkLabel(fname_frame, text=payload.get("file_name", "N/A"), font=("Arial", 10), anchor="e", wraplength=120).pack(side="right", fill="x", expand=True)
-
-        #Gcode visualizer
-
-        ctk.CTkLabel(self.left_panel, text="LIVE G-CODE", font=("Arial", 11, "bold")).pack(pady=(10, 0))
-
-        # --- BLOC BAS (Déclaré en premier avec side="bottom" pour réserver le bas) ---
-
-        # 1. Les boutons (Tout en bas)
+        # --- BLOC BAS (Boutons et Options) ---
         btn_act = ctk.CTkFrame(self.left_panel, fg_color="transparent")
         btn_act.pack(fill="x", side="bottom", pady=(0, 15)) 
-        
-        ctk.CTkButton(btn_act, text="CANCEL", fg_color="#333", height=30, 
-                      command=self.on_cancel).pack(fill="x", side="bottom", padx=10, pady=5)
-        
-        ctk.CTkButton(btn_act, text="EXPORT GCODE", fg_color="#27ae60", height=40, 
-                      font=("Arial", 11, "bold"), command=self.on_confirm).pack(fill="x", side="bottom", padx=10, pady=5)
+        ctk.CTkButton(btn_act, text="CANCEL", fg_color="#333", height=30, command=self.on_cancel).pack(fill="x", side="bottom", padx=10, pady=5)
+        ctk.CTkButton(btn_act, text="EXPORT GCODE", fg_color="#27ae60", height=40, font=("Arial", 11, "bold"), command=self.on_confirm).pack(fill="x", side="bottom", padx=10, pady=5)
 
-        # 2. Groupe OPTIONS (Juste au-dessus des boutons)
         self.options_group_frame = ctk.CTkFrame(self.left_panel, fg_color="#222222", border_width=1, border_color="#444444")
         self.options_group_frame.pack(side="bottom", pady=10, padx=10, fill="x")
         
@@ -384,70 +441,129 @@ class SimulationView(ctk.CTkFrame):
         for key, text in [("is_pointing", "POINTING"), ("is_framing", "FRAMING")]:
             active = payload.get('framing', {}).get(key, False)
             color, bg = ("#ff9f43", "#3d2b1f") if active else ("#666666", "#282828")
-            ctk.CTkLabel(
-                badge_cont, 
-                text=text, 
-                font=("Arial", 9, "bold"), 
-                text_color=color, 
-                fg_color=bg, 
-                corner_radius=5
-            ).pack(side="left", expand=True, fill="x", padx=2)
+            ctk.CTkLabel(badge_cont, text=text, font=("Arial", 9, "bold"), text_color=color, fg_color=bg, corner_radius=5).pack(side="left", expand=True, fill="x", padx=2)
 
-        # --- AJOUT DU SWITCH DE LATENCE ---
-        self.vis_corr_enabled = False  # État par défaut
-        self.latence_switch = ctk.CTkSwitch(
-            self.options_group_frame,
-            text="SIMULATE LATENCY",
-            font=("Arial", 10, "bold"),
-            progress_color="#27ae60",
-            command=self.toggle_latency_sim
-        )
+        self.vis_corr_enabled = False
+        self.latence_switch = ctk.CTkSwitch(self.options_group_frame, text="SIMULATE LATENCY", font=("Arial", 10, "bold"), progress_color="#27ae60", command=self.toggle_latency_sim)
         self.latence_switch.pack(pady=(5, 10), padx=10)
 
-        # --- BLOC CENTRAL (Prend tout l'espace restant) ---
-
+        # --- BLOC CENTRAL (G-Code View) ---
+        ctk.CTkLabel(self.left_panel, text="LIVE G-CODE", font=("Arial", 11, "bold")).pack(pady=(10, 0))
+        
         self.gcode_view = ctk.CTkTextbox(
-            self.left_panel, 
-            font=("Consolas", 10), 
-            fg_color="#1a1a1a", 
-            text_color="#00ff00", 
-            state="disabled"
+            self.left_panel, font=("Consolas", 11), fg_color="#1a1a1a", text_color="#00ff00", state="disabled", wrap="none"
         )
-
         self.gcode_view.pack(expand=True, fill="both", padx=10, pady=5)
-    
+
+        # --- GESTION DYNAMIQUE (Debounced) ---
+        self._resize_timer = None
+
+        def on_resize(event):
+            # On ne traite que si c'est le left_panel lui-même qui bouge
+            if event.widget == self.left_panel:
+                if self._resize_timer:
+                    self.after_cancel(self._resize_timer)
+                self._resize_timer = self.after(50, lambda: self._apply_dynamic_fonts(event.width))
+
+        self.left_panel.bind("<Configure>", on_resize)
+
+        # Navigation clavier
         self.gcode_view.bind("<Up>", lambda e: self._scroll_gcode(-1))
         self.gcode_view.bind("<Down>", lambda e: self._scroll_gcode(1))
-        self.gcode_view.bind("<Left>", lambda e: self._scroll_gcode(-5)) # Saut plus grand
+        self.gcode_view.bind("<Left>", lambda e: self._scroll_gcode(-5))
         self.gcode_view.bind("<Right>", lambda e: self._scroll_gcode(5))
 
+    def _apply_dynamic_fonts(self, width):
+        if not self.winfo_exists():
+            return
+
+        # -----------------------------
+        # GESTION DU CHEMIN
+        # -----------------------------
+        if hasattr(self, 'path_label'):
+
+            avail_width = width - 30
+            min_font = 8
+            max_font = 12
+
+            out_dir = self.payload.get('metadata', {}).get('output_dir', '')
+            out_name = self.payload.get('metadata', {}).get('file_name', '')
+            full_path = os.path.join(out_dir, out_name).replace("\\", "/")
+
+            # Test progressif de taille
+            for size in range(max_font, min_font - 1, -1):
+                self.path_label.configure(font=("Consolas", size))
+                self.path_label.update_idletasks()
+
+                char_width = self.path_label.winfo_reqwidth() / max(1, len(full_path))
+
+                max_chars = int(avail_width / max(char_width, 1))
+                truncated = truncate_path(full_path, max_length=max_chars)
+
+                self.path_label.configure(text=truncated)
+
+                self.path_label.update_idletasks()
+                if self.path_label.winfo_reqwidth() <= avail_width:
+                    break
+        # -----------------------------
+        # GCODE VIEW
+        # -----------------------------
+        if hasattr(self, "gcode_view") and hasattr(self, "max_gcode_chars"):
+
+            usable_width = max(100, width - 20)
+
+            # Largeur caractère réelle estimée (monospace Consolas)
+            # 0.55 est plus réaliste que 0.6
+            optimal_size = int(usable_width / (self.max_gcode_chars * 0.55))
+
+            optimal_size = max(6, min(18, optimal_size))
+
+            self.gcode_view.configure(font=("Consolas", optimal_size))
+
+
     def _add_stat(self, parent, label, value, is_path=False):
-        """Helper pour afficher une ligne d'information propre"""
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.pack(fill="x", pady=2)
-        
+
         if is_path:
-            # Pour le chemin : Label en haut, Valeur en bas (car trop long)
-            ctk.CTkLabel(frame, text=label, font=("Arial", 10, "bold"), anchor="w").pack(side="top", fill="x")
-            val_label = ctk.CTkLabel(
-                frame, 
-                text=value, 
-                font=("Consolas", 9), 
-                text_color="#3498db",
-                anchor="w", 
-                justify="left",
-                wraplength=190
-            )
-            val_label.pack(side="top", fill="x", padx=5)
-        else:
-            ctk.CTkLabel(frame, text=label, font=("Arial", 10, "bold"), anchor="w").pack(side="left")
             ctk.CTkLabel(
-                frame, 
-                text=value, 
-                font=("Consolas", 11), 
+                frame,
+                text=label,
+                font=("Arial", 10, "bold"),
+                anchor="w"
+            ).pack(side="top", fill="x")
+
+            self.path_label = ctk.CTkLabel(
+                frame,
+                text=value,  # On met le texte réel
+                font=("Consolas", 10),
+                text_color="#3498db",
+                anchor="w",
+                justify="left"
+            )
+
+            self.path_label.pack(side="top", fill="x", padx=5, expand=True)
+
+            # Application immédiate après layout stabilisé
+            self.after(10, lambda: self._apply_dynamic_fonts(self.left_panel.winfo_width()))
+
+        else:
+            print(f"label : {label}, value :{value}")
+            ctk.CTkLabel(
+                frame,
+                text=label,
+                font=("Arial", 10, "bold"),
+                anchor="w"
+            ).pack(side="left")
+
+            ctk.CTkLabel(
+                frame,
+                text=value,
+                font=("Consolas", 11),
                 text_color="#ecf0f1",
                 anchor="e"
-            ) .pack(side="right", fill="x", expand=True)
+            ).pack(side="right", fill="x", expand=True)
+  
 
     def _build_right_panel(self):
         self.right_panel = ctk.CTkFrame(self, fg_color="#111", corner_radius=0)
@@ -1149,36 +1265,71 @@ class SimulationView(ctk.CTkFrame):
 
     def _draw_segment(self, p1, p2, is_switch_on, latence_mm):
         """
-        Unique fonction de dessin compatible NumPy.
-        p1, p2 : colonnes [0:X, 1:Y, 2:Power, 3:LineIdx, 4:Timestamp]
+        Segment renderer stable (CNC raster simulation grade).
+
+        p1, p2 : [X, Y, Power, LineIdx, Timestamp]
         """
-        # 1. Vérification : pas de mouvement ou laser éteint
+
+        # --- Ignore segment inutile ---
         if (p1[0] == p2[0] and p1[1] == p2[1]) or p2[2] <= 0:
             return
 
-        # 2. Correction de latence (Offset horizontal dynamique)
-        corr_x = 0
-        if is_switch_on:
+        # ---------------------------------------------------
+        # Correction latence horizontale dynamique
+        # ---------------------------------------------------
+        corr_x = 0.0
+
+        if is_switch_on and abs(p2[0] - p1[0]) > 1e-6:
             dx = p2[0] - p1[0]
-            if abs(dx) > 1e-5:
-                # Si on va vers la droite (dx > 0), on décale vers la gauche (-latence)
-                corr_x = -latence_mm if dx > 0 else latence_mm
 
-        # 3. Conversion en pixels (screen_index gère déjà l'échelle et l'origine)
-        ix1, iy1 = self.screen_index(p1[0] + corr_x, p1[1])
-        ix2, iy2 = self.screen_index(p2[0] + corr_x, p2[1])
+            # Convention : déplacement droite → compensation gauche
+            corr_x = latence_mm if dx > 0 else -latence_mm
+            #corr_x = -latence_mm if dx > 0 else latence_mm
 
-        # 4. Calcul de la couleur (0=Noir, 255=Blanc)
+        # ---------------------------------------------------
+        # Projection espace machine → écran (float safe)
+        # ---------------------------------------------------
+        x1 = p1[0] + corr_x
+        y1 = p1[1]
+
+        x2 = p2[0] + corr_x
+        y2 = p2[1]
+
+        ix1, iy1 = self.screen_index(x1, y1)
+        ix2, iy2 = self.screen_index(x2, y2)
+
+        # ⭐ Anti-jitter critique : rounding stable
+        ix1 = int(round(ix1))
+        iy1 = int(round(iy1))
+        ix2 = int(round(ix2))
+        iy2 = int(round(iy2))
+
+        # ---------------------------------------------------
+        # Intensity mapping
+        # ---------------------------------------------------
         ratio = max(0.0, min(1.0, float(p2[2]) / self.ctrl_max))
-        color = int(255 * (1.0 - ratio))
 
-        # 5. Rendu OpenCV
+        # Laser raster simulation convention :
+        # 0 → noir, puissance élevée → blanc
+        color_val = int(round(255.0 * (1.0 - ratio)))
+
+        color_tuple = (color_val, color_val, color_val)
+
+        # ---------------------------------------------------
+        # Thickness stable (évite shimmer zoom)
+        # ---------------------------------------------------
+        thickness = int(round(max(1.0, self.laser_width_px)))
+
+        # ---------------------------------------------------
+        # OpenCV rendering
+        # ---------------------------------------------------
         cv2.line(
-            self.display_data, 
-            (ix1, iy1), 
-            (ix2, iy2), 
-            (color, color, color), 
-            thickness=max(1, self.laser_width_px)
+            self.display_data,
+            (ix1, iy1),
+            (ix2, iy2),
+            color_tuple,
+            thickness=thickness,
+            lineType=cv2.LINE_AA#cv2.LINE_8
         )
 
     def skip_to_end(self):

@@ -147,7 +147,7 @@ class GCodeEngine:
             
             is_fwd = (outer_idx % 2 == 0)
             scan_dir = 1 if is_fwd else -1
-            corr = offset_latence * scan_dir
+            corr = - offset_latence * scan_dir
             
             # Limites de balayage
             scan_start = (0 if is_fwd else real_scan_dist) + (offX if raster_mode == "Horizontal" else offY)

@@ -139,3 +139,26 @@ def ask_confirmation(parent, message, action_callback, danger_color="#8b0000"):
         command=lambda: [action_callback(), dialog.destroy()]
     )
     btn_confirm.pack(side="left", padx=10)
+
+def truncate_path(path, max_length=60): # Augmenté à 60 par défaut
+    if not path or len(path) <= max_length:
+        return path
+    
+    path = path.replace("\\", "/")
+    parts = path.split("/")
+    filename = parts[-1]
+    drive = parts[0] + "/"
+    
+    # Si le nom du fichier seul est déjà trop long
+    if len(filename) > max_length - 10:
+        return f"{drive}...{filename[-(max_length-15):]}"
+    
+    # On construit la fin en gardant le nom du fichier
+    # et on essaie de garder le dossier parent direct
+    end_part = filename
+    if len(parts) > 2:
+        parent_folder = parts[-2]
+        if len(drive) + len(parent_folder) + len(filename) + 5 <= max_length:
+            end_part = f"{parent_folder}/{filename}"
+
+    return f"{drive}.../{end_part}"

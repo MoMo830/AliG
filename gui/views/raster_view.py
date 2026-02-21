@@ -71,20 +71,31 @@ class RasterView(ctk.CTkFrame):
 
     def setup_ui(self):
 
-        self.grid_columnconfigure(0, weight=0)
-        self.grid_columnconfigure(1, weight=1)
+        # =========================================================
+        # ROOT LAYOUT
+        # =========================================================
+
+        self.grid_columnconfigure(0, weight=0)   # Sidebar fixe
+        self.grid_columnconfigure(1, weight=1)   # Viewport flexible
         self.grid_rowconfigure(0, weight=1)
 
-        # --- SIDEBAR (PANNEAU GAUCHE) ---
+        # =========================================================
+        # SIDEBAR LEFT
+        # =========================================================
+
         self.sidebar = ctk.CTkFrame(self, width=380)
-        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-        
-        self.sidebar.grid_rowconfigure(0, weight=0)  # File frame
-        self.sidebar.grid_rowconfigure(1, weight=0)  # Profile frame
-        self.sidebar.grid_rowconfigure(2, weight=1)  # TABVIEW (PREND TOUT)
-        self.sidebar.grid_rowconfigure(3, weight=0)  # GENERATE
-        self.sidebar.grid_rowconfigure(4, weight=0)  # LINKS
+        self.sidebar.grid_propagate(False)
+
+        self.sidebar.grid(row=0,
+                        column=0,
+                        sticky="nsew",
+                        padx=5,
+                        pady=5)
+
+        self.sidebar.grid_rowconfigure(2, weight=1)
         self.sidebar.grid_columnconfigure(0, weight=1)
+
+        # -------- File Frame --------
 
         file_frame = ctk.CTkFrame(self.sidebar, fg_color="#333333")
         file_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
@@ -105,23 +116,58 @@ class RasterView(ctk.CTkFrame):
         )
         self.btn_output.pack(fill="x", padx=5, pady=(0, 5))
 
+        # -------- Profile Frame --------
 
         profile_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         profile_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
-        self.btn_load_prof = ctk.CTkButton(profile_frame, text=self.common["import_profile"], width=140, height=28, fg_color="#444444", command=self.load_profile_from)
+
+        self.btn_load_prof = ctk.CTkButton(
+            profile_frame,
+            text=self.common["import_profile"],
+            width=140,
+            height=28,
+            fg_color="#444444",
+            command=self.load_profile_from
+        )
+
         self.btn_load_prof.pack(side="left", expand=True, padx=(0, 2))
 
-        self.btn_save_prof = ctk.CTkButton(profile_frame, text=self.common["export_profile"], width=140, height=28, fg_color="#444444", command=self.export_profile)
+        self.btn_save_prof = ctk.CTkButton(
+            profile_frame,
+            text=self.common["export_profile"],
+            width=140,
+            height=28,
+            fg_color="#444444",
+            command=self.export_profile
+        )
+
         self.btn_save_prof.pack(side="right", expand=True, padx=(2, 0))
-        # --- ONGLETS  ---
+
+        # -------- TabView --------
+
         self.tabview = ctk.CTkTabview(self.sidebar)
-        self.tabview.grid(row=2, column=0, sticky="nsew", padx=(10, 10), pady=5)
+        self.tabview.grid(row=2,
+                        column=0,
+                        sticky="nsew",
+                        padx=10,
+                        pady=5)
 
+        self.tab_geom_name = self.common.get("geometry", "Geometry")
+        self.tab_img_name = self.common.get("image", "Image")
+        self.tab_laser_name = self.common.get("laser", "Laser")
+        self.tab_gcode_name = self.common.get("gcode", "G-Code")
 
+        self.tabview.add(self.tab_geom_name)
+        self.tabview.add(self.tab_img_name)
+        self.tabview.add(self.tab_laser_name)
+        self.tabview.add(self.tab_gcode_name)
 
-        # --- PIED DE PAGE SIDEBAR (A FAIRE EN PREMIER POUR LE BAS) ---
+        self._setup_tabs_content()
+
+        # -------- Generate Button --------
+
         self.btn_gen = ctk.CTkButton(
-            self.sidebar, 
+            self.sidebar,
             text=self.common["generate_gcode"],
             fg_color="#1f538d",
             hover_color="#2a6dbd",
@@ -129,82 +175,183 @@ class RasterView(ctk.CTkFrame):
             font=("Arial", 13, "bold"),
             command=self.generate_gcode
         )
-        self.btn_gen.grid(row=3, column=0, sticky="ew", padx=20, pady=(5,10))
 
-        # --- 4. CONFIGURATION DU CONTENU ---
-        self.tab_geom_name = self.common.get("geometry", "Geometry")
-        self.tab_img_name  = self.common.get("image", "Image")
-        self.tab_laser_name = self.common.get("laser", "Laser")
-        self.tab_gcode_name = self.common.get("gcode", "G-Code")
+        self.btn_gen.grid(row=3,
+                        column=0,
+                        sticky="ew",
+                        padx=20,
+                        pady=(5, 10))
 
-        # 2. On ajoute les onglets (SANS le paramètre 'text=')
-        self.tabview.add(self.tab_geom_name)
-        self.tabview.add(self.tab_img_name)
-        self.tabview.add(self.tab_laser_name)
-        self.tabview.add(self.tab_gcode_name)
+        # =========================================================
+        # VIEWPORT RIGHT
+        # =========================================================
 
-        self._setup_tabs_content()  
-
-        # --- VIEWPORT (ZONE DE DROITE) ---
         self.view_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.view_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
-        self.view_frame.grid_columnconfigure(0, weight=1)
-        self.view_frame.grid_rowconfigure(0, weight=4) # Zone Image
-        self.view_frame.grid_rowconfigure(1, weight=1) # Zone Stats
 
-        # --- 1. FIGURE IMAGE (HAUT) ---
-        # On utilise une frame CTk pour faire une bordure propre
-        self.img_container = ctk.CTkFrame(self.view_frame, fg_color="#1e1e1e", border_width=1, border_color="#333333")
-        self.img_container.grid(row=0, column=0, sticky="nsew", pady=(0, 5))
-        
-        self.fig_img = plt.figure(figsize=(5, 5), facecolor='#1e1e1e')
-        # GridSpec pour Image (95%) et Colorbar (5%)
-        gs_img = self.fig_img.add_gridspec(1, 2, width_ratios=[25, 1], wspace=0.02, left=0.08, right=0.92, top=0.92, bottom=0.08)
+        self.view_frame.grid(row=0,
+                            column=1,
+                            sticky="nsew",
+                            padx=5,
+                            pady=5)
+
+        self.view_frame.grid_columnconfigure(0, weight=1)
+        self.view_frame.grid_rowconfigure(0, weight=10)
+        self.view_frame.grid_rowconfigure(1, weight=1)
+
+        # =========================================================
+        # IMAGE PREVIEW TOP
+        # =========================================================
+
+        self.img_container = ctk.CTkFrame(
+            self.view_frame,
+            fg_color="#1e1e1e",
+            border_width=1,
+            border_color="#333333"
+        )
+
+        self.img_container.grid(row=0,
+                                column=0,
+                                sticky="nsew",
+                                pady=(0, 5))
+
+        self.fig_img = plt.figure(figsize=(5, 5),
+                                facecolor='#1e1e1e')
+
+        gs_img = self.fig_img.add_gridspec(
+            1, 2,
+            width_ratios=[25, 1],
+            wspace=0.02,
+            left=0.08,
+            right=0.92,
+            top=0.92,
+            bottom=0.08
+        )
+
         self.ax_img = self.fig_img.add_subplot(gs_img[0, 0])
         self.ax_cbar = self.fig_img.add_subplot(gs_img[0, 1])
-        
+
         self.ax_img.set_facecolor('#1e1e1e')
         self.ax_cbar.set_visible(False)
-        
-        self.canvas_img = FigureCanvasTkAgg(self.fig_img, master=self.img_container)
-        self.canvas_img.get_tk_widget().pack(fill="both", expand=True)
-        self.canvas_img.get_tk_widget().config(bg='#1e1e1e', highlightthickness=0)
-
-        # --- 2. FIGURE STATS (BAS) ---
-        self.stats_container = ctk.CTkFrame(self.view_frame, fg_color="#202020", border_width=1, border_color="#333333")
-        self.stats_container.grid(row=1, column=0, sticky="nsew")
-        
-        self.fig_stats = plt.figure(figsize=(5, 1.5), facecolor='#202020')
-
-        # Utilisation de self. pour permettre la modification dynamique plus tard
-        # On initialise avec des valeurs par défaut (33% / 67%)
-        self.gs_left = self.fig_stats.add_gridspec(1, 1, left=0.0, right=0.33, top=1.0, bottom=0.0)
-        self.gs_right = self.fig_stats.add_gridspec(1, 1, left=0.42, right=0.96, top=0.82, bottom=0.28)
-
-        self.ax_info = self.fig_stats.add_subplot(self.gs_left[0, 0])
-        self.ax_hist = self.fig_stats.add_subplot(self.gs_right[0, 0])
-
-        self.ax_hist.set_facecolor('#202020')
-        self.ax_info.set_facecolor('#202020')
-        
-        self.ax_hist.set_visible(False)
-        self.ax_info.set_visible(False)
-        
-        self.canvas_stats = FigureCanvasTkAgg(self.fig_stats, master=self.stats_container)
-        self.canvas_stats.get_tk_widget().pack(fill="both", expand=True)
-        self.canvas_stats.get_tk_widget().config(bg='#202020', highlightthickness=0)
 
 
-        # Initialisation des éléments graphiques persistants
-        self.bg_rect = plt.Rectangle((0, 0), 0, 0, color='white', zorder=-2)
+        # Placeholder preview (HERE)
+        self.placeholder_text = self.ax_img.text(
+            0.5,
+            0.5,
+            self.common["choose_image"],
+            color='#444444',
+            fontsize=12,
+            fontweight='bold',
+            ha='center',
+            va='center',
+            transform=self.ax_img.transAxes
+        )
+
+        self.canvas_img = FigureCanvasTkAgg(
+            self.fig_img,
+            master=self.img_container
+        )
+
+        self.canvas_img.get_tk_widget().pack(
+            fill="both",
+            expand=True
+        )
+
+        self.canvas_img.get_tk_widget().config(
+            bg='#1e1e1e',
+            highlightthickness=0
+        )
+
+        # =========================================================
+        # STATS PANEL BOTTOM
+        # =========================================================
+
+        self.stats_container = ctk.CTkFrame(
+            self.view_frame,
+            fg_color="#202020",
+            border_width=1,
+            border_color="#333333"
+        )
+        self.stats_container.grid_propagate(False)
+
+        self.stats_container.grid(row=1,
+                                column=0,
+                                sticky="nsew")
+
+        self.stats_container.grid_columnconfigure(0, weight=1)
+        self.stats_container.grid_columnconfigure(1, weight=7)
+        self.stats_container.grid_rowconfigure(0, weight=1)
+
+        # -------- Left stats text --------
+
+        self.stats_left_frame = ctk.CTkFrame(
+            self.stats_container,
+            fg_color="#202020"
+        )
+
+        self.stats_left_frame.grid(row=0,
+                                column=0,
+                                sticky="nsew",
+                                padx=6,
+                                pady=6)
+
+        self.stats_labels = []
+
+        for _ in range(5):
+
+            lbl = ctk.CTkLabel(
+                self.stats_left_frame,
+                text="",
+                font=("Consolas", 14),
+                anchor="w",
+                justify="left"
+            )
+
+            lbl.pack(fill="x", padx=8, pady=2)
+            self.stats_labels.append(lbl)
+
+        # -------- Histogram right --------
+
+        self.stats_right_frame = ctk.CTkFrame(
+            self.stats_container,
+            fg_color="#202020"
+        )
+        self.stats_right_frame.grid_propagate(False)
+
+        self.stats_right_frame.grid(row=0,
+                                    column=1,
+                                    sticky="nsew",
+                                    padx=6,
+                                    pady=6)
+
+        self.hist_canvas = ctk.CTkCanvas(
+            self.stats_right_frame,
+            bg="#202020",
+            highlightthickness=0
+        )
+        self.hist_canvas.bind("<Configure>", self.on_hist_resize)
+
+        self.hist_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
+
+        self.hist_bins = None
+        self.hist_rects = []
+
+        # =========================================================
+        # PREVIEW ELEMENTS
+        # =========================================================
+
+        self.bg_rect = plt.Rectangle((0, 0), 0, 0,
+                                    color='white',
+                                    zorder=-2)
+
         self.ax_img.add_patch(self.bg_rect)
+
         self.img_plot = None
+        self.cbar = None
         self.origin_dot = None
-        
-        # Placeholder
-        self.placeholder_text = self.ax_img.text(0.5, 0.5, self.common["choose_image"], 
-                                              color='#444444', fontsize=12, fontweight='bold',
-                                              ha='center', va='center', transform=self.ax_img.transAxes)
+
+
+
 
     def _setup_tabs_content(self):
         """Organise le contenu des onglets de la sidebar"""
@@ -266,7 +413,13 @@ class RasterView(ctk.CTkFrame):
         force_w_frame.pack(fill="x", padx=10, pady=(0, 10))
         ctk.CTkLabel(force_w_frame, text=self.common["force_width"], font=("Segoe UI", 11)).pack(side="left")
         self.force_width_var = ctk.BooleanVar(value=False)
-        self.sw_force_width = ctk.CTkSwitch(force_w_frame, text="", variable=self.force_width_var, width=45, command=self.update_preview)
+        self.sw_force_width = ctk.CTkSwitch(
+            force_w_frame, 
+            text="", 
+            variable=self.force_width_var, 
+            width=45, 
+            command=lambda: self.after(10, self.update_preview) 
+        )
         self.sw_force_width.pack(side="right")
 
         self.create_input_pair(t_geo, self.common["line_step"], 0.01, 1.0, 0.1307, "line_step", precision=4)
@@ -325,7 +478,7 @@ class RasterView(ctk.CTkFrame):
         self.power_viz = PowerRangeVisualizer(p_cont, self.controls["min_p"]["entry"], self.controls["max_p"]["entry"], self.update_preview)
         self.power_viz.pack(side="right", padx=(5, 0))
 
-        self.create_input_pair(t_laser, self.common["laser_latency"], 0, 50, 11.5, "m67_delay")
+        self.create_input_pair(t_laser, self.common["laser_latency"], -20, 20, -11.5, "m67_delay")
         self.create_input_pair(t_laser, self.common["gray_steps"], 2, 256, 256, "gray_steps", is_int=True)
 
         # --- TAB 4: G-CODE ---
@@ -791,142 +944,110 @@ class RasterView(ctk.CTkFrame):
             print(f"Preview Error: {e}")
             return None, 0, 0, 0, 0, 0
 
+
+
     def update_preview(self):
+
         if not hasattr(self, 'controls') or 'width' not in self.controls:
             return
+
         if not hasattr(self, 'origin_mode'):
             return
 
         try:
-            matrix, h_px, w_px, l_step, x_st, est_min = self.process_logic()
-            
-            if matrix is None: 
-                # On ne met plus à jour les labels de la sidebar, on rafraîchit juste le canvas
+
+            res = self.process_logic()
+
+            if not res or res[0] is None:
+
+                if self.img_plot:
+                    self.img_plot.set_visible(False)
+
                 self.canvas_img.draw_idle()
                 return
-            
-            # --- 1. ACTIVATION DES AXES ---
-            self.ax_cbar.set_visible(True)
-            self.ax_hist.set_visible(True)
-            self.ax_info.set_visible(True)
-            self.ax_img.set_axis_on() 
 
-            if hasattr(self, 'placeholder_text') and self.placeholder_text is not None:
-                self.placeholder_text.remove()
-                self.placeholder_text = None  
-                
-            # --- 2. CALCULS DES DONNÉES ---
-            real_w = (w_px - 1) * x_st
-            real_h = (h_px - 1) * l_step
-            total_seconds = int(est_min * 60)
-            hours, remainder = divmod(total_seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            
-            # (Anciens labels Tkinter de la Sidebar supprimés ici)
+            matrix = np.array(res[0], dtype=np.float32)
 
-            premove = self.get_val(self.controls["premove"])
+            if matrix.ndim < 2 or matrix.size == 0:
+                return
+
+            h_px, w_px, l_step, x_st, est_min = res[1:6]
+
+            real_w, real_h, x_st, l_step, hours, minutes, seconds = \
+                self._process_preview_geometry(matrix, res)
+
+            premove_ctrl = self.controls.get("premove")
+            premove = self.get_val(premove_ctrl) if premove_ctrl else 0
+
             offX, offY = self.calculate_offsets(real_w, real_h)
-            v_min, v_max = self.get_val(self.controls["min_p"]), self.get_val(self.controls["max_p"])
 
-            # --- 3. RECTANGLE DE ZONE (ZORDER -1) ---
-            self.bg_rect.set_xy((offX - premove, offY))
-            self.bg_rect.set_width(real_w + (2 * premove))
-            self.bg_rect.set_height(real_h)
-            self.bg_rect.set_visible(True)
+            v_min = self.get_val(self.controls.get("min_p")) \
+                if self.controls.get("min_p") else 0
 
-            # --- 4. AFFICHAGE DE L'IMAGE (CANVAS DU HAUT) ---
-            if self.img_plot is None:
-                self.img_plot = self.ax_img.imshow(matrix, cmap="gray_r", origin='upper', 
-                                            extent=[offX, offX + real_w, offY, offY + real_h], 
-                                            aspect='equal', vmin=v_min, vmax=v_max, zorder=0)
-                self.cbar = self.fig_img.colorbar(self.img_plot, cax=self.ax_cbar) 
-                self.cbar.set_label("Power Intensity (%)", color='#888888', fontsize=16, labelpad=10)
-                self.cbar.ax.tick_params(labelcolor='#888888', labelsize=12)
-                self.cbar.outline.set_visible(False)
-            else:
-                self.img_plot.set_data(matrix)
-                self.img_plot.set_extent([offX, offX + real_w, offY, offY + real_h])
-                self.img_plot.set_clim(v_min, v_max)
+            v_max = self.get_val(self.controls.get("max_p")) \
+                if self.controls.get("max_p") else 255
 
-            # --- 5. GRILLE ET ESTHÉTIQUE IMAGE ---
-            self.ax_img.tick_params(axis='both', colors='#888888', labelsize=12)
-            self.ax_img.grid(True, color='#444444', linestyle=':', linewidth=0.5, alpha=0.6, zorder=10)
-            
-            self.ax_img.set_xlim(offX - premove - 2, offX + real_w + premove + 2)
-            self.ax_img.set_ylim(offY - 2, offY + real_h + 2)
+            self._update_image_artist(
+                matrix,
+                offX,
+                offY,
+                real_w,
+                real_h,
+                v_min,
+                v_max
+            )
 
-            if hasattr(self, 'origin_dot') and self.origin_dot:
-                for line in self.origin_dot: line.remove()
-            self.origin_dot = self.ax_img.plot(0, 0, 'ro', markersize=6, zorder=20)
-            self.ax_img.set_title("PATH PREVIEW", color='white', fontsize=20, fontweight='bold')
+            self.ax_img.set_xlim(offX - premove - 2,
+                                offX + real_w + premove + 2)
 
-            # --- 6. HISTOGRAMME (À DROITE) ---
-            self.ax_hist.clear() 
-            self.ax_hist.set_facecolor('#1a1a1a') 
-            
-            flat_data = matrix.ravel()[::10]
-            if flat_data.size > 0:
-                r_min = min(flat_data.min(), v_min-5)
-                r_max = max(flat_data.max(), v_max+5)
-                
-                self.ax_hist.hist(flat_data, bins=100, 
-                                range=(r_min, r_max), 
-                                color='#5dade2', alpha=0.9)
-                
-                self.ax_hist.axvline(v_min, color='#ffcc00', linestyle='--', linewidth=1.5, label="Min")
-                self.ax_hist.axvline(v_max, color='#ff3333', linestyle='--', linewidth=1.5, label="Max")
+            self.ax_img.set_ylim(offY - 2,
+                                offY + real_h + 2)
 
-            self.ax_hist.set_title("POWER DISTRIBUTION", color='white', fontsize=20, fontweight='bold', pad=10)
-            self.ax_hist.set_xlabel("Laser Power Level", color='#aaaaaa', fontsize=14)
-            self.ax_hist.set_ylabel("Pixel Count", color='#aaaaaa', fontsize=14)
-            self.ax_hist.tick_params(colors='#888888', labelsize=14)
-            
-            for spine in self.ax_hist.spines.values():
-                spine.set_edgecolor('#333333')
+            self.ax_img.tick_params(
+                axis='both',
+                colors='#888888',
+                labelsize=12
+            )
 
-            # --- 7. PANNEAU D'INFORMATIONS (DYNAMIQUE) ---
-            self.ax_info.clear()
-            self.ax_info.set_facecolor('#202020')
-            self.ax_info.set_xticks([]); self.ax_info.set_yticks([])
+            self.ax_img.grid(
+                True,
+                color='#444444',
+                linestyle=':',
+                linewidth=0.5,
+                alpha=0.6,
+                zorder=10
+            )
 
-            lines = [
-                f"ESTIMATED TIME:  {hours:02d}:{minutes:02d}:{seconds:02d}",
-                f"MATRIX SIZE:     {w_px} x {h_px} px",
-                f"REAL DIMENSIONS: {real_w:.2f} x {real_h:.2f} mm",
-                f"PIXEL PITCH X:   {x_st:.4f} mm",
-                f"PIXEL PITCH Y:   {l_step:.4f} mm"
-            ]
-            info_text = "\n".join(lines)
+            self.ax_img.plot(0, 0, 'ro', markersize=6, zorder=20)
 
-            # --- CALCUL DE LA LARGEUR NÉCESSAIRE ---
-            # On prend la ligne la plus longue et on estime la place (environ 0.008 par caractère monospace)
-            max_chars = max(len(l) for l in lines)
-            # Ratio de la largeur de la figure (ajuste 0.0085 selon tes tests)
-            needed_width = max_chars * 0.0085 
-            
-            # Sécurité : entre 20% et 45% de la largeur totale
-            final_ratio = min(max(needed_width, 0.20), 0.45)
+            self.ax_img.set_title(
+                "PATH PREVIEW",
+                color='white',
+                fontsize=20,
+                fontweight='bold'
+            )
 
-            # Mise à jour des grilles
-            self.gs_left.update(right=final_ratio)
-            self.gs_right.update(left=final_ratio + 0.08) # Marge de 8% entre les deux
+            self._update_dashboard_stats(
+                w_px,
+                h_px,
+                real_w,
+                real_h,
+                x_st,
+                l_step,
+                hours,
+                minutes,
+                seconds
+            )
 
-            self.ax_info.text(0.05, 0.5, info_text, color='#aaaaaa', 
-                            fontfamily='monospace', fontsize=20, 
-                            ha='left', va='center', linespacing=1.6, 
-                            transform=self.ax_info.transAxes)
-            
-            # --- 8. FINALISATION ---
+            self._update_histogram_async(matrix, v_min, v_max)
+
             self.canvas_img.draw_idle()
-            self.canvas_stats.draw_idle()
+            self.fig_img.canvas.draw_idle()
 
-            if hasattr(self, 'power_viz'):
-                self.power_viz.refresh_visuals()
-
-        except MemoryError:
-            messagebox.showerror("Memory Error", "Resolution too high for RAM.")
         except Exception as e:
+            import traceback
             print(f"Preview Error: {e}")
+            traceback.print_exc()
 
 
     def generate_gcode(self):
@@ -952,24 +1073,38 @@ class RasterView(ctk.CTkFrame):
         
         if matrix is None: return
 
-        real_w = (w_px - 1) * x_st
-        real_h = (h_px - 1) * l_step
+        # --- LOGIQUE DE DIMENSION (Synchronisée avec le switch) ---
+        ent_w = self.controls.get("width")
+        ent_h = self.controls.get("height")
+
+        # On lit la variable source de vérité (utilisée aussi dans update_preview)
+        is_forced = self.force_width_var.get() in [1, True]
+
+        if is_forced:
+            # On utilise le calcul exact (le même que celui injecté dans l'affichage)
+            real_w = (w_px - 1) * x_st
+            real_h = (h_px - 1) * l_step
+        else:
+            # Mode libre : on prend la valeur actuellement écrite dans les cases
+            try:
+                real_w = float(ent_w.get()) if ent_w else (w_px - 1) * x_st
+                real_h = float(ent_h.get()) if ent_h else (h_px - 1) * l_step
+            except (ValueError, TypeError, AttributeError):
+                real_w = (w_px - 1) * x_st
+                real_h = (h_px - 1) * l_step
+
         offX, offY = self.calculate_offsets(real_w, real_h)
 
         # --- 2. GESTION DES BLOCS DE TEXTE (FUSION GLOBAL + RASTER) ---
-        # On récupère les valeurs globales stockées dans la machine
         global_h = self.app.config_manager.get_item("machine_settings", "custom_header", "").strip()
         global_f = self.app.config_manager.get_item("machine_settings", "custom_footer", "").strip()
         
-        # On récupère les valeurs spécifiques à cet onglet Raster
         raster_h = self.txt_header.get("1.0", "end-1c").strip()
         raster_f = self.txt_footer.get("1.0", "end-1c").strip()
 
-        # Concaténation avec saut de ligne uniquement si nécessaire
-        # Header : Global en premier (setup machine), puis Raster
         full_header = f"{global_h}\n{raster_h}".strip() if global_h and raster_h else (global_h or raster_h)
-        # Footer : Raster en premier (fin de job), puis Global (M30, etc.)
         full_footer = f"{raster_f}\n{global_f}".strip() if global_f and raster_f else (global_f or raster_f)
+
 
         # --- 3. PACKAGING DU PAYLOAD ---
         payload = {
@@ -1010,13 +1145,14 @@ class RasterView(ctk.CTkFrame):
                 'file_name': os.path.basename(self.input_image_path).split('.')[0] + ".nc" if self.input_image_path else "export.nc",
                 'output_dir': self.output_dir, 
                 'origin_mode': current_origin_mode,
-                'real_w': real_w, 'real_h': real_h,
+                'real_w': real_w, 
+                'real_h': real_h,
                 'est_sec': int(est_min * 60),
                 'raster_direction': current_raster_mode 
             }
         }
 
-        # --- 4. LANCEMENT DE LA VUE SIMULATION ---
+        # --- 4. LANCEMENT ---
         self.app.show_simulation(
             self.engine, 
             payload, 
@@ -1299,6 +1435,234 @@ class RasterView(ctk.CTkFrame):
         self.txt_global_footer_preview.insert("1.0", f_glob if f_glob else "(No Global Footer)")
         self.txt_global_footer_preview.configure(state="disabled")
 
+    def update_histogram_ctk(self, matrix, v_min, v_max):
+
+        if not hasattr(self, "hist_canvas"):
+            return
+
+        if matrix is None:
+            return
+
+        canvas = self.hist_canvas
+        canvas.delete("all")
+
+        canvas.update_idletasks()
+
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+
+        if width <= 50 or height <= 50:
+            return
+
+        # Data sampling
+        flat_data = matrix.ravel()[::10]
+
+        if flat_data.size == 0:
+            return
+
+        # Histogram compute
+        bins = 80
+
+        counts, bin_edges = np.histogram(
+            flat_data,
+            bins=bins,
+            range=(v_min - 5, v_max + 5)
+        )
+
+        max_count = np.max(counts) if np.max(counts) > 0 else 1
+
+        # ===== Layout margins =====
+        left_margin = 60
+        right_margin = 30
+        top_margin = 40
+        bottom_margin = 50
+
+        plot_width = width - left_margin - right_margin
+        plot_height = height - top_margin - bottom_margin
+
+        # ===== Title =====
+        canvas.create_text(
+            width / 2,
+            18,
+            text="POWER DISTRIBUTION",
+            fill="white",
+            font=("Arial", 14, "bold")
+        )
+
+        # ===== Axis drawing =====
+        axis_color = "#888888"
+        # X axis
+        canvas.create_line(
+            left_margin,
+            height - bottom_margin,
+            width - right_margin,
+            height - bottom_margin,
+            fill=axis_color
+        )
+        # Y axis
+        canvas.create_line(
+            left_margin,
+            top_margin,
+            left_margin,
+            height - bottom_margin,
+            fill=axis_color
+        )
+
+        # ===== Histogram bars =====
+        bin_width_px = plot_width / bins
+
+        domain_min = v_min - 5
+        domain_max = v_max + 5
+
+        def scale_x(val):
+            if domain_max - domain_min == 0:
+                return left_margin
+            return left_margin + ((val - domain_min) /
+                                (domain_max - domain_min)) * plot_width
+
+        # Draw bars
+        for i in range(len(counts)):
+            h_norm = counts[i] / max_count
+            bar_height = h_norm * plot_height
+            x0 = left_margin + i * bin_width_px
+            y0 = height - bottom_margin
+            x1 = x0 + bin_width_px - 1
+            y1 = y0 - bar_height
+            canvas.create_rectangle(
+                x0, y0, x1, y1,
+                fill="#5dade2",
+                width=0
+            )
+
+        # ===== Threshold lines =====
+        try:
+            min_pos = scale_x(v_min)
+            max_pos = scale_x(v_max)
+            canvas.create_line(
+                min_pos,
+                top_margin,
+                min_pos,
+                height - bottom_margin,
+                fill="#ffcc00",
+                dash=(4, 2)
+            )
+            canvas.create_line(
+                max_pos,
+                top_margin,
+                max_pos,
+                height - bottom_margin,
+                fill="#ff3333",
+                dash=(4, 2)
+            )
+
+        except:
+            pass
+
+        # ===== Axis labels =====
+        canvas.create_text(
+            width / 2,
+            height - 15,
+            text="Laser Power (%)",
+            fill="#aaaaaa",
+            font=("Arial", 11)
+        )
+
+        canvas.create_text(
+            20,
+            height / 2,
+            text="Pixel Count",
+            fill="#aaaaaa",
+            font=("Arial", 11),
+            angle=90
+        )
+        # =====================================================
+        # TICKS X AXIS
+        # =====================================================
+
+        x_ticks = 6
+        y_ticks = 5
+
+        domain_min = v_min - 5
+        domain_max = v_max + 5
+
+        # --- X ticks ---
+        for i in range(x_ticks + 1):
+
+            ratio = i / x_ticks
+            val = domain_min + ratio * (domain_max - domain_min)
+
+            px = left_margin + ratio * plot_width
+            py = height - bottom_margin
+
+            # tick mark
+            canvas.create_line(
+                px,
+                py,
+                px,
+                py + 6,
+                fill=axis_color
+            )
+
+            # label
+            canvas.create_text(
+                px,
+                py + 18,
+                text=f"{val:.0f}",
+                fill="#aaaaaa",
+                font=("Arial", 9)
+            )
+
+        # =====================================================
+        # Y TICKS
+        # =====================================================
+
+        for i in range(y_ticks + 1):
+
+            ratio = i / y_ticks
+            val = max_count * ratio
+
+            px = left_margin
+            py = height - bottom_margin - ratio * plot_height
+
+            # tick mark
+            canvas.create_line(
+                px - 6,
+                py,
+                px,
+                py,
+                fill=axis_color
+            )
+
+            # label
+            canvas.create_text(
+                px - 25,
+                py,
+                text=f"{int(val)}",
+                fill="#aaaaaa",
+                font=("Arial", 8)
+            )
+            
+        self.last_hist_matrix = matrix
+        self.last_hist_vmin = v_min
+        self.last_hist_vmax = v_max
+
+    def on_hist_resize(self, event):
+
+        if not hasattr(self, "hist_canvas"):
+            return
+
+        try:
+            if hasattr(self, "last_hist_matrix"):
+
+                self.update_histogram_ctk(
+                    self.last_hist_matrix,
+                    self.last_hist_vmin,
+                    self.last_hist_vmax
+                )
+
+        except Exception:
+            pass
+
     def _set_text_widget(self, widget, text):
         """Remplit un widget de texte CTkTextbox s'il y a une valeur."""
         if text is not None:
@@ -1311,3 +1675,175 @@ class RasterView(ctk.CTkFrame):
             entry.configure(state="normal")
             entry.delete(0, tk.END)
             entry.insert(0, str(val))
+
+
+    def _process_preview_geometry(self, matrix, res):
+
+        h_px, w_px, l_step, x_st, est_min = res[1:6]
+
+        calc_w = (w_px - 1) * x_st
+        calc_h = (h_px - 1) * l_step
+
+        ctrl_w = self.controls.get("width")
+        ctrl_h = self.controls.get("height")
+
+        ent_w = ctrl_w["entry"] if ctrl_w else None
+        ent_h = ctrl_w["entry"] if ctrl_h else None
+
+        sld_w = ctrl_w["slider"] if ctrl_w else None
+        sld_h = ctrl_h["slider"] if ctrl_h else None
+
+        is_forced = self.force_width_var.get() in [1, True, "1"]
+
+        if is_forced:
+
+            if ent_w and ent_h:
+                ent_w.delete(0, "end")
+                ent_w.insert(0, f"{calc_w:.2f}")
+
+                ent_h.delete(0, "end")
+                ent_h.insert(0, f"{calc_h:.2f}")
+
+            if sld_w:
+                sld_w.set(calc_w)
+
+            if sld_h:
+                sld_h.set(calc_h)
+
+            real_w, real_h = calc_w, calc_h
+
+        else:
+
+            try:
+
+                val_w = ent_w.get().replace(',', '.') if ent_w else ""
+                val_h = ent_h.get().replace(',', '.') if ent_h else ""
+
+                real_w = float(val_w) if val_w else calc_w
+                real_h = float(val_h) if val_h else calc_h
+
+            except:
+                real_w, real_h = calc_w, calc_h
+
+        total_seconds = int(est_min * 60)
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+
+        return real_w, real_h, x_st, l_step, hours, minutes, seconds
+    
+    def _update_image_artist(self, matrix, offX, offY, real_w, real_h, v_min, v_max):
+
+        premove_ctrl = self.controls.get("premove")
+        premove = self.get_val(premove_ctrl) if premove_ctrl else 0
+
+        self.bg_rect.set_xy((offX - premove, offY))
+        self.bg_rect.set_width(real_w + (2 * premove))
+        self.bg_rect.set_height(real_h)
+        self.bg_rect.set_visible(True)
+
+        if self.placeholder_text is not None:
+            try:
+                self.placeholder_text.remove()
+            except:
+                pass
+            self.placeholder_text = None
+
+        # ===============================
+        # IMAGE + COLORBAR CREATION
+        # ===============================
+        if self.img_plot is None:
+
+            self.img_plot = self.ax_img.imshow(
+                matrix,
+                cmap="gray_r",
+                origin='upper',
+                extent=[offX, offX + real_w, offY, offY + real_h],
+                aspect='equal',
+                vmin=v_min,
+                vmax=v_max,
+                interpolation='nearest',
+                zorder=0
+            )
+
+            # Activer axe colorbar
+            self.ax_cbar.set_visible(True)
+            self.ax_cbar.set_axis_on()
+
+            # Créer UNE SEULE FOIS
+            self.cbar = self.fig_img.colorbar(
+                self.img_plot,
+                cax=self.ax_cbar
+            )
+
+            self.cbar.set_label(
+                "Laser Power Level (%)",
+                color='#888888',
+                fontsize=14,
+                labelpad=8
+            )
+
+            self.cbar.ax.tick_params(
+                colors='#888888',
+                labelsize=11
+            )
+
+            self.cbar.outline.set_visible(False)
+
+        else:
+
+            # Update image
+            self.img_plot.set_data(matrix)
+            self.img_plot.set_extent([offX, offX + real_w, offY, offY + real_h])
+            self.img_plot.set_clim(v_min, v_max)
+
+            # 🔥 Mise à jour SANS recréation
+            if self.cbar is not None:
+                self.cbar.update_normal(self.img_plot)
+                self.cbar.update_ticks()
+
+            self.img_plot.set_visible(True)
+
+    def _update_dashboard_stats(self, w_px, h_px, real_w, real_h,
+                                x_st, l_step,
+                                hours, minutes, seconds):
+
+        if not hasattr(self, "stats_labels"):
+            return
+
+        try:
+
+            self.stats_frame.update_idletasks()
+
+            w_px_win = self.stats_frame.winfo_width()
+            h_px_win = self.stats_frame.winfo_height()
+
+            dynamic_size = (w_px_win + h_px_win) / 55
+            final_font_size = max(8, min(dynamic_size, 22))
+
+        except:
+            final_font_size = 14
+
+        stats_lines = [
+            f"ESTIMATED TIME:   {hours:02d}:{minutes:02d}:{seconds:02d}",
+            f"MATRIX SIZE:      {w_px} x {h_px} px",
+            f"REAL DIMENSIONS:  {real_w:.2f} x {real_h:.2f} mm",
+            f"PIXEL PITCH X:    {x_st:.4f} mm",
+            f"PIXEL PITCH Y:    {l_step:.4f} mm"
+        ]
+
+        for lbl, txt in zip(self.stats_labels, stats_lines):
+            lbl.configure(
+                text=txt,
+                font=("Consolas", int(final_font_size))
+            )
+
+    def _update_histogram_async(self, matrix, v_min, v_max):
+
+        if not hasattr(self, "hist_canvas"):
+            return
+
+        def delayed_hist():
+            self.hist_canvas.update_idletasks()
+            self.update_histogram_ctk(matrix, v_min, v_max)
+
+        self.hist_canvas.after(50, delayed_hist)
