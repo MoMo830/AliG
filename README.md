@@ -51,7 +51,7 @@ ALIG gives you **total control** over the G-Code generation process. Whether you
 [![GitHub release](https://img.shields.io/github/v/release/MoMo830/ALIG?label=Latest%20Version&color=orange)](https://github.com/MoMo830/ALIG/releases/latest)  
 If you just want to use the software without installing Python, follow these steps:
 
-1.  Look at the **"Releases"** section on the right side of this page.
+1. Click on the [**Releases**](https://github.com/MoMo830/AliG/releases/) section (or find it on the right side of this page).
 2.  Click on the latest version.
 3.  Under **Assets**, download the `.exe` file.
     * *Note: Do NOT use the "Download ZIP" green button at the top, as it only contains the source code.*
