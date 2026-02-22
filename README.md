@@ -15,11 +15,13 @@
 
 <table align="center" style="border-collapse: collapse; border: none;">
   <tr style="border: none;">
-    <td style="border: none; padding: 5px;">
+    <td align="center" style="border: none; padding: 5px; width: 50%;">
       <img src="Ressources/ALIG_calibration.jpg" alt="ALIG Calibration" width="100%">
+      <p><sub><b>Laser Latency Calibration Engine</b></sub></p>
     </td>
-    <td style="border: none; padding: 5px;">
+    <td align="center" style="border: none; padding: 5px; width: 50%;">
       <img src="Ressources/ALIG_settings.jpg" alt="ALIG Settings" width="100%">
+      <p><sub><b>Settings view</b></sub></p>
     </td>
   </tr>
 </table>
