@@ -27,7 +27,7 @@ params = [
     '--add-data', 'gui;gui',
     '--add-data', 'core;core',
     '--add-data', 'utils;utils',
-    '--add-data', 'engine;engine' # N'oublie pas le dossier engine !
+    '--add-data', 'engine;engine' 
 ]
 
 if os.path.exists(ICON_PATH):
