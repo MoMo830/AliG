@@ -25,3 +25,12 @@ def load_json_file(file_path):
         return data, None
     except Exception as e:
         return None, str(e)
+    
+def save_config(self):
+    """Sauvegarde l'état actuel des données dans le fichier JSON."""
+    # On utilise la fonction globale save_json_file que vous avez définie
+    success, error = save_json_file(self.config_path, self.data)
+    
+    if not success:
+        print(f"Error saving config file: {error}")
+    return success
