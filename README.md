@@ -11,8 +11,24 @@
 
 <p align="center">
   <img src="Ressources/Animation_ALIG_v0.98b.gif" alt="A.L.I.G. Interface Demo" width="95%">
+</p>
+
+<table align="center" style="border-collapse: collapse; border: none;">
+  <tr style="border: none;">
+    <td style="border: none; padding: 5px;">
+      <img src="Ressources/ALIG_calibration.jpg" alt="ALIG Calibration" width="100%">
+    </td>
+    <td style="border: none; padding: 5px;">
+      <img src="Ressources/ALIG_settings.jpg" alt="ALIG Settings" width="100%">
+    </td>
+  </tr>
+</table>
+
+<p align="center">
   <br>
-  <a href="https://buymeacoffee.com/momo830"><img src="https://img.shields.io/badge/Donate-Buy%20Me%20A%20Coffee-orange?style=flat-square&logo=buy-me-a-coffee" alt="Support the project"></a>
+  <a href="https://buymeacoffee.com/momo830">
+    <img src="https://img.shields.io/badge/Donate-Buy%20Me%20A%20Coffee-orange?style=flat-square&logo=buy-me-a-coffee" alt="Support the project">
+  </a>
 </p>
 
 
