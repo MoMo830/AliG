@@ -5,7 +5,7 @@
 
 
 # A.L.I.G. - Advanced Laser Imaging Generator 
-*Project born on February 5, 2026. Still alive and laser-focused.*
+
 
 
 
@@ -99,6 +99,8 @@ If you just want to use the software without installing Python, follow these ste
 * **v0.93b** : Origin selection added / improved display.
 ### (08/02/2026)
 * **v0.92b** : Switched pre-moves from **G0 to G1** to ensure a constant velocity and eliminate the sawtooth effect on the image edges.
+### (05/02/2026)
+* **Project born**.
 
 </details>
 
@@ -141,7 +143,9 @@ If you just want to use the software without installing Python, follow these ste
 ---
 
 ## Support & Contributions
-A.L.I.G. is a free project, developed during their spare time by a world-class team of... just me. If this tool has helped you with your CNC projects or saved you time, please consider supporting its development. Your contributions help cover the costs of testing materials and hardware for further compatibility tests.
+A.L.I.G. is an open-source project developed and maintained independently.
+If this tool has helped you improve your CNC workflow or save valuable time, you can support its ongoing development.
+Contributions help fund testing materials, hardware validation, and continued feature improvements.
 
 * **Donations:** [Support A.L.I.G. on Buy Me a Coffee](https://buymeacoffee.com/momo830)
 * **Feedback:** If you encounter any issues or have suggestions for new features, feel free to open an **Issue**.
