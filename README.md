@@ -111,7 +111,7 @@ If you just want to use the software without installing Python, follow these ste
 * **Comprehensive Raster Toolkit:** Finalizing the entire user interface to provide a rock-solid, streamlined environment dedicated to high-performance rastering.
 * **Export Policy Overhaul:** Flexible export management allowing users to choose specific file extensions (e.g., .gcode, .nc, .txt) to match various CNC controller requirements.
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
-* **UI Enhancement & Custom Branding:** * Replace emojis with custom SVG vector icons (Theme-aware).
+* **UI Enhancement & Custom Branding:** * Replace emojis with custom icons (Theme-aware).
     * Dynamic color adaptation for seamless Light/Dark mode transitions.
 * **Full Internationalization (i18n):** Completion of multi-language support for the entire interface.
 * **Onboarding Experience:** First-run setup wizard for essential machine configuration (safety limits, workspace, language).
