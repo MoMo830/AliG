@@ -11,7 +11,6 @@
 
 <p align="center">
   <img src="Ressources/Animation_ALIG_v0.98b.gif" alt="A.L.I.G. Interface Demo" width="95%">
-<<<<<<< HEAD
 </p>
 
 <table align="center" style="border-collapse: collapse; border: none;">
@@ -26,8 +25,6 @@
 </table>
 
 <p align="center">
-=======
->>>>>>> 40e4cb8e154c846d4dc2c91a8f8bad95fbb342a1
   <br>
   <a href="https://buymeacoffee.com/momo830">
     <img src="https://img.shields.io/badge/Donate-Buy%20Me%20A%20Coffee-orange?style=flat-square&logo=buy-me-a-coffee" alt="Support the project">
