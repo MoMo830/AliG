@@ -1,7 +1,7 @@
 {
     "window_settings": {
         "is_maximized": true,
-        "geometry": "1851x1019+50+50"
+        "geometry": "1300x900+338+338"
     },
     "machine_settings": {
         "theme": "System",
@@ -16,21 +16,21 @@
         "custom_footer": ""
     },
     "raster_settings": {
-        "width": 40.0,
-        "line_step": 0.2614,
+        "width": 30.0,
+        "line_step": 0.1307,
         "dpi": 254,
         "custom_x": 0.0,
         "custom_y": 0.0,
-        "contrast": 0.11,
-        "gamma": 1.81,
+        "contrast": 0.0,
+        "gamma": 1.0,
         "thermal": 1.5,
         "feedrate": 3000,
-        "premove": 18.0,
+        "premove": 10.0,
         "max_p": 40.0,
         "min_p": 10.0,
-        "gray_steps": 19,
-        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/Original-image-512x512-pixels.png",
-        "output_dir": "C:/Users/momof/SynologyDrive/Python/CNC",
+        "gray_steps": 256,
+        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/ALIG_Project/Ressources/AMC.jpg",
+        "output_dir": "//192.168.2.100/cnc/03_laser",
         "custom_header": "",
         "custom_footer": "",
         "origin_mode": "Lower-Left",
@@ -43,9 +43,9 @@
         "invert_relief": false
     },
     "stats": {
-        "total_lines": 303840,
-        "total_gcodes": 16,
-        "total_time_seconds": 6838.17333984375,
-        "last_project_time": 233.34144592285156
+        "total_lines": 57342,
+        "total_gcodes": 2,
+        "total_time_seconds": 613.56494140625,
+        "last_project_time": 306.782470703125
     }
 }

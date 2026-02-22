@@ -5,37 +5,46 @@ A.L.I.G. - Advanced Laser Imaging Generator
 Version: 0.9783b
 Author: Alexandre "MoMo"
 License: MIT
-Description: 
-    Specialized G-Code generator for grayscale laser engraving. 
-    Optimized for Mach4 and PoKeys57CNC using M67 analog commands.
-    Features: Constant velocity pre-moves (overscan), Gamma & Thermal 
-    correction, and real-time power distribution preview.
-
-GitHub: https://github.com/MoMo830/ALIG
 """
 
 import os
+import sys
+import traceback
 import customtkinter as ctk
+import ctypes
+
 from gui.main_window import LaserGeneratorApp
 from utils.gui_utils import setup_app_id
 from utils.config_manager import ConfigManager
-import ctypes
+from utils.paths import load_all_images
 
 
 def main():
-    setup_app_id()
-    
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(base_dir, "alig_config.json")
-    config_manager = ConfigManager(config_path)
-    
-    theme = config_manager.get_item("machine_settings", "theme", "System")
-    ctk.set_appearance_mode(theme)
-    
-    ctk.set_default_color_theme("blue")
+    try:
+        setup_app_id()
+        base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        config_path = os.path.join(base_dir, "alig_config.json")
+        config_manager = ConfigManager(config_path)
 
-    app = LaserGeneratorApp(config_manager=config_manager)
-    app.mainloop()
+        theme = config_manager.get_item("machine_settings", "theme", "System")
+        ctk.set_appearance_mode(theme)
+        ctk.set_default_color_theme("blue")
+
+
+        app = LaserGeneratorApp(config_manager=config_manager)
+
+
+        app.mainloop()
+
+    except Exception:
+        error_message = traceback.format_exc()
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            error_message,
+            "ALIG - Fatal Error",
+            0x10
+        )
+
 
 if __name__ == "__main__":
     main()

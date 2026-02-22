@@ -3,7 +3,7 @@ import customtkinter as ctk
 import os
 from PIL import Image
 from core.translations import TRANSLATIONS
-from utils.paths import RASTER_LIGHT, RASTER_DARK
+from utils.paths import RASTER_LIGHT, RASTER_DARK, THUMBNAILS_DIR
 
 class DashboardView(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -83,6 +83,9 @@ class DashboardView(ctk.CTkFrame):
         self.last_columns = 0
         self.all_thumbnails = [] # Liste pour stocker les images
         self.last_width = 0
+
+        if not os.path.exists(THUMBNAILS_DIR):
+            os.makedirs(THUMBNAILS_DIR, exist_ok=True)
         
         self.load_thumbnails() 
 
@@ -98,24 +101,31 @@ class DashboardView(ctk.CTkFrame):
 
     def load_thumbnails(self):
         """Lit les fichiers sur le disque et prépare les objets images"""
-        thumb_dir = "assets/thumbnails"
+        # Utilisation du chemin universel défini dans paths.py
+        thumb_dir = THUMBNAILS_DIR 
         self.all_thumbnails = []
         
         if os.path.exists(thumb_dir):
-            files = [f for f in os.listdir(thumb_dir) if f.endswith(".png")]
-            files.sort(reverse=True)
+            # Filtrage et tri des fichiers
+            files = [f for f in os.listdir(thumb_dir) if f.lower().endswith(".png")]
+            files.sort(key=lambda x: os.path.getmtime(os.path.join(thumb_dir, x)), reverse=True)
+            
             for file in files:
                 try:
                     path = os.path.join(thumb_dir, file)
                     img_data = Image.open(path)
+                    # On garde un ratio carré de 200x200
                     ctk_img = ctk.CTkImage(light_image=img_data, dark_image=img_data, size=(200, 200))
                     self.all_thumbnails.append(ctk_img)
-                except:
+                except Exception as e:
+                    print(f"Erreur chargement vignette {file}: {e}")
                     continue
+        
         self.render_grid()
 
     def render_grid(self):
         """Réorganise les labels dans la grille selon la largeur disponible"""
+        # Nettoyage sécurisé
         for widget in self.scroll_thumbs.winfo_children():
             widget.destroy()
 
@@ -124,32 +134,29 @@ class DashboardView(ctk.CTkFrame):
             lbl.pack(pady=50)
             return
 
-        # On force la mise à jour pour obtenir la largeur réelle si possible
+        # Calcul dynamique des colonnes
         self.scroll_thumbs.update_idletasks()
         container_width = self.scroll_thumbs.winfo_width()
 
-        # Si le widget n'est pas encore affiché (largeur <= 1), 
-        # on part sur une base de 3 colonnes par défaut pour éviter la colonne unique
-        if container_width <= 1:
-            num_cols = 3
+        # Ajustement de la largeur de cellule (Image 200 + Padding 16)
+        cell_width = 200 + 16 
+        
+        if container_width <= 100: # Cas où le widget n'est pas encore dessiné
+            num_cols = 2
         else:
-            cell_width = 200 + 20 # Image (130) + Padding (10 de chaque côté)
             num_cols = max(1, (container_width - 30) // cell_width)
 
-        # IMPORTANT : On réinitialise la configuration des colonnes
-        # pour éviter que les réglages d'un ancien redimensionnement persistent
-        for i in range(20): # On nettoie les 20 premières colonnes potentielles
+        # Reset et configuration des colonnes
+        for i in range(10): # Nettoyage des anciennes colonnes
             self.scroll_thumbs.grid_columnconfigure(i, weight=0)
-
         for i in range(num_cols):
             self.scroll_thumbs.grid_columnconfigure(i, weight=1)
 
-        # Placement
+        # Placement des vignettes
         for i, ctk_img in enumerate(self.all_thumbnails):
             row = i // num_cols
             col = i % num_cols
             
-            # Utilisation d'un bouton ou label
             btn = ctk.CTkLabel(self.scroll_thumbs, image=ctk_img, text="", cursor="hand2")
             btn.grid(row=row, column=col, padx=8, pady=8)
 

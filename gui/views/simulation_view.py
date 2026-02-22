@@ -51,6 +51,7 @@ class SimulationView(ctk.CTkFrame):
         self.last_mouse_coords = (0, 0)
         self.sim_speed = 1.0 
         self.last_drawn_idx = -1
+        self.latence_switch = None
         # --- ÉTATS DE TEMPS POUR LA SIMULATION ---
         self.current_sim_time = 0.0  # Temps écoulé dans la simulation (secondes)
         self.total_sim_dur = 0.0     # Durée totale calculée dans _async_generation
@@ -1064,9 +1065,15 @@ class SimulationView(ctk.CTkFrame):
         self.last_frame_time = now
         self.current_sim_time += dt
 
-        # On utilise l’état figé si présent
-        is_switch_on = getattr(self, "active_latence",
-                            self.latence_switch.get())
+        # 1. On vérifie d'abord si on a un état figé
+        if hasattr(self, "active_latence"):
+            is_switch_on = self.active_latence
+        # 2. Sinon on vérifie si le switch existe et on prend sa valeur
+        elif self.latence_switch is not None:
+            is_switch_on = self.latence_switch.get()
+        # 3. Par défaut, pas de latence
+        else:
+            is_switch_on = False
 
         latence_mm = getattr(
             self,
@@ -1282,102 +1289,94 @@ class SimulationView(ctk.CTkFrame):
         self.sync_sim_to_index(self.current_point_idx)
 
     def _redraw_up_to(self, target_idx):
-        """Redessine tout avec la latence capturée lors de la génération."""
         if self.points_list is None or len(self.points_list) < 2:
             return
 
-        # Sécurité sur l'index
         last_idx = len(self.points_list) - 1
         target_idx = min(target_idx, last_idx)
 
-        # 1. Reset complet de l'image (Fond blanc)
+        # 1. Reset de la matrice
         self.display_data.fill(255)
 
-        # 2. On lit l'état RÉEL du bouton
+        # 2. CACHE LOCAL : C'est le secret de la vitesse en Python
+        # Accéder à une variable locale est bcp plus rapide qu'un attribut d'objet (self)
+        points = self.points_list
+        draw_func = self._draw_segment
         is_switch_on = self.latence_switch.get() if self.latence_switch is not None else False
+        lat_mm = self.latence_mm
         
-        # On récupère la valeur FIGÉE lors de la génération (active_latence_mm)
-        # On utilise getattr par sécurité pour éviter un crash si la variable n'existe pas
-
-
-        # DEBUG : Pour confirmer que la valeur n'est plus à 0
-        # print(f"DEBUG REDRAW: Latence={latence_mm}mm, ON={is_switch_on}")
-
-        # 3. Boucle de dessin optimisée
+        # 3. Boucle resserrée au maximum
         start_scan = self.framing_end_idx
-        
         for i in range(start_scan, target_idx):
-            p1 = self.points_list[i]
-            p2 = self.points_list[i + 1]
+            # On passe directement les références locales
+            draw_func(points[i], points[i + 1], is_switch_on, lat_mm)
 
-            # On passe la valeur récupérée à draw_segment
-            self._draw_segment(p1, p2, is_switch_on, self.latence_mm)
-
-        # 4. Mise à jour de l'affichage
+        # 4. Mise à jour UI UNIQUE
         self.update_graphics()
 
+
     def _draw_segment(self, p1, p2, is_switch_on, latence_mm):
-        # --- Ignore segment inutile ---
-        if (p1[0] == p2[0] and p1[1] == p2[1]) or p2[2] <= 0:
+        # Sortie ultra-rapide si puissance nulle (G0)
+        p2_pow = p2[2]
+        if p2_pow <= 0:
             return
 
-        # ---------------------------------------------------
-        # Correction latence
-        # ---------------------------------------------------
-        corr_x = 0.0
-        if is_switch_on and abs(p2[0] - p1[0]) > 1e-6:
-            dx_machine = p2[0] - p1[0]
-            # Convention : déplacement droite → compensation gauche
-            corr_x = latence_mm if dx_machine > 0 else -latence_mm
+        # Cache des coordonnées pour éviter les indexations multiples
+        x1, y1 = p1[0], p1[1]
+        x2, y2 = p2[0], p2[1]
 
-        # ---------------------------------------------------
-        # Projection écran (On reste en FLOAT ici)
-        # ---------------------------------------------------
-        ix1, iy1 = self.screen_index(p1[0] + corr_x, p1[1])
-        ix2, iy2 = self.screen_index(p2[0] + corr_x, p2[1])
+        # Correction latence
+        if is_switch_on:
+            dx_m = x2 - x1
+            if dx_m > 1e-6:
+                x1 += latence_mm
+                x2 += latence_mm
+            elif dx_m < -1e-6:
+                x1 -= latence_mm
+                x2 -= latence_mm
+
+        # Inlining de screen_index (Calcul direct sans appel de fonction)
+        # Gain énorme sur 200 000 appels
+        sc = self.scale
+        mx = self.min_x_machine
+        my = self.min_y_machine
+        th = self.total_px_h
+
+        ix1 = (x1 - mx) * sc
+        iy1 = th - (y1 - my) * sc
+        ix2 = (x2 - mx) * sc
+        iy2 = th - (y2 - my) * sc
 
         dx = ix2 - ix1
         dy = iy2 - iy1
-        length = (dx**2 + dy**2)**0.5
+        dist_sq = dx*dx + dy*dy
 
-        if length < 0.0001:
+        # Si le segment est trop petit pour être visible, on ignore
+        if dist_sq < 0.25: # Moins de 0.5 pixel
             return
 
-        # ---------------------------------------------------
-        # Géométrie du rectangle (Précision Sub-pixel)
-        # ---------------------------------------------------
-        thickness = max(1.0, self.laser_width_px)
-        half_th = thickness / 2.0
+        length = dist_sq**0.5
+        
+        # Calcul des normales
+        half_th = max(1.0, self.laser_width_px) * 0.5
+        nx = (-dy / length) * half_th
+        ny = (dx / length) * half_th
 
-        nx = -dy / length
-        ny = dx / length
+        # On prépare les points pour fillPoly avec SHIFT 4 (précision sub-pixel)
+        # On multiplie par 16 une seule fois ici
+        pts = np.array([
+            [(ix1 + nx) * 16, (iy1 + ny) * 16],
+            [(ix1 - nx) * 16, (iy1 - ny) * 16],
+            [(ix2 - nx) * 16, (iy2 - ny) * 16],
+            [(ix2 + nx) * 16, (iy2 + ny) * 16]
+        ], dtype=np.int32)
 
-        # On calcule les coins en FLOAT
-        pts_float = np.array([
-            [ix1 + nx * half_th, iy1 + ny * half_th],
-            [ix1 - nx * half_th, iy1 - ny * half_th],
-            [ix2 - nx * half_th, iy2 - ny * half_th],
-            [ix2 + nx * half_th, iy2 + ny * half_th]
-        ], dtype=np.float32)
-
-        # ⭐ LE SECRET : Passer en coordonnées shiftées pour OpenCV
-        # On multiplie par 16 (2^4) pour garder 4 bits de précision sub-pixel
-        SHIFT = 4
-        FACTOR = 2**SHIFT
-        pts_fixed = (pts_float * FACTOR).astype(np.int32)
-
-        # ---------------------------------------------------
-        # Intensity mapping
-        # ---------------------------------------------------
-        ratio = max(0.0, min(1.0, float(p2[2]) / self.ctrl_max))
-        color_val = int(round(255.0 * (1.0 - ratio)))
-        color_tuple = (color_val, color_val, color_val)
-
-        # Dessin avec l'argument shift
-        # Cela force OpenCV à faire l'antialiasing interne correctement
-        cv2.fillPoly(self.display_data, [pts_fixed], color_tuple, lineType=cv2.LINE_8, shift=SHIFT)
-
-
+        # Calcul couleur
+        c = int(255 * (1.0 - (p2_pow / self.ctrl_max)))
+        
+        # Appel OpenCV (Passer l'entier directement au lieu d'un tuple si c'est du grayscale)
+        cv2.fillPoly(self.display_data, [pts], c, lineType=cv2.LINE_8, shift=4)
+        
     #     thickness = int(round(max(1.0, self.laser_width_px)))
 
     #     # ---------------------------------------------------

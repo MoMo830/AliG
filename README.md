@@ -85,7 +85,7 @@ If you just want to use the software without installing Python, follow these ste
 </details>
 
 
-## Roadmap
+## Roadmap & Known Issues
 
 ### Phase 1: Core Stability & UX (Towards v1.0)
 * **Comprehensive Raster Toolkit:** Finalizing the entire user interface to provide a rock-solid, streamlined environment dedicated to high-performance rastering.
@@ -113,6 +113,11 @@ If you just want to use the software without installing Python, follow these ste
 * **[Under consideration] Diagonal Rastering (45°):** Advanced trajectory logic to engrave at 45-degree angles.
 * **[Theoretical] Hybrid Engine:** Implementation of SVG path parsing to allow hybrid projects (Raster engraving + Vector cutting) in a single G-code file.
 * **[In discussion] 3D Relief Engraving Mode:** Implementation of multi-pass logic with Z-axis decrement for deep carving. *Currently seeking user feedback/interest due to hardware power constraints.*
+
+### Known Issues: 
+* Simulation is not yet pixel-perfect.
+* Translations not yet finished.
+
 
 ---
 

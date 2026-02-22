@@ -5,61 +5,79 @@ from tkinter import messagebox
 from core.translations import TRANSLATIONS
 import webbrowser
 from PIL import Image, ImageTk
-from utils.paths import LOGO_ALIG, HOME_DARK, HOME_LIGHT
+from utils import paths
 import ctypes
 
 class LaserGeneratorApp(ctk.CTk):
     def __init__(self, config_manager):
         super().__init__()
-        
+
+        # On cache la fenêtre immédiatement
+        self.attributes('-alpha', 0)
+
         # 1. Ressources et Configuration
         self.config_manager = config_manager
+        paths.load_all_images()
+
         lang = self.config_manager.get_item("machine_settings", "language", "English")
         self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
+
         self.version = "0.98b"
         self.title(f"A.L.I.G. - Advanced Laser Imaging Generator v{self.version}")
         self.current_view = None
 
-
         # 2. Configuration Système (Fenêtre & Icône)
+        # load_window_config va définir la taille et le state('zoomed') si besoin
         self.load_window_config()
         self._setup_icon()
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-        # 3. Layout Principal
+        # 3. Layout principal (préparation en arrière-plan)
         self.setup_top_bar()
-
         self.container = ctk.CTkFrame(self, fg_color="transparent")
         self.container.pack(fill="both", expand=True)
 
-        # 4. Lancement de la vue initiale
+        # 4. Charger la vue (le Dashboard se construit alors que la fenêtre est invisible)
         self.show_dashboard()
 
+        # 5. RÉVÉLATION : On attend 200ms que tout soit stable avant de montrer
+        self.after(200, self._reveal_window)
+
+    def _reveal_window(self):
+        """Affiche la fenêtre proprement en restaurant l'opacité."""
+        # On s'assure qu'elle est bien là
+        self.deiconify() 
+        # On remet l'opacité à 1 (100% visible)
+        self.attributes('-alpha', 1)
+        self.focus_force()
 
     # --- Gestion de l'Interface Système ---
 
     def _setup_icon(self):
         """Configure l'icône de la fenêtre et force l'affichage en barre des tâches."""
-        if os.path.exists(LOGO_ALIG):
-            try:
-                # 1. Détacher du processus Python (indispensable sous Windows)
-                myappid = f'momo.alig.lasergenerator.{self.version}' 
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-                
-                # 2. Méthode iconbitmap (pour le coin de la fenêtre)
-                self.iconbitmap(LOGO_ALIG)
-                
-                # 3. Méthode iconphoto (pour la barre des tâches - Force Windows à rafraîchir)
-                # On utilise PIL pour charger l'image
-                from PIL import Image
-                img = Image.open(LOGO_ALIG)
-                self.icon_photo = ImageTk.PhotoImage(img) # Garder une référence !
-                self.wm_iconphoto(True, self.icon_photo)
-                
-            except Exception as e:
-                print(f"DEBUG: Icon error: {e}")
-        else:
-            print(f"DEBUG: Icon not found at: {LOGO_ALIG}")
+        if not os.path.exists(paths.LOGO_ALIG):
+            print(f"DEBUG: Icon not found at: {paths.LOGO_ALIG}")
+            return
+
+        try:
+            # 1. Windows App ID (important pour barre des tâches)
+            myappid = f'momo.alig.lasergenerator.{self.version}'
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
+            # 2. Icon fenêtre classique
+            self.iconbitmap(paths.LOGO_ALIG)
+
+            # 3. PIL load icon
+            img = Image.open(paths.LOGO_ALIG)
+
+            self.icon_photo = ImageTk.PhotoImage(img)
+
+            self._icon_ref = self.icon_photo
+
+            self.wm_iconphoto(True, self.icon_photo)
+
+        except Exception as e:
+            print(f"DEBUG: Icon error: {e}")
 
     def load_window_config(self):
         """Initialise la taille et la position de la fenêtre via le ConfigManager."""
@@ -68,12 +86,20 @@ class LaserGeneratorApp(ctk.CTk):
         default_geom = "1300x900+50+50"
         geom = data.get("geometry", default_geom)
         
-        # Validation et application de la géométrie
-        self.geometry(self._validate_geometry(geom))
+        # 1. On force Tkinter à lire les infos système (résolution, DPI)
+        self.update_idletasks()
         
-        # Application de l'état agrandi si nécessaire
+        # 2. On valide et on applique la géométrie
+        valid_geom = self._validate_geometry(geom)
+        self.geometry(valid_geom)
+        
+        # 3. On s'assure que la fenêtre est bien visible et non iconifiée
+        self.deiconify()
+        
+        # 4. Application de l'état agrandi avec un délai légèrement plus long
+        # Cela laisse le temps au gestionnaire de fenêtres Windows de stabiliser la position
         if data.get("is_maximized", False):
-            self.after(100, lambda: self.state('zoomed'))
+            self.after(200, lambda: self.state('zoomed'))
 
     def save_window_config(self):
             """Récupère l'état actuel et le transmet au manager pour sauvegarde."""
@@ -93,17 +119,39 @@ class LaserGeneratorApp(ctk.CTk):
             self.config_manager.save()
 
     def _validate_geometry(self, geom_string):
-        """Empêche la fenêtre de s'ouvrir hors des limites de l'écran."""
+        """Empêche la fenêtre de s'ouvrir hors des limites de l'écran ou d'être invisible."""
+        default_res = "1300x900+50+50"
         try:
+            # Extraction des données
             parts = geom_string.replace('x', '+').split('+')
+            if len(parts) < 4: return default_res
+            
             w, h, x, y = map(int, parts)
             
-            # On vérifie si le coin haut-gauche est visible
-            if x < 0 or y < 0 or x > self.winfo_screenwidth() - 100 or y > self.winfo_screenheight() - 100:
-                return "1300x900+50+50"
+            # On récupère la résolution actuelle
+            # update_idletasks permet de rafraîchir les infos système de Tkinter
+            self.update_idletasks()
+            sw = self.winfo_screenwidth()
+            sh = self.winfo_screenheight()
+
+            # --- SÉCURITÉS ---
+            # 1. Si sw/sh sont trop petits (bug d'init), on accepte la géométrie sans valider
+            if sw <= 100: return geom_string 
+            
+            # 2. Vérifier que la fenêtre n'est pas hors écran à droite ou en bas
+            if x > sw - 100 or y > sh - 100: return default_res
+            
+            # 3. Vérifier que la fenêtre n'est pas perdue dans les coordonnées négatives 
+            # (Sauf si x < -10 car Windows met parfois de petites marges négatives en plein écran)
+            if x < -20 or y < -20: return default_res
+
+            # 4. Vérifier que la taille n'est pas minuscule
+            if w < 400 or h < 300: return default_res
+
             return geom_string
-        except:
-            return "1300x900+50+50"
+        except Exception as e:
+            print(f"DEBUG: Erreur validation géométrie: {e}")
+            return default_res
 
     # --- Gestion du Routage (Vues) ---
 
@@ -121,12 +169,19 @@ class LaserGeneratorApp(ctk.CTk):
             widget.destroy()
 
     def show_dashboard(self):
+        # Sécurité : Si on est déjà sur le dashboard, on ne fait rien
+        from gui.views.dashboard_view import DashboardView
+        if isinstance(self.current_view, DashboardView):
+            return
+
         self._clear_container()
         
+        # Mise à jour du titre de la topbar
         self.view_title.configure(text=self.texts.get("dashboard", "DASHBOARD"))
         
-        from gui.views.dashboard_view import DashboardView
+        # Création de la vue (le __init__ de DashboardView appelle déjà load_thumbnails)
         self.current_view = DashboardView(self.container, self)
+        
         self.current_view.pack(fill="both", expand=True)
 
     def show_raster_mode(self, image_to_load=None, reset_filters=False):
@@ -191,8 +246,8 @@ class LaserGeneratorApp(ctk.CTk):
 
         # Bouton Home
         home_image = ctk.CTkImage(
-            light_image=HOME_LIGHT,
-            dark_image=HOME_DARK,
+            light_image=paths.HOME_LIGHT,
+            dark_image=paths.HOME_DARK,
             size=(20, 20) # Ajuste la taille selon tes besoins
         )
         self.home_btn = ctk.CTkButton(
