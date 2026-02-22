@@ -158,7 +158,7 @@ A.L.I.G. is a free project, developed during their spare time by a world-class t
 > - Check overscan travel limits
 > - Inspect generated G-code before execution
 >
-> Full safety documentation is available in the Wiki.
+> Full safety documentation is available in the [Wiki](https://github.com/MoMo830/AliG/wiki).
 
 
 
