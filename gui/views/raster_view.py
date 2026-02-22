@@ -440,6 +440,8 @@ class RasterView(ctk.CTkFrame):
             height=28,
         )
         self.raster_dir_btn.pack(pady=(0, 10), padx=10, fill="x")
+        self.raster_dir_btn.set("Horizontal")
+        self.raster_dir_btn.configure(state="disabled")
         
         # --- SUITE DE LA GÉOMÉTRIE ---
         self.create_dropdown_pair(t_geo, self.common["origin_point"], ["Lower-Left", "Upper-Left", "Lower-Right", "Upper-Right", "Center", "Custom"], "origin_mode")
@@ -478,7 +480,7 @@ class RasterView(ctk.CTkFrame):
         self.power_viz = PowerRangeVisualizer(p_cont, self.controls["min_p"]["entry"], self.controls["max_p"]["entry"], self.update_preview)
         self.power_viz.pack(side="right", padx=(5, 0))
 
-        self.create_input_pair(t_laser, self.common["laser_latency"], -20, 20, -11.5, "m67_delay")
+        self.create_input_pair(t_laser, self.common["laser_latency"], -20, 20, 0, "m67_delay")
         self.create_input_pair(t_laser, self.common["gray_steps"], 2, 256, 256, "gray_steps", is_int=True)
 
         # --- TAB 4: G-CODE ---

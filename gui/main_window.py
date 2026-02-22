@@ -4,7 +4,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 from core.translations import TRANSLATIONS
 import webbrowser
-from PIL import Image
+from PIL import Image, ImageTk
 from utils.paths import LOGO_ALIG, HOME_DARK, HOME_LIGHT
 import ctypes
 
@@ -16,7 +16,7 @@ class LaserGeneratorApp(ctk.CTk):
         self.config_manager = config_manager
         lang = self.config_manager.get_item("machine_settings", "language", "English")
         self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
-        self.version = "0.9783b"
+        self.version = "0.98b"
         self.title(f"A.L.I.G. - Advanced Laser Imaging Generator v{self.version}")
         self.current_view = None
 
@@ -42,20 +42,25 @@ class LaserGeneratorApp(ctk.CTk):
         """Configure l'icône de la fenêtre et force l'affichage en barre des tâches."""
         if os.path.exists(LOGO_ALIG):
             try:
-                # ÉTAPE CRUCIALE POUR WINDOWS :
-                # On définit un identifiant unique pour le processus.
-                # Cela détache le script de l'icône "Python" (ou la plume Tkinter).
+                # 1. Détacher du processus Python (indispensable sous Windows)
                 myappid = f'momo.alig.lasergenerator.{self.version}' 
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
                 
-                # Appliquer l'icône à la fenêtre
+                # 2. Méthode iconbitmap (pour le coin de la fenêtre)
                 self.iconbitmap(LOGO_ALIG)
+                
+                # 3. Méthode iconphoto (pour la barre des tâches - Force Windows à rafraîchir)
+                # On utilise PIL pour charger l'image
+                from PIL import Image
+                img = Image.open(LOGO_ALIG)
+                self.icon_photo = ImageTk.PhotoImage(img) # Garder une référence !
+                self.wm_iconphoto(True, self.icon_photo)
                 
             except Exception as e:
                 print(f"DEBUG: Icon error: {e}")
         else:
             print(f"DEBUG: Icon not found at: {LOGO_ALIG}")
-            
+
     def load_window_config(self):
         """Initialise la taille et la position de la fenêtre via le ConfigManager."""
         data = self.config_manager.get_section("window_settings")

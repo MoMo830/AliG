@@ -114,7 +114,7 @@ class SettingsView(ctk.CTkFrame):
         self.create_dropdown_pair(self.current_sec, self.texts["label_firing"], ["M3/M5", "M4/M5"], "firing_mode")
 
         self.create_section(self.left_col, self.texts["sec_hardware"])
-        self.create_input_pair(self.current_sec, self.texts["label_latency"], 0, 50, 11.5, "m67_delay")
+        self.create_input_pair(self.current_sec, self.texts["label_latency"], -20,20, 0, "m67_delay")
         self.create_input_pair(self.current_sec, self.texts["label_overscan"], 0, 50, 10.0, "premove")
 
         self.create_section(self.left_col, self.texts["sec_scripts"])

@@ -14,12 +14,12 @@ Description:
 GitHub: https://github.com/MoMo830/ALIG
 """
 
-import json
 import os
 import customtkinter as ctk
 from gui.main_window import LaserGeneratorApp
 from utils.gui_utils import setup_app_id
 from utils.config_manager import ConfigManager
+import ctypes
 
 
 def main():

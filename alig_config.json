@@ -4,11 +4,16 @@
         "geometry": "1851x1019+50+50"
     },
     "machine_settings": {
+        "theme": "System",
+        "language": "Fran\u00e7ais",
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
         "m67_e_num": 0,
         "ctrl_max": 100,
-        "m67_delay": 0.0
+        "m67_delay": 0.0,
+        "premove": 10.0,
+        "custom_header": "",
+        "custom_footer": ""
     },
     "raster_settings": {
         "width": 40.0,
