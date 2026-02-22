@@ -21,7 +21,7 @@
     </td>
     <td align="center" style="border: none; padding: 5px; width: 50%;">
       <img src="Ressources/ALIG_settings.jpg" alt="ALIG Settings" width="100%">
-      <p><sub><b>Settings view</b></sub></p>
+      <p><sub><b>Hardware & Power Settings Panel</b></sub></p>
     </td>
   </tr>
 </table>
