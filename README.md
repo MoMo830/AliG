@@ -116,6 +116,7 @@ If you just want to use the software without installing Python, follow these ste
 
 ### Known Issues: 
 * Simulation is not yet pixel-perfect.
+* Framing during simulation not rendering correctly.
 * Translations not yet finished.
 
 
