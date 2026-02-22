@@ -273,13 +273,13 @@ class SimulationView(ctk.CTkFrame):
 
         # B. Affichage conditionnel du switch de latence
         if hasattr(self, 'latence_switch') and self.latence_switch is not None:
-            if self.latence_mm > 0:
-                # On ré-affiche le switch s'il était caché
+            # On vérifie si la latence est non-nulle (positive ou négative)
+            if abs(self.latence_mm) > 1e-6: 
+                # On ré-affiche le switch
                 self.latence_switch.pack(pady=(5, 10), padx=10)
-                # Optionnel : On le remet à OFF par défaut à chaque nouvelle génération
-                self.latence_switch.deselect()
+                # self.latence_switch.deselect() # Optionnel
             else:
-                # On cache le switch car la latence est nulle
+                # On cache le switch car la latence est strictement nulle
                 self.latence_switch.pack_forget()
 
         # 4. Injection G-Code
