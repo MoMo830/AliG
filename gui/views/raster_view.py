@@ -1221,7 +1221,8 @@ class RasterView(ctk.CTkFrame):
                 'version': self.version,
                 'mode': current_cmd_mode.split(' ')[0],
                 'firing_cmd': current_firing_mode.split('/')[0],
-                'file_name': os.path.basename(self.input_image_path).split('.')[0] + ".nc" if self.input_image_path else "export.nc",
+                'file_extension': self.app.config_manager.get_item("machine_settings", "gcode_extension", ".nc"),
+                'file_name': (os.path.basename(self.input_image_path).split('.')[0] if self.input_image_path else "export"),
                 'output_dir': self.output_dir, 
                 'origin_mode': current_origin_mode,
                 'real_w': real_w, 
@@ -1230,7 +1231,6 @@ class RasterView(ctk.CTkFrame):
                 'raster_direction': current_raster_mode 
             }
         }
-
         # --- 4. LANCEMENT ---
         self.app.show_simulation(
             self.engine, 

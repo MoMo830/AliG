@@ -8,6 +8,7 @@
         "language": "Fran\u00e7ais",
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
+        "gcode_extension": ".nc",
         "m67_e_num": 0,
         "ctrl_max": 100,
         "m67_delay": -11.5,
@@ -43,9 +44,9 @@
         "invert_relief": false
     },
     "stats": {
-        "total_lines": 57342,
-        "total_gcodes": 2,
-        "total_time_seconds": 613.56494140625,
-        "last_project_time": 306.782470703125
+        "total_lines": 544526,
+        "total_gcodes": 10,
+        "total_time_seconds": 6525.81103515625,
+        "last_project_time": 739.0307006835938
     }
 }

@@ -112,6 +112,7 @@ class SettingsView(ctk.CTkFrame):
         self.create_simple_input(self.current_sec, self.texts["label_output_e"], 0, "m67_e_num", precision=0)
         self.create_simple_input(self.current_sec, self.texts["label_ctrl_max"], 100, "ctrl_max", precision=0)
         self.create_dropdown_pair(self.current_sec, self.texts["label_firing"], ["M3/M5", "M4/M5"], "firing_mode")
+        self.create_simple_input(self.current_sec, self.texts.get("label_extension", "Export Extension"), ".nc", "gcode_extension")
 
         self.create_section(self.left_col, self.texts["sec_hardware"])
         self.create_input_pair(self.current_sec, self.texts["label_latency"], -20,20, 0, "m67_delay")
@@ -304,24 +305,29 @@ class SettingsView(ctk.CTkFrame):
         ))
 
     def load_settings(self):
+        self.loading = True  # Bloque temporairement les événements de modification
         data = self.app.config_manager.get_section("machine_settings")
         
+        if not data:
+            self.loading = False
+            return
+
+        # 1. Menus déroulants et Options Segmentées
         self.appearance_mode.set(data.get("theme", "System"))
         self.app_language.set(data.get("language", "English"))
-        
-
         self.cmd_mode.set(data.get("cmd_mode", "M67 (Analog)"))
         self.firing_mode.set(data.get("firing_mode", "M3/M5"))
 
-        if not data: 
-            return
-
-    
-        for key in ["m67_e_num", "ctrl_max"]:
+        # 2. Champs de texte simples (Nombres entiers et Extension)
+        # On ajoute "gcode_extension" à la boucle des entrées textuelles
+        for key in ["m67_e_num", "ctrl_max", "gcode_extension"]:
             if key in data and key in self.controls:
+                # Valeur par défaut spécifique pour l'extension si vide dans le JSON
+                val = data.get(key, ".nc" if key == "gcode_extension" else "0")
                 self.controls[key]["entry"].delete(0, tk.END)
-                self.controls[key]["entry"].insert(0, str(data[key]))
+                self.controls[key]["entry"].insert(0, str(val))
         
+        # 3. Sliders avec entrées numériques (Précision float)
         for key in ["m67_delay", "premove"]:
             if key in data and key in self.controls:
                 val = float(data[key])
@@ -329,6 +335,7 @@ class SettingsView(ctk.CTkFrame):
                 self.controls[key]["entry"].delete(0, tk.END)
                 self.controls[key]["entry"].insert(0, f"{val:.2f}")
         
+        # 4. Blocs de texte (Scripts)
         if "custom_header" in data:
             self.txt_header.delete("1.0", tk.END)
             self.txt_header.insert("1.0", data["custom_header"])
@@ -336,9 +343,15 @@ class SettingsView(ctk.CTkFrame):
             self.txt_footer.delete("1.0", tk.END)
             self.txt_footer.insert("1.0", data["custom_footer"])
 
+        # 5. Switches (Paramètres d'affichage)
         if "enable_thumbnails" in data:
-            if data["enable_thumbnails"]: self.sw_thumbnails.select()
-            else: self.sw_thumbnails.deselect()
+            if data["enable_thumbnails"]: 
+                self.sw_thumbnails.select()
+            else: 
+                self.sw_thumbnails.deselect()
+
+        self.loading = False
+        self.has_changes = False # On réinitialise l'état après chargement
 
     def save_all_settings(self):
         try:
@@ -347,12 +360,20 @@ class SettingsView(ctk.CTkFrame):
             
             current_lang = self.app.config_manager.get_item("machine_settings", "language", "English")
             new_lang = self.app_language.get()
+
+            ext = self.controls["gcode_extension"]["entry"].get().strip().lower()
+            if ext and not ext.startswith("."):
+                ext = "." + ext
+            # Sécurité si le champ est vide
+            if not ext or ext == ".":
+                ext = ".nc"
             
             machine_data = {
                 "theme": self.appearance_mode.get(),
                 "language": new_lang,
                 "cmd_mode": self.cmd_mode.get(),
                 "firing_mode": self.firing_mode.get(),
+                "gcode_extension": ext,
                 "m67_e_num": int(self.controls["m67_e_num"]["entry"].get()),
                 "ctrl_max": int(self.controls["ctrl_max"]["entry"].get()),
                 "m67_delay": float(self.controls["m67_delay"]["slider"].get()),

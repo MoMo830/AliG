@@ -140,25 +140,41 @@ def ask_confirmation(parent, message, action_callback, danger_color="#8b0000"):
     )
     btn_confirm.pack(side="left", padx=10)
 
-def truncate_path(path, max_length=60): # Augmenté à 60 par défaut
+def truncate_path(path, max_length=60):
     if not path or len(path) <= max_length:
         return path
     
     path = path.replace("\\", "/")
+    
+    # Gestion des chemins réseau (commençant par //)
+    prefix = ""
+    if path.startswith("//"):
+        prefix = "//"
+        path = path[2:]
+    
     parts = path.split("/")
     filename = parts[-1]
-    drive = parts[0] + "/"
     
-    # Si le nom du fichier seul est déjà trop long
-    if len(filename) > max_length - 10:
-        return f"{drive}...{filename[-(max_length-15):]}"
+    # On définit le début (Drive ou premier dossier)
+    start_part = prefix + parts[0]
     
-    # On construit la fin en gardant le nom du fichier
-    # et on essaie de garder le dossier parent direct
-    end_part = filename
-    if len(parts) > 2:
-        parent_folder = parts[-2]
-        if len(drive) + len(parent_folder) + len(filename) + 5 <= max_length:
-            end_part = f"{parent_folder}/{filename}"
+    # Si le nom de fichier lui-même est plus long que la limite
+    if len(filename) >= max_length - 5:
+        # On garde le début de l'extension
+        name_part, ext_part = (filename.rsplit('.', 1) + [""])[:2]
+        if ext_part:
+            ext_part = "." + ext_part
+        
+        # On coupe le nom de fichier au milieu pour garder l'extension
+        remaining_space = max_length - len(start_part) - len(ext_part) - 5
+        return f"{start_part}/...{name_part[-remaining_space:]}{ext_part}"
 
-    return f"{drive}.../{end_part}"
+    # Tentative d'inclure le dossier parent si possible
+    if len(parts) > 2:
+        parent = parts[-2]
+        # Si (Debut + Parent + Fichier) entre dans la limite
+        if len(start_part) + len(parent) + len(filename) + 5 <= max_length:
+            return f"{start_part}/.../{parent}/{filename}"
+    
+    # Sinon, simple Debut + ... + Fichier
+    return f"{start_part}/.../{filename}"

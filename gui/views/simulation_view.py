@@ -12,9 +12,9 @@ import os
 import time
 import re
 from PIL import Image,ImageTk, ImageDraw
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import cv2
-import bisect
+
 
 from engine.gcode_parser import GCodeParser
 from core.utils import save_dashboard_data, truncate_path
@@ -402,13 +402,34 @@ class SimulationView(ctk.CTkFrame):
         
         self._add_stat(info_container, "Final Size (mm):", f"{w_mm:.2f}x{h_mm:.2f}")
 
-        # --- CHEMIN DE SORTIE ---
-        out_dir = payload.get('metadata', {}).get('output_dir', 'C:/')
-        out_name = payload.get('metadata', {}).get('file_name', 'output.nc')
-        full_path = os.path.join(out_dir, out_name).replace("\\", "/")
-        
-        # Note: _add_stat doit maintenant stocker le label dans self.path_label (voir modif plus bas)
-        self._add_stat(info_container, "Output Path:", full_path, is_path=True)
+        # --- CHEMIN DE SORTIE  ---
+
+        # --- CHEMIN DE SORTIE (Calcul via Payload) ---
+        meta = self.payload.get('metadata', {}) # Utilise self.payload
+        out_dir = meta.get('output_dir', 'C:/')
+
+        # 1. Récupération de l'extension
+        # Si 'file_extension' n'existe pas dans le payload, on met ".nc" par défaut
+        extension = meta.get('file_extension', '.nc')
+        print(f"DEBUG: extension = {extension}")
+
+        # 2. Récupération du nom
+        raw_name = meta.get('file_name', 'export')
+
+        # 3. Assemblage forcé (On ignore les vérifications de point pour tester)
+        full_filename = f"{raw_name}{extension}"
+
+        # 4. Construction du chemin complet
+        full_path = os.path.join(out_dir, full_filename).replace("\\", "/")
+
+        # IMPORTANT : On stocke pour le bouton QUICK EXPORT
+        self.quick_export_full_path = full_path
+        print(f"DEBUG: full_path = {full_path}")
+
+        # 5. Envoi à l'affichage
+        # On change le label pour "Output File:" pour être plus précis
+        self.full_export_path = full_path # On le stocke ici
+        self._add_stat(info_container, "Output File:", full_path, is_path=True)
 
         # --- ÉCHELLE DE PUISSANCE ---
         params = payload.get('params', {})
@@ -469,15 +490,47 @@ class SimulationView(ctk.CTkFrame):
 
         # --- BLOC BAS (Boutons et Options) ---
         # 1. Conteneur des boutons d'action (CANCEL / EXPORT)
+        # --- Dans setup_ui de SimulationView ---
         btn_act = ctk.CTkFrame(self.left_panel, fg_color="transparent")
         btn_act.pack(fill="x", side="bottom", pady=(0, 15)) 
         
-        ctk.CTkButton(btn_act, text="CANCEL", fg_color="#333", height=30, 
-                      command=self.on_cancel).pack(fill="x", side="bottom", padx=10, pady=5)
+        # Bouton CANCEL (tout en bas)
+        ctk.CTkButton(
+            btn_act, text="CANCEL", fg_color="#333", height=30, 
+            command=self.on_cancel
+        ).pack(fill="x", side="bottom", padx=10, pady=5)
         
-        ctk.CTkButton(btn_act, text="EXPORT GCODE", fg_color="#27ae60", height=40, 
-                      font=("Arial", 11, "bold"), command=self.on_confirm).pack(fill="x", side="bottom", padx=10, pady=5)
+        # Conteneur horizontal pour les exports
+        export_row = ctk.CTkFrame(btn_act, fg_color="transparent")
+        export_row.pack(fill="x", side="bottom", padx=10, pady=5)
 
+        # QUICK EXPORT 
+        # Couleur suggérée :
+        self.btn_export = ctk.CTkButton(
+            export_row, 
+            text="QUICK EXPORT", 
+            fg_color="#2ecc71",      # Vert plus clair et moderne
+            hover_color="#27ae60",   # Teinte un peu plus sombre au survol
+            height=40, 
+            text_color="white",
+            font=("Arial", 11, "bold"), 
+            command=self.on_export
+        )
+        self.btn_export.pack(side="left", expand=True, fill="x", padx=(0, 5))
+
+        # EXPORT AS... 
+        self.btn_export_as = ctk.CTkButton(
+            export_row, 
+            text="Export As...", 
+            command=self.on_export_as,
+            fg_color="#7ac99b", 
+            hover_color="#27ae60",
+            border_width=1, 
+            border_color="#555",
+            height=40,
+            width=100
+        )
+        self.btn_export_as.pack(side="right", expand=True, fill="x")
         # 2. Conteneur des options (Badges et Latence)
         self.options_group_frame = ctk.CTkFrame(self.left_panel, fg_color="#222222", border_width=1, border_color="#444444")
         self.options_group_frame.pack(side="bottom", pady=10, padx=10, fill="x")
@@ -531,29 +584,32 @@ class SimulationView(ctk.CTkFrame):
         if not self.winfo_exists():
             return
 
-        # -----------------------------
-        # GESTION DU CHEMIN
-        # -----------------------------
         if hasattr(self, 'path_label'):
-
             avail_width = width - 30
             min_font = 8
             max_font = 12
 
-            out_dir = self.payload.get('metadata', {}).get('output_dir', '')
-            out_name = self.payload.get('metadata', {}).get('file_name', '')
-            full_path = os.path.join(out_dir, out_name).replace("\\", "/")
+            # --- CORRECTION ICI ---
+            # On utilise le chemin complet calculé au début (qui contient l'extension)
+            # Si pour une raison X il n'existe pas, on met une chaîne vide
+            full_path = getattr(self, 'full_export_path', "")
+            if not full_path:
+                return 
+            # ----------------------
 
             # Test progressif de taille
             for size in range(max_font, min_font - 1, -1):
                 self.path_label.configure(font=("Consolas", size))
                 self.path_label.update_idletasks()
 
-                char_width = self.path_label.winfo_reqwidth() / max(1, len(full_path))
+                # Calcul du ratio largeur/caractère pour estimer max_chars
+                req_w = self.path_label.winfo_reqwidth()
+                char_width = req_w / max(1, len(self.path_label.cget("text")))
 
                 max_chars = int(avail_width / max(char_width, 1))
+                
+                # On tronque à partir du VRAI chemin complet
                 truncated = truncate_path(full_path, max_length=max_chars)
-
                 self.path_label.configure(text=truncated)
 
                 self.path_label.update_idletasks()
@@ -580,39 +636,50 @@ class SimulationView(ctk.CTkFrame):
         frame.pack(fill="x", pady=2)
 
         if is_path:
+            # Titre du chemin (ex: Output File:)
             ctk.CTkLabel(
                 frame,
                 text=label,
                 font=("Arial", 10, "bold"),
+                text_color="gray",
                 anchor="w"
             ).pack(side="top", fill="x")
 
+            # Utilisation de truncate_path pour l'affichage initial propre
+            # On importe ici si ce n'est pas fait en haut du fichier
+            from core.utils import truncate_path
+            display_path = truncate_path(value, max_length=40)
+
             self.path_label = ctk.CTkLabel(
                 frame,
-                text=value,  # On met le texte réel
+                text=display_path,  
                 font=("Consolas", 10),
-                text_color="#3498db",
+                text_color="#2ecc71",  # Vert clair pour matcher avec le bouton Export
                 anchor="w",
                 justify="left"
             )
-
             self.path_label.pack(side="top", fill="x", padx=5, expand=True)
 
-            # Application immédiate après layout stabilisé
+            # Tooltip pour voir le chemin complet sans troncature au survol
+            from ..widgets import ToolTip
+            ToolTip(self.path_label, value)
+
+            # Application de ta logique de redimensionnement dynamique
             self.after(10, lambda: self._apply_dynamic_fonts(self.left_panel.winfo_width()))
 
         else:
-            print(f"label : {label}, value :{value}")
+            # Affichage standard (Clé : Valeur)
             ctk.CTkLabel(
                 frame,
                 text=label,
                 font=("Arial", 10, "bold"),
+                text_color="gray",
                 anchor="w"
             ).pack(side="left")
 
             ctk.CTkLabel(
                 frame,
-                text=value,
+                text=str(value),
                 font=("Consolas", 11),
                 text_color="#ecf0f1",
                 anchor="e"
@@ -1560,26 +1627,98 @@ class SimulationView(ctk.CTkFrame):
     
 
 
-    def on_confirm(self):
-        """Action déclenchée par le bouton 'Confirm' (Save G-Code + Stats + Thumbnail via Utils)"""
+    def on_export(self):
+        """EXPORT RAPIDE : Utilise le chemin par défaut sans ouvrir de fenêtre."""
         self.stop_processes()
         
-        # 1. Préparation du chemin de sortie du G-Code
-        output_dir = self.payload['metadata'].get('output_dir', '')
-        file_name = self.payload['metadata'].get('file_name', 'output.nc')
-        full_path = os.path.join(output_dir, file_name)
+        # Récupération des données du payload
+        meta = self.payload.get('metadata', {})
+        output_dir = meta.get('output_dir', '')
+        pref_ext = self.controller.config_manager.get_item("machine_settings", "gcode_extension", ".nc")
+        
+        # Sécurisation du nom de fichier (on enlève l'extension proprement)
+        raw_file = meta.get('file_name', 'output')
+        clean_name = os.path.splitext(os.path.basename(str(raw_file)))[0]
+        
+        # Assemblage et normalisation forcée vers des slashs /
+        full_path = os.path.join(output_dir, f"{clean_name}{pref_ext}").replace("\\", "/")
+        
+        self._execute_save(full_path)
 
-        # 2. Sauvegarde du fichier et mise à jour des données
+    def on_export_as(self):
+        """EXPORT VERS : Ouvre une fenêtre avec gestion intelligente des doublons d'extension."""
+        self.stop_processes()
+        self.update_idletasks() 
+        
+        meta = self.payload.get('metadata', {})
+        pref_ext = meta.get('file_extension', '.nc').lower()
+        if not pref_ext.startswith("."):
+            pref_ext = f".{pref_ext}"
+            
+        raw_name = meta.get('file_name', 'output')
+        clean_name = os.path.splitext(os.path.basename(str(raw_name)))[0]
+
+        # 1. Liste des formats standards connus
+        standards = [
+            (".nc", "NC File"),
+            (".gcode", "G-Code File"),
+            (".gc", "GC File"),
+            (".tap", "Tap File"),
+            (".txt", "Text File")
+        ]
+
+        # 2. Construction dynamique de la liste
+        file_types = []
+        
+        # On vérifie si notre extension préférée est dans les standards
+        is_standard = any(ext == pref_ext for ext, label in standards)
+
+        if is_standard:
+            # Si c'est un standard, on réorganise pour mettre le standard correspondant en premier
+            # On cherche le label associé pour l'afficher proprement
+            current_label = next(label for ext, label in standards if ext == pref_ext)
+            file_types.append((f"{current_label} (Default)", f"*{pref_ext}"))
+            
+            # On ajoute les autres standards (sans celui qu'on vient de mettre)
+            for ext, label in standards:
+                if ext != pref_ext:
+                    file_types.append((label, f"*{ext}"))
+        else:
+            # Si l'extension est exotique/inconnue, on ajoute la ligne "Default format"
+            file_types.append(("Default format", f"*{pref_ext}"))
+            # Et on ajoute toute la liste des standards ensuite
+            for ext, label in standards:
+                file_types.append((label, f"*{ext}"))
+
+        # On finit toujours par "All files"
+        file_types.append(("All files", "*.*"))
+
+        # 3. Ouverture du dialogue
+        full_path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Export G-Code As...",
+            initialdir=meta.get('output_dir', ''),
+            initialfile=f"{clean_name}{pref_ext}",
+            defaultextension=pref_ext,
+            filetypes=file_types
+        )
+
+        if full_path:
+            full_path = full_path.replace("\\", "/")
+            self._execute_save(full_path)
+
+
+    def _execute_save(self, full_path):
+        """Logique interne finale pour écrire le fichier et mettre à jour le dashboard."""
         try:
             if hasattr(self, 'final_gcode') and self.final_gcode:
-                # --- A. Sauvegarde du G-Code ---
+                # --- A. Sauvegarde physique du fichier ---
                 with open(full_path, "w") as f:
                     f.write(self.final_gcode)
 
-                # --- B. Appel de la fonction centralisée dans utils.py ---
+                # --- B. Enregistrement dans le Dashboard ---
                 matrix = self.payload.get('matrix') 
                 if matrix is not None:
-                    # On appelle directement la fonction importée de utils
                     from core.utils import save_dashboard_data
                     save_dashboard_data(
                         config_manager=self.controller.config_manager,
@@ -1589,8 +1728,6 @@ class SimulationView(ctk.CTkFrame):
                     )
 
                 messagebox.showinfo("Success", f"G-Code saved to:\n{full_path}", parent=self.controller)
-                
-                # 3. Retour à la vue précédente
                 self._navigate_back()
             else:
                 messagebox.showerror("Error", "No G-Code data to save.", parent=self.controller)

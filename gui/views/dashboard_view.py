@@ -249,7 +249,8 @@ class DashboardView(ctk.CTkFrame):
                 w.configure(cursor="hand2")
                 w.bind("<Enter>", on_enter)
                 w.bind("<Leave>", on_leave)
-                w.bind("<Button-1>", lambda e: callback())
+                w.bind("<Button-1>", lambda e=None: callback())
+                #w.bind("<Button-1>", lambda e: callback())
         else:
             # Gestion du mode désactivé (grisage)
             for w in [icon_lbl, t_lbl, d_lbl]:
