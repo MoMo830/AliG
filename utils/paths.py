@@ -70,10 +70,15 @@ LATENCY_DARK = None
 LATENCY_LIGHT = None
 LATENCY_EXPLAIN_DARK = None
 LATENCY_EXPLAIN_LIGHT = None
+LINESTEP_DARK = None
+LINESTEP_LIGHT = None
+POWER_COM = None
+
 
 def load_all_images():
     global HOME_DARK, HOME_LIGHT, RASTER_DARK, RASTER_LIGHT
     global LATENCY_DARK, LATENCY_LIGHT, LATENCY_EXPLAIN_DARK, LATENCY_EXPLAIN_LIGHT
+    global LINESTEP_DARK, LINESTEP_LIGHT, POWER_COM
 
     try:
         HOME_DARK = load_image("home_white.png")
@@ -84,6 +89,10 @@ def load_all_images():
         LATENCY_LIGHT = load_image("latency_calibration_black.png")
         LATENCY_EXPLAIN_DARK = load_image("latency_calibration_explain_white.png")
         LATENCY_EXPLAIN_LIGHT = load_image("latency_calibration_explain_black.png")
+        LINESTEP_DARK = load_image("linestep_calibration_white.png")
+        LINESTEP_LIGHT = load_image("linestep_calibration_black.png")
+        POWER_COM = load_image("power_calibration.png")
+
 
     except Exception as e:
         ctypes.windll.user32.MessageBoxW(

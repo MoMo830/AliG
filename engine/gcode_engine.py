@@ -521,6 +521,72 @@ class GCodeEngine:
 
         return offX, offY
     
+    def compute_geometry(self, s, matrix_shape=None):
+        """
+        Calcule les dimensions physiques, l'overscan et les statistiques temporelles.
+        s : dictionnaire des paramètres (width, dpi, line_step, overscan_dist, speed, etc.)
+        matrix_shape : (h_px, w_px) optionnel si la matrice est déjà générée.
+        """
+        # 1. Constantes de base
+        x_step = 25.4 / max(1, s.get("dpi", 254))
+        l_step = s.get("line_step", 0.1)
+        raster_mode = s.get("raster_mode", "Horizontal")
+        
+        # 2. Détermination des dimensions en pixels
+        # Si la matrice n'est pas fournie, on simule la taille basée sur la largeur cible
+        if matrix_shape:
+            h_px, w_px = matrix_shape
+        else:
+            w_px = max(2, int(s["width"] / x_step))
+            # On simule la hauteur proportionnelle (ou fixe selon votre logique)
+            h_px = max(2, int(s["height"] / l_step))
+
+        # 3. Calcul des dimensions réelles (Zone de gravure)
+        real_w = (w_px - 1) * x_step
+        real_h = (h_px - 1) * l_step
+        
+        # 4. Calcul de l'Overscan
+        # On peut utiliser une valeur fixe ou un calcul dynamique basé sur l'accélération
+        overscan_dist = float(s.get("overscan_dist", 2.0))
+        
+        # 5. Définition des zones (Rectangles de simulation)
+        # Format : (x_min, y_min, x_max, y_max)
+        self.stats["rect_burn"] = (0, 0, real_w, real_h)
+        
+        if raster_mode == "Horizontal":
+            # L'overscan s'ajoute à gauche et à droite de l'axe X
+            self.stats["rect_full"] = (-overscan_dist, 0, real_w + overscan_dist, real_h)
+        else:
+            # Mode Vertical : l'overscan s'ajoute en haut et en bas de l'axe Y
+            self.stats["rect_full"] = (0, -overscan_dist, real_w, real_h + overscan_dist)
+
+        # 6. Estimation du temps (simplifiée)
+        # On calcule la distance totale parcourue par la tête
+        num_lines = h_px if raster_mode == "Horizontal" else w_px
+        dist_per_line = (real_w if raster_mode == "Horizontal" else real_h) + (2 * overscan_dist)
+        
+        total_dist_mm = num_lines * dist_per_line
+        speed_mm_min = s.get("speed", 3000)
+        
+        # Temps = distance / vitesse + temps de transition (estimé)
+        est_min = total_dist_mm / max(1, speed_mm_min)
+        est_min += (num_lines * 0.1) / 60 # Ajout de 100ms par changement de ligne
+        
+        self.stats["est_min"] = est_min
+
+        # 7. Retour de l'objet complet pour la vue
+        return {
+            "w_px": w_px,
+            "h_px": h_px,
+            "real_w": real_w,
+            "real_h": real_h,
+            "x_step": x_step,
+            "l_step": l_step,
+            "overscan_dist": overscan_dist,
+            "est_min": est_min,
+            "rect_burn": self.stats["rect_burn"],
+            "rect_full": self.stats["rect_full"]
+        }
 
     def estimate_gcode_statistics(self, matrix, s_params, gc_params):
         if matrix is None:

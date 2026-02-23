@@ -5,6 +5,7 @@ from core.utils import get_app_paths
 from engine.calibrate_engine import CalibrateEngine
 from core.translations import TRANSLATIONS
 from utils.paths import LATENCY_LIGHT, LATENCY_DARK, LATENCY_EXPLAIN_LIGHT, LATENCY_EXPLAIN_DARK
+from utils.paths import LINESTEP_DARK, LINESTEP_LIGHT, POWER_COM
 
 class CalibrationView(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -14,7 +15,7 @@ class CalibrationView(ctk.CTkFrame):
         self.base_path, self.application_path = get_app_paths()
         self.config_manager = controller.config_manager 
         
-        # --- 1. DÉFINITION DES STYLES (Toujours en premier) ---
+        # --- 1. DÉFINITION DES STYLES ---
         self.accent_color = "#e67e22" 
         self.color_selected = ["#DCE4EE", "#3E454A"] 
         self.color_hover = ["#E5E5E5", "#353535"]    
@@ -34,57 +35,104 @@ class CalibrationView(ctk.CTkFrame):
         self.main_grid.grid_columnconfigure(1, weight=1)
         self.main_grid.grid_rowconfigure(0, weight=1)
 
-        # Sidebar (Gauche)
+        # Sidebar (Gauche) - Utilisation de couleurs assorties au fond pour "cacher" la scrollbar
         self.left_column = ctk.CTkScrollableFrame(self.main_grid, fg_color="transparent", width=420)
         self.left_column.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
-        self.left_column._scrollbar.configure(width=0) 
+        self.left_column.grid_columnconfigure(0, weight=1)
+
+        # Ajoutez cette sécurité pour être sûr que la barre ne prend pas de place
+        try:
+            self.left_column._scrollbar.configure(width=0)
+        except:
+            pass
+        self.left_column.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
+
+        # Tentative sécurisée de réduction de la largeur de la scrollbar
+        try:
+            if hasattr(self.left_column, "_scrollbar"):
+                self.left_column._scrollbar.configure(width=0)
+        except:
+            pass
 
         ctk.CTkLabel(self.left_column, text=self.texts["sidebar_title"], 
                      font=("Arial", 18, "bold"), text_color=self.accent_color, anchor="w").grid(row=0, column=0, sticky="ew", pady=(0, 15), padx=15)
 
+        # Conteneur des cartes avec configuration de colonne pour l'extension
         self.cards_container = ctk.CTkFrame(self.left_column, fg_color="transparent")
         self.cards_container.grid(row=1, column=0, sticky="nsew")
+        self.cards_container.grid_columnconfigure(0, weight=1)
 
         # Zone de test (Droite)
         self.right_column = ctk.CTkFrame(self.main_grid, fg_color=["#EBEBEB", "#202020"], corner_radius=15)
         self.right_column.grid(row=0, column=1, sticky="nsew")
 
-        # --- 4. CHARGEMENT DES DONNÉES ---
-        self.selected_test = None
-        self.setup_calibration_data()
-        
-        # Charger le premier test par défaut (Optionnel)
-        if self.test_list:
-            self.update_detail_view(self.test_list[0])
+        self.right_column = ctk.CTkFrame(self.main_grid, fg_color=["#EBEBEB", "#202020"], corner_radius=15)
+        self.right_column.grid(row=0, column=1, sticky="nsew")
 
-    def clear_right_column(self):
-        """Nettoie la colonne de droite avant d'afficher un nouveau test."""
-        for widget in self.right_column.winfo_children():
-            widget.destroy()
-
-    def latency_test_window(self):
-        """Isole et construit les éléments du test de Latence."""
-        self.clear_right_column()
-
-        # Titre
-        self.desc_title = ctk.CTkLabel(self.right_column, text=self.texts.get("latency_title", "Latency Test"), 
-                                      font=("Arial", 30, "bold"), text_color=self.accent_color)
+        # --- FIXATION DE LA STRUCTURE (Éléments qui ne bougent jamais) ---
+        self.desc_title = ctk.CTkLabel(self.right_column, font=("Arial", 30, "bold"), text_color=self.accent_color)
         self.desc_title.pack(pady=(40, 10), padx=40, anchor="w")
 
-        # --- DESCRIPTION + IMAGE ---
         self.desc_info_row = ctk.CTkFrame(self.right_column, fg_color="transparent")
         self.desc_info_row.pack(fill="x", padx=40, pady=10)
 
-        self.desc_text = ctk.CTkLabel(self.desc_info_row, text=self.texts["default_desc"], font=("Arial", 15), justify="left", anchor="nw")
+        self.desc_text = ctk.CTkLabel(self.desc_info_row, font=("Arial", 15), justify="left", anchor="nw")
         self.desc_text.pack(side="left", fill="both", expand=True)
+        # Gestion auto du retour à la ligne
         self.desc_text.bind("<Configure>", lambda e: self.desc_text.configure(wraplength=self.desc_text.winfo_width() - 10))
 
-        self.illustration_label = ctk.CTkLabel(self.desc_info_row, text="", width=150)
+        self.illustration_label = ctk.CTkLabel(self.desc_info_row, text="")
         self.illustration_label.pack(side="right", padx=(20, 0))
 
-        # --- PARAMÈTRES ---
-        self.settings_container = ctk.CTkFrame(self.right_column, fg_color=["#DCE4EE", "#2B2B2B"], corner_radius=10)
-        self.settings_container.pack(fill="x", padx=40, pady=20)
+        # --- ZONE DYNAMIQUE (C'est elle qu'on vide) ---
+        self.dynamic_params_frame = ctk.CTkFrame(self.right_column, fg_color="transparent")
+        self.dynamic_params_frame.pack(fill="both", expand=True, padx=40)
+
+        # Bouton d'action fixe en bas
+        self.create_action_button()
+
+        # --- 4. CHARGEMENT DES DONNÉES ---
+        self.selected_test = None
+        self.setup_calibration_data()
+        self.show_default_message()
+
+    def show_default_message(self):
+        """Affiche le titre par défaut et invite à choisir un test."""
+        self.clear_dynamic_zone()
+        
+        # On utilise le message du dictionnaire
+        self.desc_title.configure(text=self.texts.get("sidebar_title", "Calibration"))
+        self.desc_text.configure(text=self.texts.get("default_title", "Select a test to begin"))
+        
+        # On cache l'image et le bouton d'action tant qu'aucun test n'est choisi
+        self.illustration_label.configure(image=None, text="")
+        if hasattr(self, "action_btn"):
+            self.action_btn.pack_forget()
+        
+
+    def clear_dynamic_zone(self):
+        """Nettoie la zone des paramètres et réinitialise l'image d'illustration."""
+        for widget in self.dynamic_params_frame.winfo_children():
+            widget.destroy()
+        
+        # Réinitialisation propre pour CTk
+        if hasattr(self, "illustration_label") and self.illustration_label.winfo_exists():
+            # On retire l'image et le texte
+            self.illustration_label.configure(image=None, text="")
+            # On force le widget à oublier l'image précédente en mémoire
+            self.illustration_label.image = None
+
+
+    def latency_test_window(self):
+        """Isole et construit les paramètres spécifiques au test de Latence."""
+        # On nettoie uniquement la zone dynamique pour éviter de casser les labels de titre/desc
+        self.clear_dynamic_zone()
+
+        self.action_btn.pack(side="bottom", pady=40, padx=40, fill="x")
+
+        # --- CONTAINER DES PARAMÈTRES (Saisie) ---
+        self.settings_container = ctk.CTkFrame(self.dynamic_params_frame, fg_color=["#DCE4EE", "#2B2B2B"], corner_radius=10)
+        self.settings_container.pack(fill="x", pady=10)
         
         self.params_grid = ctk.CTkFrame(self.settings_container, fg_color="transparent")
         self.params_grid.pack(fill="x", padx=15, pady=15)
@@ -98,7 +146,7 @@ class CalibrationView(ctk.CTkFrame):
         self.latency_entry = ctk.CTkEntry(self.params_grid, width=100)
         self.latency_entry.grid(row=0, column=3, pady=5)
 
-        # --- CORRECTION : Ajout du label mm_info_label qui manquait ---
+        # Info calculée mm
         self.mm_info_label = ctk.CTkLabel(self.params_grid, text="= 0.000 mm", font=("Arial", 12, "bold"), text_color="#1f538d")
         self.mm_info_label.grid(row=0, column=4, padx=(10, 0), sticky="w")
 
@@ -107,54 +155,62 @@ class CalibrationView(ctk.CTkFrame):
         self.power_entry = ctk.CTkEntry(self.params_grid, width=100)
         self.power_entry.grid(row=1, column=1, padx=5, pady=5)
 
-        # --- CORRECTION : Ajout du label fire_mode_info qui manquait ---
+        # Label d'information sur le mode de tir (S ou M67)
         self.fire_mode_info = ctk.CTkLabel(self.params_grid, text="", font=("Arial", 11), text_color="gray")
         self.fire_mode_info.grid(row=1, column=2, columnspan=3, padx=10, sticky="w")
 
-        # --- CALCULATRICE (Le reste de votre code est correct) ---
-        self.calc_container = ctk.CTkFrame(self.right_column, fg_color=["#DCE4EE", "#2B2B2B"], corner_radius=10)
-        self.calc_container.pack(fill="x", padx=40, pady=10)
+        # --- CALCULATRICE (Aide au réglage) ---
+        self.calc_container = ctk.CTkFrame(self.dynamic_params_frame, fg_color=["#DCE4EE", "#2B2B2B"], corner_radius=10)
+        self.calc_container.pack(fill="x", pady=10)
         
-        # ... (Conservez votre code pour calc_header, calc_grid, etc.) ...
         self.calc_header = ctk.CTkLabel(self.calc_container, text="Latency Calculator (from measurement):", 
                                         font=("Arial", 13, "bold"), text_color=self.accent_color)
         self.calc_header.pack(padx=15, pady=(10, 5), anchor="w")
+
         self.calc_grid = ctk.CTkFrame(self.calc_container, fg_color="transparent")
         self.calc_grid.pack(fill="x", padx=15, pady=(0, 10))
+
         ctk.CTkLabel(self.calc_grid, text="Measured Offset (mm):").grid(row=0, column=0, padx=(0, 10), sticky="w")
         self.measured_mm_entry = ctk.CTkEntry(self.calc_grid, width=100, placeholder_text="ex: 0.25")
         self.measured_mm_entry.grid(row=0, column=1, sticky="w")
+
         self.calc_result_label = ctk.CTkLabel(self.calc_grid, text="Result: -- ms", font=("Arial", 12, "bold"), text_color=self.accent_color)
         self.calc_result_label.grid(row=0, column=2, padx=(15, 0), sticky="w")
+
         self.save_latency_btn = ctk.CTkButton(self.calc_grid, text="Apply & Save", width=120, height=28, command=self.apply_calculated_latency)
         self.save_latency_btn.grid(row=0, column=3, padx=(20, 0), sticky="w")
+
         self.calc_hint_label = ctk.CTkLabel(self.calc_container, text="", font=("Arial", 11, "italic"), text_color="gray")
         self.calc_hint_label.pack(padx=15, pady=(0, 10), anchor="w")
 
         # --- BINDINGS ---
         self.measured_mm_entry.bind("<KeyRelease>", lambda e: self.update_latency_calculation())
-        # Ajout du rafraîchissement mm lors de la saisie manuelle
         self.speed_entry.bind("<KeyRelease>", lambda e: (self.update_latency_calculation(), self.update_mm_display()), add="+")
         self.latency_entry.bind("<KeyRelease>", lambda e: self.update_mm_display())
-        
-        self.create_action_button()
+
+ 
 
     def power_test_window(self):
-        """Isole et construit les éléments du test de Puissance."""
-        self.clear_right_column()
+        """Construit les éléments du test de Puissance."""
+        self.clear_dynamic_zone()
 
-        self.desc_title = ctk.CTkLabel(self.right_column, text=self.texts.get("power_title", "Power Test"), 
-                                      font=("Arial", 30, "bold"), text_color=self.accent_color)
-        self.desc_title.pack(pady=(40, 10), padx=40, anchor="w")
-
-        # Container spécifique au test de puissance
-        self.power_container = ctk.CTkFrame(self.right_column, fg_color=["#DCE4EE", "#2B2B2B"], corner_radius=10)
-        self.power_container.pack(fill="x", padx=40, pady=20)
         
-        ctk.CTkLabel(self.power_container, text="Power Settings specific to this test...").pack(pady=20)
+        self.power_container = ctk.CTkFrame(self.dynamic_params_frame, fg_color=["#DCE4EE", "#2B2B2B"], corner_radius=10)
+        self.power_container.pack(fill="x", pady=20)
+        
+        ctk.CTkLabel(self.power_container, text="Power test specific settings...").pack(pady=20)
 
-        # --- BOUTON D'ACTION ---
-        self.create_action_button()
+    def linestep_window(self):
+        """Construit les éléments du test de Line Step."""
+        self.clear_dynamic_zone()
+
+        
+        self.ls_container = ctk.CTkFrame(self.dynamic_params_frame, fg_color=["#DCE4EE", "#2B2B2B"], corner_radius=10)
+        self.ls_container.pack(fill="x", pady=20)
+        
+        ctk.CTkLabel(self.ls_container, text="Line step test specific settings...").pack(pady=20)
+        
+
 
     def create_action_button(self):
         """Crée le bouton d'action commun en bas de la colonne droite."""
@@ -163,9 +219,12 @@ class CalibrationView(ctk.CTkFrame):
         self.action_btn.pack(side="bottom", pady=40, padx=40, fill="x")
 
     def create_calibration_card(self, test, index):
+        self.cards_container.grid_columnconfigure(0, weight=1)
+
         card = ctk.CTkFrame(self.cards_container, corner_radius=15, border_width=2, 
                             fg_color=self.color_normal, border_color=self.border_normal)
-        card.grid(row=index, column=0, padx=15, pady=8, sticky="ew")
+
+        card.grid(row=index, column=0, padx=(15, 32), pady=8, sticky="ew")
         card.grid_columnconfigure(1, weight=1)
 
         test["card_widget"] = card
@@ -209,7 +268,9 @@ class CalibrationView(ctk.CTkFrame):
 
     def setup_calibration_data(self):
         latency_img = ctk.CTkImage(light_image=LATENCY_LIGHT, dark_image=LATENCY_DARK, size=(35, 35))
-        # Image plus grande pour la description
+        linestep_img = ctk.CTkImage(light_image=LINESTEP_LIGHT, dark_image=LINESTEP_DARK, size=(35, 35))
+        power_img = ctk.CTkImage(light_image=POWER_COM, dark_image=POWER_COM, size=(35, 35))
+        # Images plus grandes pour la description
         latency_preview = ctk.CTkImage(light_image=LATENCY_EXPLAIN_LIGHT, dark_image=LATENCY_EXPLAIN_DARK, size=(600, 120))
 
         self.test_list = [
@@ -224,14 +285,23 @@ class CalibrationView(ctk.CTkFrame):
                 "callback": self.run_latency_test
             },
             {
+                "title": self.texts["linestep_title"],
+                "short": self.texts["linestep_short"],
+                "long": self.texts["linestep_long"],
+                "icon": linestep_img,
+                "preview": None,
+                "is_image": True,
+                "callback": self.linestep_window
+            },
+            {
                 "title": self.texts["power_title"],
                 "short": self.texts["power_short"],
                 "long": self.texts["power_long"],
                 "params": "• Steps: 10 levels\n• Power Range: 0-100%\n• Variable: S-Mode / M67",
-                "icon": "🔥",
+                "icon": power_img,
                 "preview": None,
-                "is_image": False,
-                "callback": self.run_power_test
+                "is_image": True,
+                "callback": self.power_test_window
             }
         ]
 
@@ -239,76 +309,82 @@ class CalibrationView(ctk.CTkFrame):
             self.create_calibration_card(test, i)
 
     def update_detail_view(self, test):
-        """Chef d'orchestre : sélectionne le test et remplit les données."""
-        # 1. Gestion visuelle de la sélection dans la sidebar
+        """Sélectionne le test, met à jour l'UI et lie les actions."""
+        
+        # 1. GESTION VISUELLE DE LA SÉLECTION (SIDEBAR)
         if hasattr(self, "selected_test") and self.selected_test is not None:
             try:
-                self.selected_test["card_widget"].configure(
-                    fg_color=self.color_normal, 
-                    border_color=self.border_normal
-                )
-            except Exception: pass
+                if self.selected_test["card_widget"].winfo_exists():
+                    self.selected_test["card_widget"].configure(
+                        fg_color=self.color_normal, 
+                        border_color=self.border_normal
+                    )
+            except Exception: 
+                pass
 
         self.selected_test = test
-        if "card_widget" in test:
+        if "card_widget" in test and test["card_widget"].winfo_exists():
             test["card_widget"].configure(
                 fg_color=self.color_selected,
                 border_color=self.accent_color 
             )
 
-        # 2. Construction de l'interface selon le test
+        # 2. CONSTRUCTION DE L'INTERFACE SPÉCIFIQUE
+        # On définit d'abord le comportement par défaut du bouton
+        self.action_btn.configure(text=self.texts["btn_prepare"], fg_color=self.accent_color)
+
         if test["title"] == self.texts["latency_title"]:
-            # On construit les widgets d'abord !
             self.latency_test_window() 
+            self.action_btn.configure(command=self.validate_and_generate) # Action G-Code
             
-            # Maintenant que les widgets existent, on les configure
+            # Remplissage des données depuis la config
             cfg = self.config_manager
-            
-            # Récupération des données config
-            max_val = cfg.get_item("machine_settings", "ctrl_max", None)
-            m67_reg = cfg.get_item("machine_settings", "m67_e_num", None)
             cmd_mode = cfg.get_item("machine_settings", "cmd_mode", "Unknown")
             is_s_mode = "S (" in cmd_mode
-            default_speed = cfg.get_item("machine_settings", "base_feedrate", 3000)
-
-            # Remplissage des champs
-            self.speed_entry.delete(0, "end")
-            self.speed_entry.insert(0, str(default_speed))
-            self.latency_entry.delete(0, "end")
-            self.latency_entry.insert(0, "0.0")
-
-            # Texte d'info dynamique
-            info_parts = [f"Mode: {cmd_mode}"]
-            if not is_s_mode:
-                info_parts.append(f"M67 Reg: {m67_reg if m67_reg is not None else '??'}")
-            info_parts.append(f"Max: {max_val if max_val is not None else '??'}")
             
-            # On suppose que ce label est créé dans latency_test_window
-            if hasattr(self, "fire_mode_info"):
-                self.fire_mode_info.configure(text=" | ".join(info_parts))
+            if hasattr(self, "speed_entry") and self.speed_entry.winfo_exists():
+                self.speed_entry.delete(0, "end")
+                self.speed_entry.insert(0, str(cfg.get_item("machine_settings", "base_feedrate", 3000)))
+            
+            if hasattr(self, "latency_entry") and self.latency_entry.winfo_exists():
+                self.latency_entry.delete(0, "end")
+                self.latency_entry.insert(0, "0.0")
 
-            # Initialisation de l'affichage mm
+            # Info dynamique
+            info = f"Mode: {cmd_mode} | Max: {cfg.get_item('machine_settings', 'ctrl_max', '??')}"
+            if not is_s_mode:
+                info += f" | M67 Reg: {cfg.get_item('machine_settings', 'm67_e_num', '??')}"
+            
+            if hasattr(self, "fire_mode_info") and self.fire_mode_info.winfo_exists():
+                self.fire_mode_info.configure(text=info)
+
             self.update_mm_display()
 
-        elif test["title"] == self.texts["power_title"]:
+        elif test["title"] == self.texts.get("power_title", "Power Test"):
             self.power_test_window()
+            self.action_btn.configure(command=self.run_power_test) # Action Image/Raster
 
-        # 3. Mise à jour des textes communs et images
-        # (Seulement si latency_test_window ou power_test_window ont créé les labels)
-        if hasattr(self, "desc_title"):
+        elif test["title"] == self.texts.get("linestep_title", "Line Step"):
+            self.linestep_window()
+            # self.action_btn.configure(command=self.run_linestep_test) # À définir plus tard
+
+        # 3. MISE À JOUR DES TEXTES COMMUNS ET IMAGES
+        if hasattr(self, "desc_title") and self.desc_title.winfo_exists():
             self.desc_title.configure(text=test["title"])
-        if hasattr(self, "desc_text"):
+            
+        if hasattr(self, "desc_text") and self.desc_text.winfo_exists():
             self.desc_text.configure(text=test["long"])
         
-        if hasattr(self, "illustration_label"):
-            if test.get("preview"):
+        if hasattr(self, "illustration_label") and self.illustration_label.winfo_exists():
+            if test.get("preview") is not None:
                 self.illustration_label.configure(image=test["preview"], text="")
             else:
-                self.illustration_label.configure(image=None, text="[No Preview]")
+                # Si pas de preview, on s'assure que RIEN ne s'affiche (ni image, ni texte [No Preview])
+                self.illustration_label.configure(image="", text="")
 
-        # Ajustement du texte
+        # 4. AJUSTEMENT FINAL DU RENDU
         self.update_idletasks()
-        if hasattr(self, "desc_text"):
+        if hasattr(self, "desc_text") and self.desc_text.winfo_exists():
             new_wrap = self.desc_text.winfo_width() - 10
             if new_wrap > 0:
                 self.desc_text.configure(wraplength=new_wrap)

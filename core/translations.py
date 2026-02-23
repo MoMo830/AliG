@@ -61,7 +61,10 @@ TRANSLATIONS = {
             "latency_title": "LASER LATENCY TEST",
             "latency_short": "Test beam alignment & internal delays.",
             "latency_long": "This test calibrates internal system delays by drawing a central vertical reference line and alternating horizontal lines on both sides. \n\nGoal:\nIf the horizontal lines stop exactly on the vertical line, your latency setting is perfect.\n\nInstructions:\n1. The test uses a 30x10mm area with the origin (G54) at the center.\n2. Choose your feedrate. Start with 0 if you are calibrating for the first time.\n3. Observe the junction points: \n   - Gap (too short): Move towards a more negative value (ex: -10 to -15).\n   - Overlap (too long): Move towards zero (ex: -10 to -5).\n4. Repeat until the horizontal strokes perfectly 'kiss' the vertical reference.",
-            "power_title": "POWER SCALE GRID  (!! WIP !!)",
+            "linestep_title": "(!WIP!) LINE STEP TEST", 
+            "linestep_short": "Check your ideal line step setting to avoid white stripes or overburning",
+            "linestep_long": "This test is designed to optimize your scanning density (DPI/Line Interval). If the interval is too large, gaps will appear between engraving lines (white stripes). If it is too small, excessive overlap will occur, causing overburning, loss of fine detail, and unnecessary material stress. Find the value where lines perfectly touch without overlapping.",
+            "power_title": "(!WIP!) POWER SCALE GRID",
             "power_short": "Intensity ramp from 0% to 100%.",
             "power_long": "Generates 10 squares with varying gray levels.\n\nGoal:\n- Observe how your material reacts to different power percentages.\n- Identify the threshold where the material starts to mark.\n- Determine the maximum effective black level."
         },
@@ -180,6 +183,9 @@ TRANSLATIONS = {
             "latency_title": "TEST DE LATENCE LASER",
             "latency_short": "Teste l'alignement du faisceau et les délais internes.",
             "latency_long": "Ce test calibre les délais internes du système en traçant une ligne de référence verticale centrale et des lignes horizontales alternées de chaque côté.\n\nObjectif :\nSi les lignes horizontales s'arrêtent exactement sur la ligne verticale, votre réglage de latence est parfait.\n\nInstructions :\n1. Le test utilise une zone de 30x10mm avec l'origine (G54) au centre.\n2. Choisissez votre vitesse. Commencez à 0 si vous calibrez pour la première fois.\n3. Observez les points de jonction :\n   - Écart (trop court) : Allez vers une valeur plus négative (ex: -10 vers -15).\n   - Chevauchement (trop long) : Allez vers zéro (ex: -10 vers -5).\n4. Répétez jusqu'à ce que les traits horizontaux viennent 'effleurer' parfaitement la référence verticale.",
+            "linestep_title": "(!WIP!) TEST D'INTERVALLE DE LIGNES", 
+            "linestep_short": "Déterminez le réglage idéal pour éviter les bandes blanches ou les brûlures excessives",
+            "linestep_long": "Ce test permet d'optimiser la densité du balayage (DPI). Un intervalle trop grand laissera apparaître des lignes vides (bandes blanches), tandis qu'un intervalle trop petit entraînera un chevauchement excessif, brûlant inutilement la matière et perdant les détails.",
             "power_title": "GRILLE D'ÉCHELLE DE PUISSANCE (!! TRAVAIL EN COURS !!)",
             "power_short": "Rampe d'intensité de 0% à 100%.",
             "power_long": "Génère 10 carrés avec des niveaux de gris variables.\n\nObjectif :\n- Observer comment votre matériau réagit aux différents pourcentages de puissance.\n- Identifier le seuil où le matériau commence à être marqué.\n- Déterminer le niveau de noir maximal effectif."

@@ -182,3 +182,34 @@ class PowerRangeVisualizer(ctk.CTkFrame):
         
         self.refresh_visuals()
         self.update_callback()
+
+
+class LoadingOverlay:
+    """Overlay de chargement réutilisable pour couvrir une vue pendant un calcul."""
+    def __init__(self, parent, text="Génération en cours..."):
+        self.frame = ctk.CTkFrame(parent, fg_color="#2b2b2b")
+        # On utilise place pour couvrir tout l'espace sans perturber le grid
+        self.frame.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.frame.lift() # Met l'overlay au premier plan
+
+        # Boîte centrale
+        self.box = ctk.CTkFrame(self.frame, fg_color="#3a3a3a", corner_radius=12)
+        self.box.place(relx=0.5, rely=0.5, anchor="center")
+
+        self.label = ctk.CTkLabel(
+            self.box, text=text, 
+            font=("Arial", 14, "bold"), text_color="white"
+        )
+        self.label.pack(padx=30, pady=(20, 10))
+
+        self.progress = ctk.CTkProgressBar(self.box, width=280)
+        self.progress.pack(padx=30, pady=(5, 25))
+        self.progress.configure(mode="indeterminate")
+        self.progress.start()
+
+    def destroy(self):
+        """Supprime l'overlay proprement."""
+        try:
+            self.frame.destroy()
+        except:
+            pass

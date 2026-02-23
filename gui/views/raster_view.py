@@ -10,12 +10,13 @@ from PIL import Image, ImageDraw
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.patches import Rectangle
 import sys
 import json
 import os
 import webbrowser
 
-from ..widgets import ToolTip, PowerRangeVisualizer
+from ..widgets import ToolTip, PowerRangeVisualizer, LoadingOverlay
 from .simulation_view import SimulationView
 from core.engine import (
     process_image_logic, 
@@ -60,7 +61,25 @@ class RasterView(ctk.CTkFrame):
         self.controls = {}
         self.setup_ui()
         self.load_settings() 
-        self.update_preview()
+        
+        # --- 4. CHARGEMENT DIFFÉRÉ (Pour éviter le bug de rendu) ---
+        # On vérifie si une image est déjà chargée (via load_settings)
+        if self.input_image_path and os.path.exists(self.input_image_path):
+            # On affiche l'overlay
+            self.loading_overlay = LoadingOverlay(self, text="Loading...")
+            # On attend que la fenêtre soit prête avant de calculer les hachures
+            self.after(250, self._initial_render)
+        else:
+            # Si pas d'image, on peut appeler update_preview normalement
+            self.update_preview()
+
+    def _initial_render(self):
+        """Appelé 250ms après l'ouverture pour un rendu parfait."""
+        try:
+            self.update_preview()
+        finally:
+            if hasattr(self, 'loading_overlay'):
+                self.loading_overlay.destroy()
 
 
     def on_closing(self):
@@ -957,18 +976,16 @@ class RasterView(ctk.CTkFrame):
 
 
     def update_preview(self):
-
         if not hasattr(self, 'controls') or 'width' not in self.controls:
             return
-
         if not hasattr(self, 'origin_mode'):
             return
 
         try:
+            # 1. Logique de traitement d'image
             res = self.process_logic()
             if not res or res[0] is None:
-                if self.img_plot:
-                    self.img_plot.set_visible(False)
+                if self.img_plot: self.img_plot.set_visible(False)
                 self.canvas_img.draw_idle()
                 return
 
@@ -976,69 +993,133 @@ class RasterView(ctk.CTkFrame):
             if matrix.ndim < 2 or matrix.size == 0:
                 return
 
-            h_px, w_px, l_step, x_st, est_min = res[1:6]
+            # 2. Appel à l'engine (Calcul basé sur les centres de pixels)
+            current_params = self.get_ui_params() 
+            geom = self.engine.compute_geometry(current_params, matrix.shape)
+
+            # Extraction des données géométriques
             real_w, real_h, x_st, l_step, hours, minutes, seconds = \
-                self._process_preview_geometry(matrix, res)
-            premove_ctrl = self.controls.get("premove")
-            premove = self.get_val(premove_ctrl) if premove_ctrl else 0
+                self._process_preview_geometry(matrix, geom)
 
+            # Calcul du décalage selon l'origine choisie (Top-Left, Center, etc.)
             offX, offY = self.calculate_offsets(real_w, real_h)
-            v_min = self.get_val(self.controls.get("min_p")) \
-                if self.controls.get("min_p") else 0
-            v_max = self.get_val(self.controls.get("max_p")) \
-                if self.controls.get("max_p") else 255
+            
+            v_min = self.get_val(self.controls.get("min_p")) if self.controls.get("min_p") else 0
+            v_max = self.get_val(self.controls.get("max_p")) if self.controls.get("max_p") else 255
 
-            self._update_image_artist(
-                matrix,
-                offX,
-                offY,
-                real_w,
-                real_h,
-                v_min,
-                v_max
+
+            # 4. Dessin de l'Overscan (Rectangle Bleu)
+            # --- Nettoyages ---
+            for attr in ['rect_overscan_patch', 'overscan_text_left', 'overscan_text_right']:
+                if hasattr(self, attr):
+                    try: getattr(self, attr).remove()
+                    except: pass
+
+            if hasattr(self, "overscan_hatch_patches"):
+                for p in self.overscan_hatch_patches:
+                    try: p.remove()
+                    except: pass
+            self.overscan_hatch_patches = []
+
+            # --- Géométrie ---
+            dx = real_w / (matrix.shape[1] - 1) if matrix.shape[1] > 1 else 0
+            # On aligne img_y sur les limites réelles de l'image
+            dy_total = real_h / (matrix.shape[0]-1) if matrix.shape[0] > 1 else 0
+            img_x_min, img_x_max = offX - dx/2, offX + real_w + dx/2
+            img_y_min, img_y_max = offY - dy_total/2, offY + real_h + dy_total/2
+
+            rf = geom["rect_full"]
+            over_x_min, over_x_max = offX + rf[0] - dx/2, offX + rf[2] + dx/2
+            
+            left_width = img_x_min - over_x_min
+            right_width = over_x_max - img_x_max
+            y_center = (img_y_min + img_y_max) / 2
+
+            # --- Mise à jour de l'image et calcul du Renderer ---
+            self._update_image_artist(matrix, offX, offY, real_w, real_h, v_min, v_max)
+            # Crucial : On force le dessin interne pour initialiser les coordonnées
+            self.canvas_img.draw() 
+
+            def draw_overscan_side(x_min_zone, width_zone, side="left"):
+                if width_zone < 0.5: return None
+                rotation = 90 if side == "left" else -90
+                x_mid = x_min_zone + width_zone/2
+                
+                txt = self.ax_img.text(x_mid, y_center, "OVERSCAN", rotation=rotation,
+                                    fontsize=8, va='center', ha='center',
+                                    color='#3498db', weight='bold', zorder=20)
+                
+                try:
+                    renderer = self.canvas_img.get_renderer()
+                    bbox = txt.get_window_extent(renderer)
+                    inv = self.ax_img.transData.inverted()
+                    bbox_data = inv.transform_bbox(bbox)
+                    
+                    # Sécurité si bbox invalide
+                    if bbox_data.width <= 0: raise ValueError("Invalid BBox")
+                    
+                    pad = 1.0 
+                    hy, hh = bbox_data.y0 - pad, bbox_data.height + 2*pad
+                    hx, hw = bbox_data.x0 - pad, bbox_data.width + 2*pad
+                except:
+                    # Fallback mathématique si le renderer n'est pas prêt (ex: 22mm x 4mm)
+                    hy, hh = y_center - 11.0, 22.0
+                    hx, hw = x_mid - 2.0, 4.0
+
+                # Dessin des 4 blocs de hachures
+                r_coords = [
+                    (x_min_zone, img_y_min, width_zone, hy - img_y_min),            # Bas
+                    (x_min_zone, hy + hh, width_zone, img_y_max - (hy + hh)),       # Haut
+                    (x_min_zone, hy, (width_zone - hw)/2, hh),                      # Gauche
+                    (hx + hw, hy, (width_zone - hw)/2, hh)                         # Droite
+                ]
+                for rx, ry, rw, rh in r_coords:
+                    if rw > 0.05 and rh > 0.05:
+                        r = Rectangle((rx, ry), rw, rh, facecolor="none", hatch="////", 
+                                      edgecolor="#3498db", linewidth=0, alpha=0.3, zorder=5)
+                        self.ax_img.add_patch(r)
+                        self.overscan_hatch_patches.append(r)
+                return txt
+
+            # Exécution finale
+            if left_width > 0.1:
+                self.overscan_text_left = draw_overscan_side(over_x_min, left_width, "left")
+            if right_width > 0.1:
+                self.overscan_text_right = draw_overscan_side(img_x_max, right_width, "right")
+
+            self.rect_overscan_patch = Rectangle(
+                (over_x_min, img_y_min), over_x_max - over_x_min, img_y_max - img_y_min,
+                linewidth=1, edgecolor='#3498db', facecolor='none', linestyle='--', alpha=0.8, zorder=15
             )
+            self.ax_img.add_patch(self.rect_overscan_patch)
+            # 5. Configuration des axes
+            # On ajuste les limites pour englober l'overscan + une petite marge de 2mm
+            self.ax_img.set_xlim(offX + rf[0] - 2, offX + rf[2] + 2)
+            self.ax_img.set_ylim(offY + rf[1] - 2, offY + rf[3] + 2)
+            
+            # Crucial pour que 1mm sur X = 1mm sur Y à l'écran
+            self.ax_img.set_aspect('equal', adjustable='box')
 
-            self.ax_img.set_xlim(offX - premove - 2,
-                                offX + real_w + premove + 2)
+            # Nettoyage et dessin du point d'origine machine (0,0)
+            if hasattr(self, 'origin_marker'):
+                try: self.origin_marker[0].remove()
+                except: pass
+            self.origin_marker = self.ax_img.plot(0, 0, 'ro', markersize=6, zorder=25)
 
-            self.ax_img.set_ylim(offY - 2,
-                                offY + real_h + 2)
+            # Style visuel
+            self.ax_img.tick_params(axis='both', colors='#888888', labelsize=10)
+            self.ax_img.grid(True, color='#444444', linestyle=':', linewidth=0.5, alpha=0.6, zorder=1)
 
-            self.ax_img.tick_params(
-                axis='both',
-                colors='#888888',
-                labelsize=12
-            )
-
-            self.ax_img.grid(
-                True,
-                color='#444444',
-                linestyle=':',
-                linewidth=0.5,
-                alpha=0.6,
-                zorder=10
-            )
-
-            self.ax_img.plot(0, 0, 'ro', markersize=6, zorder=20)
-
-
+            # 6. Mise à jour des Stats et Histogramme
             self._update_dashboard_stats(
-                w_px,
-                h_px,
-                real_w,
-                real_h,
-                x_st,
-                l_step,
-                hours,
-                minutes,
-                seconds,
-                getattr(self, 'estimated_file_size', "N/A") 
+                geom["w_px"], geom["h_px"], real_w, real_h, x_st, l_step,
+                hours, minutes, seconds,
+                getattr(self, 'estimated_file_size', "N/A")
             )
-
             self._update_histogram_async(matrix, v_min, v_max)
-
+            
+            # Rafraîchissement du canvas
             self.canvas_img.draw_idle()
-            self.fig_img.canvas.draw_idle()
 
         except Exception as e:
             import traceback
@@ -1434,7 +1515,6 @@ class RasterView(ctk.CTkFrame):
         self.txt_global_footer_preview.configure(state="disabled")
 
     def update_histogram_ctk(self, matrix, v_min, v_max):
-
         if not hasattr(self, "hist_canvas"):
             return
 
@@ -1443,7 +1523,6 @@ class RasterView(ctk.CTkFrame):
 
         canvas = self.hist_canvas
         canvas.delete("all")
-
         canvas.update_idletasks()
 
         width = canvas.winfo_width()
@@ -1454,13 +1533,11 @@ class RasterView(ctk.CTkFrame):
 
         # Data sampling
         flat_data = matrix.ravel()[::10]
-
         if flat_data.size == 0:
             return
 
         # Histogram compute
         bins = 80
-
         counts, bin_edges = np.histogram(
             flat_data,
             bins=bins,
@@ -1470,7 +1547,8 @@ class RasterView(ctk.CTkFrame):
         max_count = np.max(counts) if np.max(counts) > 0 else 1
 
         # ===== Layout margins =====
-        left_margin = 60
+        # On augmente légèrement la marge gauche pour accommoder les grands nombres
+        left_margin = 75 
         right_margin = 30
         top_margin = 40
         bottom_margin = 50
@@ -1489,36 +1567,19 @@ class RasterView(ctk.CTkFrame):
 
         # ===== Axis drawing =====
         axis_color = "#888888"
-        # X axis
-        canvas.create_line(
-            left_margin,
-            height - bottom_margin,
-            width - right_margin,
-            height - bottom_margin,
-            fill=axis_color
-        )
-        # Y axis
-        canvas.create_line(
-            left_margin,
-            top_margin,
-            left_margin,
-            height - bottom_margin,
-            fill=axis_color
-        )
+        canvas.create_line(left_margin, height - bottom_margin, width - right_margin, height - bottom_margin, fill=axis_color)
+        canvas.create_line(left_margin, top_margin, left_margin, height - bottom_margin, fill=axis_color)
 
         # ===== Histogram bars =====
         bin_width_px = plot_width / bins
-
         domain_min = v_min - 5
         domain_max = v_max + 5
 
         def scale_x(val):
             if domain_max - domain_min == 0:
                 return left_margin
-            return left_margin + ((val - domain_min) /
-                                (domain_max - domain_min)) * plot_width
+            return left_margin + ((val - domain_min) / (domain_max - domain_min)) * plot_width
 
-        # Draw bars
         for i in range(len(counts)):
             h_norm = counts[i] / max_count
             bar_height = h_norm * plot_height
@@ -1526,118 +1587,71 @@ class RasterView(ctk.CTkFrame):
             y0 = height - bottom_margin
             x1 = x0 + bin_width_px - 1
             y1 = y0 - bar_height
-            canvas.create_rectangle(
-                x0, y0, x1, y1,
-                fill="#5dade2",
-                width=0
-            )
+            canvas.create_rectangle(x0, y0, x1, y1, fill="#5dade2", width=0)
 
         # ===== Threshold lines =====
         try:
             min_pos = scale_x(v_min)
             max_pos = scale_x(v_max)
-            canvas.create_line(
-                min_pos,
-                top_margin,
-                min_pos,
-                height - bottom_margin,
-                fill="#ffcc00",
-                dash=(4, 2)
-            )
-            canvas.create_line(
-                max_pos,
-                top_margin,
-                max_pos,
-                height - bottom_margin,
-                fill="#ff3333",
-                dash=(4, 2)
-            )
-
+            canvas.create_line(min_pos, top_margin, min_pos, height - bottom_margin, fill="#ffcc00", dash=(4, 2))
+            canvas.create_line(max_pos, top_margin, max_pos, height - bottom_margin, fill="#ff3333", dash=(4, 2))
         except:
             pass
 
-        # ===== Axis labels =====
+        # ===== Axis labels (DYNAMIQUE) =====
+        # Label X
         canvas.create_text(
-            width / 2,
+            left_margin + (plot_width / 2),
             height - 15,
             text="Laser Power (%)",
             fill="#aaaaaa",
             font=("Arial", 11)
         )
 
+        # Label Y (Pixel Count) - Positionné par rapport au bord gauche, pas de l'axe
         canvas.create_text(
-            20,
-            height / 2,
+            15,  # Fixé près du bord gauche du canvas
+            top_margin + (plot_height / 2),
             text="Pixel Count",
             fill="#aaaaaa",
-            font=("Arial", 11),
-            angle=90
+            font=("Arial", 11, "bold"),
+            angle=90,
+            anchor="center"
         )
+
         # =====================================================
         # TICKS X AXIS
         # =====================================================
-
         x_ticks = 6
-        y_ticks = 5
-
-        domain_min = v_min - 5
-        domain_max = v_max + 5
-
-        # --- X ticks ---
         for i in range(x_ticks + 1):
-
             ratio = i / x_ticks
             val = domain_min + ratio * (domain_max - domain_min)
-
             px = left_margin + ratio * plot_width
             py = height - bottom_margin
-
-            # tick mark
-            canvas.create_line(
-                px,
-                py,
-                px,
-                py + 6,
-                fill=axis_color
-            )
-
-            # label
-            canvas.create_text(
-                px,
-                py + 18,
-                text=f"{val:.0f}",
-                fill="#aaaaaa",
-                font=("Arial", 9)
-            )
+            canvas.create_line(px, py, px, py + 6, fill=axis_color)
+            canvas.create_text(px, py + 18, text=f"{val:.0f}", fill="#aaaaaa", font=("Arial", 9))
 
         # =====================================================
-        # Y TICKS
+        # Y TICKS (UNITÉS ALIGNÉES À DROITE)
         # =====================================================
-
+        y_ticks = 5
         for i in range(y_ticks + 1):
-
             ratio = i / y_ticks
             val = max_count * ratio
-
             px = left_margin
             py = height - bottom_margin - ratio * plot_height
 
-            # tick mark
-            canvas.create_line(
-                px - 6,
-                py,
-                px,
-                py,
-                fill=axis_color
-            )
+            # Tick mark
+            canvas.create_line(px - 6, py, px, py, fill=axis_color)
 
-            # label
+            # Label des unités : anchor="e" (East/Droite) pour coller à l'axe
             canvas.create_text(
-                px - 25,
+                px - 10,  # Espacement fixe de 10px entre le chiffre et l'axe
                 py,
                 text=f"{int(val)}",
                 fill="#aaaaaa",
-                font=("Arial", 8)
+                font=("Arial", 8),
+                anchor="e" 
             )
             
         self.last_hist_matrix = matrix
@@ -1675,69 +1689,33 @@ class RasterView(ctk.CTkFrame):
             entry.insert(0, str(val))
 
 
-    def _process_preview_geometry(self, matrix, res):
-
-        h_px, w_px, l_step, x_st, est_min = res[1:6]
-
-        calc_w = (w_px - 1) * x_st
-        calc_h = (h_px - 1) * l_step
-
+    def _process_preview_geometry(self, matrix, geom):
+        calc_w = geom["real_w"]
+        calc_h = geom["real_h"]
+        
+        # Mise à jour auto de l'entrée Largeur seulement
         ctrl_w = self.controls.get("width")
-        ctrl_h = self.controls.get("height")
+        if self.force_width_var.get() in [1, True, "1"] and ctrl_w:
+            ent_w = ctrl_w["entry"]
+            ent_w.delete(0, "end")
+            ent_w.insert(0, f"{calc_w:.2f}")
 
-        ent_w = ctrl_w["entry"] if ctrl_w else None
-        ent_h = ctrl_w["entry"] if ctrl_h else None
+        # Pas de widget height à mettre à jour d'après vos explications, 
+        # donc on utilise directement la valeur calculée par l'engine
+        real_w = calc_w
+        real_h = calc_h
 
-        sld_w = ctrl_w["slider"] if ctrl_w else None
-        sld_h = ctrl_h["slider"] if ctrl_h else None
-
-        is_forced = self.force_width_var.get() in [1, True, "1"]
-
-        if is_forced:
-
-            if ent_w and ent_h:
-                ent_w.delete(0, "end")
-                ent_w.insert(0, f"{calc_w:.2f}")
-
-                ent_h.delete(0, "end")
-                ent_h.insert(0, f"{calc_h:.2f}")
-
-            if sld_w:
-                sld_w.set(calc_w)
-
-            if sld_h:
-                sld_h.set(calc_h)
-
-            real_w, real_h = calc_w, calc_h
-
-        else:
-
-            try:
-
-                val_w = ent_w.get().replace(',', '.') if ent_w else ""
-                val_h = ent_h.get().replace(',', '.') if ent_h else ""
-
-                real_w = float(val_w) if val_w else calc_w
-                real_h = float(val_h) if val_h else calc_h
-
-            except:
-                real_w, real_h = calc_w, calc_h
-
-        total_seconds = int(est_min * 60)
+        # Formatage du temps
+        total_seconds = int(geom["est_min"] * 60)
         hours, remainder = divmod(total_seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
 
-        return real_w, real_h, x_st, l_step, hours, minutes, seconds
+        return real_w, real_h, geom["x_step"], geom["l_step"], hours, minutes, seconds
     
     def _update_image_artist(self, matrix, offX, offY, real_w, real_h, v_min, v_max):
-
-        premove_ctrl = self.controls.get("premove")
-        premove = self.get_val(premove_ctrl) if premove_ctrl else 0
-
-        self.bg_rect.set_xy((offX - premove, offY))
-        self.bg_rect.set_width(real_w + (2 * premove))
-        self.bg_rect.set_height(real_h)
-        self.bg_rect.set_visible(True)
+        # Désactivation définitive du rectangle blanc redondant
+        if hasattr(self, 'bg_rect'):
+            self.bg_rect.set_visible(False)
 
         if self.placeholder_text is not None:
             try:
@@ -1746,59 +1724,44 @@ class RasterView(ctk.CTkFrame):
                 pass
             self.placeholder_text = None
 
-        # ===============================
-        # IMAGE + COLORBAR CREATION
-        # ===============================
-        if self.img_plot is None:
+        # On utilise l'étendue exacte. 
+        # Matplotlib avec 'nearest' centrera les pixels sur les coordonnées.
+        dx = real_w / (matrix.shape[1] - 1) if matrix.shape[1] > 1 else 0
+        dy = real_h / (matrix.shape[0] - 1) if matrix.shape[0] > 1 else 0
+        img_extent = [
+            offX - dx/2, 
+            offX + real_w + dx/2, 
+            offY - dy/2, 
+            offY + real_h + dy/2
+        ]
 
+        if self.img_plot is None:
             self.img_plot = self.ax_img.imshow(
                 matrix,
                 cmap="gray_r",
                 origin='upper',
-                extent=[offX, offX + real_w, offY, offY + real_h],
+                extent=img_extent,
                 aspect='equal',
                 vmin=v_min,
                 vmax=v_max,
-                interpolation='nearest',
-                zorder=0
+                interpolation='nearest', # Garde les bords nets
+                zorder=2 # Au-dessus de la grille, sous l'overscan
             )
 
-            # Activer axe colorbar
+            # Configuration Colorbar
             self.ax_cbar.set_visible(True)
             self.ax_cbar.set_axis_on()
-
-            # Créer UNE SEULE FOIS
-            self.cbar = self.fig_img.colorbar(
-                self.img_plot,
-                cax=self.ax_cbar
-            )
-
-            self.cbar.set_label(
-                "Laser Power Level (%)",
-                color='#888888',
-                fontsize=14,
-                labelpad=8
-            )
-
-            self.cbar.ax.tick_params(
-                colors='#888888',
-                labelsize=11
-            )
-
+            self.cbar = self.fig_img.colorbar(self.img_plot, cax=self.ax_cbar)
+            self.cbar.set_label("Laser Power Level (%)", color='#888888', fontsize=14, labelpad=8)
+            self.cbar.ax.tick_params(colors='#888888', labelsize=11)
             self.cbar.outline.set_visible(False)
-
         else:
-
-            # Update image
+            # Update
             self.img_plot.set_data(matrix)
-            self.img_plot.set_extent([offX, offX + real_w, offY, offY + real_h])
+            self.img_plot.set_extent(img_extent)
             self.img_plot.set_clim(v_min, v_max)
-
-            # 🔥 Mise à jour SANS recréation
             if self.cbar is not None:
                 self.cbar.update_normal(self.img_plot)
-                self.cbar.update_ticks()
-
             self.img_plot.set_visible(True)
 
     def _update_dashboard_stats(self, w_px, h_px, real_w, real_h,
@@ -1845,3 +1808,32 @@ class RasterView(ctk.CTkFrame):
             self.update_histogram_ctk(matrix, v_min, v_max)
 
         self.hist_canvas.after(50, delayed_hist)
+
+    def get_ui_params(self):
+        """Récupère les paramètres disponibles."""
+        try:
+            # On récupère la largeur (obligatoire)
+            ctrl_w = self.controls.get("width") or self.controls.get("w")
+            width = float(ctrl_w["entry"].get().replace(',', '.')) if ctrl_w else 10.0
+            
+            # On récupère les autres paramètres
+            dpi = int(self.get_val(self.controls.get("dpi"))) if self.controls.get("dpi") else 254
+            speed = float(self.controls["speed"]["entry"].get().replace(',', '.')) if "speed" in self.controls else 3000
+            
+            # L'overscan (premove)
+            overscan_dist = self.get_val(self.controls.get("premove")) if "premove" in self.controls else 2.0
+            
+            # On ne passe pas de "height" ici, ou on passe 0, 
+            # car l'engine va la recalculer avec le ratio de la matrice
+            return {
+                "width": width,
+                "height": 0, # Sera calculé par l'engine via le ratio image
+                "dpi": dpi,
+                "line_step": self.get_val(self.controls.get("line_step", 0.1)),
+                "speed": speed,
+                "overscan_dist": overscan_dist,
+                "raster_mode": getattr(self, "raster_mode", "Horizontal")
+            }
+        except Exception as e:
+            print(f"Erreur get_ui_params: {e}")
+            return {"width": 10, "height": 0, "dpi": 254, "line_step": 0.1, "speed": 3000, "overscan_dist": 2.0}
