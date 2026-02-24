@@ -59,18 +59,20 @@ If you just want to use the software without installing Python, follow these ste
 5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
 
 ## Last version change 
+### (24/02/2026) **v0.981b** :
+- **Vertical Rastering Mode**: Introduced full support for vertical scanning trajectories. Users can now choose between Horizontal and Vertical engraving directions.
+- **Dynamic Histogram Engine**: Replaced heavy Matplotlib dependencies with a custom, high-performance histogram. Features real-time percentage-based distribution, integer-rounded axis scaling, and a dedicated "OFF" zone visualizer for better power range analysis.
+- **FreezeFix:** Resolved a critical UI freeze occurring when returning to the dashboard.
+
+<details>
+<summary><b> Click to view full version history</b></summary>
+
 ### (22/02/2026) **v0.98b** :
 - **Advanced Latency Calibration Engine**: Implemented a robust G-Code generator for latency testing, allowing users to fine-tune laser timing (ms) with real-time offset calculation in millimeters.
 - **Predictive Latency Simulation**: Upgraded the G-Code parser to factor in machine latency, providing a high-fidelity visual preview of how timing offsets will affect the final physical engraving.
 - **Core Performance Optimization**: Re-engineered the internal parsing logic and generator loops for faster G-Code processing. Replaced the heavy Matplotlib dependency with a custom, lightweight histogram engine to significantly reduce memory footprint and startup time.
 - **Refined Geometry Controls**: Optimized the Raster direction settings to prioritize Horizontal stability for this release, ensuring maximum reliability before the introduction of Vertical mode.
 - **Stability & UI Polishing**: Fixed various UI scaling issues and improved the "Prepare" workflow with visual success/error feedback directly on action buttons.
-
-
-<details>
-<summary><b> Click to view full version history</b></summary>
-
-
 ### (18/02/2026) **v0.9781b** :
 - **Real G-Code Parser Simulation**: Re-engineered the simulation engine to process actual G-Code commands for 100% fidelity between preview and final laser output.
 - **Interactive Dashboard**: Added a new landing page featuring usage statistics (total lines, G-Code generated).
