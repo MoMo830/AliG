@@ -62,6 +62,9 @@ If you just want to use the software without installing Python, follow these ste
 ### (24/02/2026) **v0.981b** :
 - **Vertical Rastering Mode**: Introduced full support for vertical scanning trajectories. Users can now choose between Horizontal and Vertical engraving directions.
 - **Dynamic Histogram Engine**: Replaced heavy Matplotlib dependencies with a custom, high-performance histogram. Features real-time percentage-based distribution, integer-rounded axis scaling, and a dedicated "OFF" zone visualizer for better power range analysis.
+- **Export System Overhaul**:
+    * Added **Preferred Format** setting to define a default file extension (e.g., .gcode, .nc, .txt).
+    * Introduced **"Export As..."** option for quick, one-click file generation using the preferred format and automated naming.
 - **FreezeFix:** Resolved a critical UI freeze occurring when returning to the dashboard.
 
 <details>
@@ -111,12 +114,11 @@ If you just want to use the software without installing Python, follow these ste
 
 ### Phase 1: Core Stability & UX (Towards v1.0)
 * **Comprehensive Raster Toolkit:** Finalizing the entire user interface to provide a rock-solid, streamlined environment dedicated to high-performance rastering.
-* ~~**Export Policy Overhaul:** Flexible export management allowing users to choose specific file extensions (e.g., .gcode, .nc, .txt) to match various CNC controller requirements.~~ _(Pending next release)_
+
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
 * **UI Enhancement & Custom Branding:** Replace emojis with custom icons (Theme-aware).
 * **Full Internationalization (i18n):** Completion of multi-language support for the entire interface.
 * **Onboarding Experience:** First-run setup wizard for essential machine configuration.
-* ~~**Variable Raster Direction:** X-axis or Y-axis engraving.~~ _(Pending next release)_
 * **Async Streamed Parsing:** Implement a buffered G-code processing system to allow real-time simulation rendering while the generation is still in progress (eliminating UI freezing on large files).
 
 ---
