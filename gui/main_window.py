@@ -22,7 +22,7 @@ class LaserGeneratorApp(ctk.CTk):
         lang = self.config_manager.get_item("machine_settings", "language", "English")
         self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
 
-        self.version = "0.98b"
+        self.version = "0.981b"
         self.title(f"A.L.I.G. - Advanced Laser Imaging Generator v{self.version}")
         self.current_view = None
 

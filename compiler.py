@@ -4,7 +4,7 @@ import subprocess
 import shutil
 
 # --- CONFIGURATION ---
-VERSION = "0.98b"
+VERSION = "0.981b"
 EXE_NAME = f"ALIG_v{VERSION}"
 MAIN_SCRIPT = "main.py"
 

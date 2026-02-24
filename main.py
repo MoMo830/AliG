@@ -2,7 +2,7 @@
 """
 A.L.I.G. - Advanced Laser Imaging Generator
 ===========================================
-Version: 0.9783b
+Version: 0.981b
 Author: Alexandre "MoMo"
 License: MIT
 """
