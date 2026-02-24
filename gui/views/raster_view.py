@@ -241,9 +241,9 @@ class RasterView(ctk.CTkFrame):
             width_ratios=[25, 1],
             wspace=0.02,
             left=0.08,
-            right=0.92,
-            top=0.92,
-            bottom=0.08
+            right=0.96,
+            top=0.96,
+            bottom=0.04
         )
 
         self.ax_img = self.fig_img.add_subplot(gs_img[0, 0])
@@ -252,11 +252,40 @@ class RasterView(ctk.CTkFrame):
         self.ax_img.set_facecolor('#1e1e1e')
         self.ax_cbar.set_visible(False)
 
+        # 1. Configuration des unités (Chiffres des axes)
+        self.ax_img.tick_params(
+            axis='both',
+            colors='#888888',     # Gris clair pour la lisibilité
+            labelsize=9
+        )
 
-        # Placeholder preview (HERE)
+        # 2. FORCE LA GRILLE AU-DESSUS DE L'IMAGE
+        # Par défaut, Matplotlib dessine la grille SOUS l'image (True). 
+        # En mettant False, elle passe au premier plan.
+        self.ax_img.set_axisbelow(False)
+
+        # 3. GRILLE AUTO-ADAPTATIVE
+        # Le blanc avec alpha faible crée un effet de contraste dynamique :
+        # - Visible en gris sur les zones noires
+        # - Discret sur les zones blanches
+        self.ax_img.grid(
+            True, 
+            which='both', 
+            color='#ffffff', 
+            linestyle=':', 
+            linewidth=0.5, 
+            alpha=0.3,           # Opacité légère pour ne pas masquer le travail
+            zorder=10            # Calque supérieur à l'image
+        )
+
+        # 4. Configuration des bordures du cadre (Spines)
+        for spine in self.ax_img.spines.values():
+            spine.set_edgecolor('#333333')
+            spine.set_zorder(11) # Le cadre ferme la vue au-dessus de la grille
+
+        # Placeholder preview
         self.placeholder_text = self.ax_img.text(
-            0.5,
-            0.5,
+            0.5, 0.5,
             self.common["choose_image"],
             color='#444444',
             fontsize=12,
@@ -298,34 +327,29 @@ class RasterView(ctk.CTkFrame):
                                 sticky="nsew")
 
         self.stats_container.grid_columnconfigure(0, weight=1)
-        self.stats_container.grid_columnconfigure(1, weight=7)
+        self.stats_container.grid_columnconfigure(1, weight=6)
         self.stats_container.grid_rowconfigure(0, weight=1)
 
         # -------- Left stats text --------
-
         self.stats_left_frame = ctk.CTkFrame(
             self.stats_container,
             fg_color="#202020"
         )
+        self.stats_left_frame.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
 
-        self.stats_left_frame.grid(row=0,
-                                column=0,
-                                sticky="nsew",
-                                padx=6,
-                                pady=6)
+        # AJOUT : Un conteneur interne pour centrer les labels verticalement
+        self.labels_inner_container = ctk.CTkFrame(self.stats_left_frame, fg_color="transparent")
+        self.labels_inner_container.place(relx=0.5, rely=0.5, anchor="center", relwidth=1)
 
         self.stats_labels = []
-
         for _ in range(6):
-
             lbl = ctk.CTkLabel(
-                self.stats_left_frame,
+                self.labels_inner_container, # Changement de parent ici
                 text="",
                 font=("Consolas", 14),
                 anchor="w",
                 justify="left"
             )
-
             lbl.pack(fill="x", padx=8, pady=2)
             self.stats_labels.append(lbl)
 
@@ -426,11 +450,18 @@ class RasterView(ctk.CTkFrame):
 
         # --- TAB 1: GEOMETRY ---
         t_geo = prepare_tab(self.tab_geom_name)
-        self.create_input_pair(t_geo, self.common["target_width"], 5, 400, 30.0, "width")
+        
+        # 1. Correction pour le label de largeur (on capture l'objet renvoyé)
+        # Assure-toi que create_input_pair renvoie le widget label en premier ou seul.
+        self.width_label_widget = self.create_input_pair(t_geo, self.common["target_width"], 5, 400, 30.0, "width")
         
         force_w_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
         force_w_frame.pack(fill="x", padx=10, pady=(0, 10))
-        ctk.CTkLabel(force_w_frame, text=self.common["force_width"], font=("Segoe UI", 11)).pack(side="left")
+        
+        # 2. Correction cruciale : Séparer la création du pack pour self.force_w_label
+        self.force_w_label = ctk.CTkLabel(force_w_frame, text=self.common["force_width"], font=("Segoe UI", 11))
+        self.force_w_label.pack(side="left") # On pack sur une ligne séparée
+        
         self.force_width_var = ctk.BooleanVar(value=False)
         self.sw_force_width = ctk.CTkSwitch(
             force_w_frame, 
@@ -450,17 +481,30 @@ class RasterView(ctk.CTkFrame):
         
         ctk.CTkLabel(raster_frame, text=self.common["raster_mode"], font=("Segoe UI", 11)).pack(side="left")
         
-        self.raster_dir_var = ctk.StringVar(value="Horizontal")
+        # 1. On définit le mapping (Technique -> Traduit)
+        self.raster_map = {
+            "horizontal": self.common["horizontal"],
+            "vertical": self.common["vertical"]
+        }
+
+        # 2. On crée une liste inversée pour retrouver la clé technique lors du clic
+        self.raster_map_inv = {v: k for k, v in self.raster_map.items()}
+
+        # 3. Initialisation du bouton
+        self.raster_dir_var = ctk.StringVar(value="horizontal") # TA VARIABLE TECHNIQUE
+
         self.raster_dir_btn = ctk.CTkSegmentedButton(
             t_geo, 
-            values=["Horizontal", "Vertical"],
-            variable=self.raster_dir_var,
-            command=lambda _: self.update_preview(),
+            values=list(self.raster_map.values()), # ON AFFICHE LES TEXTES TRADUITS
+            command=self._on_raster_dir_change,     # FONCTION DE PONT
             height=28,
         )
         self.raster_dir_btn.pack(pady=(0, 10), padx=10, fill="x")
-        self.raster_dir_btn.set("Horizontal")
-        self.raster_dir_btn.configure(state="disabled")
+
+        # On définit la position visuelle initiale basée sur "Horizontal"
+        self.raster_dir_btn.set(self.raster_map["horizontal"])
+        #self.raster_dir_btn.configure(state="disabled")
+        
         
         # --- SUITE DE LA GÉOMÉTRIE ---
         self.create_dropdown_pair(t_geo, self.common["origin_point"], ["Lower-Left", "Upper-Left", "Lower-Right", "Upper-Right", "Center", "Custom"], "origin_mode")
@@ -726,7 +770,7 @@ class RasterView(ctk.CTkFrame):
         if help_text:
             ToolTip(lbl, help_text)
             
-        return self.controls[key]
+        return lbl #return self.controls[key]
 
     def create_simple_input(self, parent, label_text, default, key, precision=2, help_text=None, compact=False):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -903,17 +947,23 @@ class RasterView(ctk.CTkFrame):
 
 
     def process_logic(self):
-        if not self.input_image_path:
-            print("DEBUG: En attente du chargement d'une image...")
-            return None, 0, 0, 0, 0, 0
-            
-        if not os.path.isfile(self.input_image_path):
-            print(f"DEBUG: ERREUR - Le fichier image est introuvable ou a été déplacé -> {self.input_image_path}")
-            return None, 0, 0, 0, 0, 0
+        """
+        Prépare les données pour la simulation et le G-code.
+        Regroupe le traitement d'image et les calculs géométriques (moteur).
+        """
+        if not self.input_image_path or not os.path.isfile(self.input_image_path):
+            print("DEBUG: Chargement / Image non disponible.")
+            return None, None
 
-        # 1. On prépare les réglages dans un dictionnaire
+        # 1. Préparation des paramètres consolidés
+        # Note : 'width' contient la valeur de l'UI (qui est la Hauteur si Vertical)
+        ui_dimension = self.get_val(self.controls["width"])
+        raster_mode = self.raster_dir_var.get().lower()
+
+        ui_dimension = self.get_val(self.controls["width"])
+        raster_mode = self.raster_dir_var.get().lower()
+
         settings = {
-            "width": self.get_val(self.controls["width"]),
             "line_step": self.get_val(self.controls["line_step"]),
             "gamma": self.get_val(self.controls["gamma"]),
             "contrast": self.get_val(self.controls["contrast"]),
@@ -924,55 +974,78 @@ class RasterView(ctk.CTkFrame):
             "gray_steps": self.get_val(self.controls["gray_steps"]),
             "premove": self.get_val(self.controls["premove"]),
             "feedrate": self.get_val(self.controls["feedrate"]),
+            "speed": self.get_val(self.controls["feedrate"]),
             "invert": self.invert_var.get(),
-            "force_width": self.force_width_var.get(),
-            "raster_mode": self.raster_dir_var.get() 
+            
+            # --- C'est ici que la magie opère ---
+            "ui_dimension": ui_dimension,      # La valeur numérique saisie
+            "raster_mode": raster_mode,        # 'horizontal' ou 'vertical'
+            "force_dim": self.force_width_var.get() # On transmet l'état du bouton Force
         }
 
-        # 2. GESTION DU CACHE
+        # On garde ces clés par sécurité si d'autres fonctions de l'engine les utilisent
+        if raster_mode == "horizontal":
+            settings["width"] = ui_dimension
+        else:
+            settings["height"] = ui_dimension
+
+        # 2. Gestion du cache source
         current_cache = None
         if hasattr(self, '_source_img_path') and self._source_img_path == self.input_image_path:
             current_cache = getattr(self, '_source_img_cache', None)
 
-        # 3. APPEL DU MOTEUR
+        # 3. Appel unique au moteur (Engine)
         try:
+            # On demande à l'engine de traiter l'image ET de calculer la géométrie
+            # results doit retourner : (matrix, img_obj, geom_dict, mem_warn)
             results = self.engine.process_image_logic(
-                  self.input_image_path, 
-                  settings, 
-                  source_img_cache=current_cache
+                self.input_image_path, 
+                settings, 
+                source_img_cache=current_cache
             )
             
-            # 1. Récupération des 10 valeurs
-            # On récupère bien estimated_file_size à la fin
-            matrix, h_px, w_px, l_step, x_st, est_min, mem_warn, img_obj, _, estimated_file_size = results
-            
-            # 2. STOCKAGE PERSISTANT pour SimulationView
-            self.estimated_file_size = estimated_file_size 
+            matrix, img_obj, geom, mem_warn = results
 
+            # --- Normalisation des pixel pitch selon orientation machine ---
+            raster_mode = settings["raster_mode"]
+
+            x_step = geom.get("x_step", 0.1)
+            y_step = geom.get("y_step", 0.1)
+
+            if raster_mode == "vertical":
+                geom["machine_step_x"] = y_step
+                geom["machine_step_y"] = x_step
+            else:
+                geom["machine_step_x"] = x_step
+                geom["machine_step_y"] = y_step
+
+            # 4. Mise à jour du cache et des références de classe
+            self._source_img_cache = img_obj
+            self._source_img_path = self.input_image_path
+            
+            # On stocke les derniers résultats pour update_preview et generate_gcode
+            self._last_matrix = matrix
+            self._last_geom = geom 
+            self.estimated_file_size = geom.get("file_size_str", "N/A")
+            self._estimated_time = geom.get("est_min", 0)
+
+            # 5. Mise à jour visuelle des alertes mémoire
             if hasattr(self, 'label_matrix_size'):
                 color = "#e74c3c" if mem_warn else "#aaaaaa"
                 self.label_matrix_size.configure(text_color=color)
 
-            # 4. MISE À JOUR DU CACHE
-            self._source_img_cache = img_obj
-            self._source_img_path = self.input_image_path
-
-            # 5. Stockage du résultat pour generate_gcode 
-            # (Ajoute estimated_file_size ici si tu veux que ce soit complet)
-            self._last_result = (matrix, h_px, w_px, l_step, x_st, est_min, estimated_file_size)
-
-            # 6. Mise à jour de l'affichage des stats (Optionnel)
-            # Si tu as un label pour la taille du fichier, mets le à jour ici
+            # 6. Mise à jour des labels de stats si présents
             if hasattr(self, 'label_file_size'):
-                self.label_file_size.configure(text=f"FILE SIZE: {estimated_file_size}")
+                self.label_file_size.configure(text=f"FILE SIZE: {self.estimated_file_size}")
 
-            return matrix, h_px, w_px, l_step, x_st, est_min
+            # On retourne la matrice et le dictionnaire de géométrie complet
+            return matrix, geom
         
         except Exception as e:
             import traceback
+            print(f"Logic Error: {e}")
             traceback.print_exc()
-            print(f"Preview Error: {e}")
-            return None, 0, 0, 0, 0, 0
+            return None, None
 
 
     def update_preview(self):
@@ -982,35 +1055,29 @@ class RasterView(ctk.CTkFrame):
             return
 
         try:
-            # 1. Logique de traitement d'image
+            # 1. Récupération des données consolidées depuis l'Engine
+            # process_logic() retourne maintenant (matrix, geom)
             res = self.process_logic()
             if not res or res[0] is None:
                 if self.img_plot: self.img_plot.set_visible(False)
                 self.canvas_img.draw_idle()
                 return
 
-            matrix = np.array(res[0], dtype=np.float32)
-            if matrix.ndim < 2 or matrix.size == 0:
-                return
-
-            # 2. Appel à l'engine (Calcul basé sur les centres de pixels)
-            current_params = self.get_ui_params() 
-            geom = self.engine.compute_geometry(current_params, matrix.shape)
-
-            # Extraction des données géométriques
-            real_w, real_h, x_st, l_step, hours, minutes, seconds = \
-                self._process_preview_geometry(matrix, geom)
-
-            # Calcul du décalage selon l'origine choisie (Top-Left, Center, etc.)
+            matrix, geom = res
+            
+            # 2. Extraction des paramètres géométriques calculés par l'engine
+            real_w = geom["real_w"]
+            real_h = geom["real_h"]
+            rf = geom["rect_full"]  # [x_min, y_min, x_max, y_max] relatif à l'image
+            
+            # Calcul du décalage selon l'origine machine choisie
             offX, offY = self.calculate_offsets(real_w, real_h)
             
             v_min = self.get_val(self.controls.get("min_p")) if self.controls.get("min_p") else 0
             v_max = self.get_val(self.controls.get("max_p")) if self.controls.get("max_p") else 255
 
-
-            # 4. Dessin de l'Overscan (Rectangle Bleu)
-            # --- Nettoyages ---
-            for attr in ['rect_overscan_patch', 'overscan_text_left', 'overscan_text_right']:
+            # 3. Nettoyage des anciens éléments de dessin
+            for attr in ['rect_overscan_patch', 'overscan_text_1', 'overscan_text_2']:
                 if hasattr(self, attr):
                     try: getattr(self, attr).remove()
                     except: pass
@@ -1021,104 +1088,136 @@ class RasterView(ctk.CTkFrame):
                     except: pass
             self.overscan_hatch_patches = []
 
-            # --- Géométrie ---
-            dx = real_w / (matrix.shape[1] - 1) if matrix.shape[1] > 1 else 0
-            # On aligne img_y sur les limites réelles de l'image
-            dy_total = real_h / (matrix.shape[0]-1) if matrix.shape[0] > 1 else 0
-            img_x_min, img_x_max = offX - dx/2, offX + real_w + dx/2
-            img_y_min, img_y_max = offY - dy_total/2, offY + real_h + dy_total/2
-
-            rf = geom["rect_full"]
-            over_x_min, over_x_max = offX + rf[0] - dx/2, offX + rf[2] + dx/2
-            
-            left_width = img_x_min - over_x_min
-            right_width = over_x_max - img_x_max
-            y_center = (img_y_min + img_y_max) / 2
-
-            # --- Mise à jour de l'image et calcul du Renderer ---
+            # 4. Mise à jour de l'image de fond
             self._update_image_artist(matrix, offX, offY, real_w, real_h, v_min, v_max)
-            # Crucial : On force le dessin interne pour initialiser les coordonnées
             self.canvas_img.draw() 
 
-            def draw_overscan_side(x_min_zone, width_zone, side="left"):
-                if width_zone < 0.5: return None
-                rotation = 90 if side == "left" else -90
-                x_mid = x_min_zone + width_zone/2
+            def draw_overscan_zone(x_min, y_min, width, height, label_side="left"):
+                if width < 0.5 or height < 0.5: return None
                 
-                txt = self.ax_img.text(x_mid, y_center, "OVERSCAN", rotation=rotation,
-                                    fontsize=8, va='center', ha='center',
-                                    color='#3498db', weight='bold', zorder=20)
-                
-                try:
-                    renderer = self.canvas_img.get_renderer()
-                    bbox = txt.get_window_extent(renderer)
-                    inv = self.ax_img.transData.inverted()
-                    bbox_data = inv.transform_bbox(bbox)
-                    
-                    # Sécurité si bbox invalide
-                    if bbox_data.width <= 0: raise ValueError("Invalid BBox")
-                    
-                    pad = 1.0 
-                    hy, hh = bbox_data.y0 - pad, bbox_data.height + 2*pad
-                    hx, hw = bbox_data.x0 - pad, bbox_data.width + 2*pad
-                except:
-                    # Fallback mathématique si le renderer n'est pas prêt (ex: 22mm x 4mm)
-                    hy, hh = y_center - 11.0, 22.0
-                    hx, hw = x_mid - 2.0, 4.0
+                # Création du conteneur de hachures
+                r_main = Rectangle((x_min, y_min), width, height, facecolor="none", 
+                                  hatch=hatch_pattern, edgecolor="#3498db", 
+                                  linewidth=0, alpha=0.3, zorder=5)
+                self.ax_img.add_patch(r_main)
+                self.overscan_hatch_patches.append(r_main)
 
-                # Dessin des 4 blocs de hachures
-                r_coords = [
-                    (x_min_zone, img_y_min, width_zone, hy - img_y_min),            # Bas
-                    (x_min_zone, hy + hh, width_zone, img_y_max - (hy + hh)),       # Haut
-                    (x_min_zone, hy, (width_zone - hw)/2, hh),                      # Gauche
-                    (hx + hw, hy, (width_zone - hw)/2, hh)                         # Droite
-                ]
-                for rx, ry, rw, rh in r_coords:
-                    if rw > 0.05 and rh > 0.05:
-                        r = Rectangle((rx, ry), rw, rh, facecolor="none", hatch="////", 
-                                      edgecolor="#3498db", linewidth=0, alpha=0.3, zorder=5)
-                        self.ax_img.add_patch(r)
-                        self.overscan_hatch_patches.append(r)
+                # Ajout du texte "OVERSCAN" au centre de la zone
+                rotation = 90 if direction == "horizontal" else 0
+                txt = self.ax_img.text(x_min + width/2, y_min + height/2, "OVERSCAN", 
+                                       rotation=rotation, fontsize=7, va='center', ha='center',
+                                       color='#3498db', weight='bold', zorder=20)
                 return txt
+            
+            # 5. Logique de dessin de l'Overscan (Adaptée pour origin='upper')
+            direction = self.raster_dir_var.get()
+            hatch_pattern = "|||" if direction == "vertical" else "---"
 
-            # Exécution finale
-            if left_width > 0.1:
-                self.overscan_text_left = draw_overscan_side(over_x_min, left_width, "left")
-            if right_width > 0.1:
-                self.overscan_text_right = draw_overscan_side(img_x_max, right_width, "right")
+            if direction == "horizontal":
+                over_w_left = abs(rf[0])
+                over_w_right = rf[2] - real_w
+                
+                # On force l'alignement sur les bords de l'image
+                global_y = offY
+                global_h = real_h
+                
+                if over_w_left > 0.1:
+                    self.overscan_text_1 = draw_overscan_zone(offX + rf[0], offY, over_w_left, real_h)
+                if over_w_right > 0.1:
+                    self.overscan_text_2 = draw_overscan_zone(offX + real_w, offY, over_w_right, real_h)
+            else:
+                # Mode Vertical
+                over_h_bottom = abs(rf[1])
+                over_h_top = rf[3] - real_h
+                
+                global_y = offY + rf[1]
+                global_h = rf[3] - rf[1]
+                
+                if over_h_bottom > 0.1:
+                    self.overscan_text_1 = draw_overscan_zone(offX, offY + rf[1], real_w, over_h_bottom)
+                if over_h_top > 0.1:
+                    self.overscan_text_2 = draw_overscan_zone(offX, offY + real_h, real_w, over_h_top)
 
+            # Rectangle global en pointillés
             self.rect_overscan_patch = Rectangle(
-                (over_x_min, img_y_min), over_x_max - over_x_min, img_y_max - img_y_min,
-                linewidth=1, edgecolor='#3498db', facecolor='none', linestyle='--', alpha=0.8, zorder=15
+                (offX + rf[0], global_y), rf[2] - rf[0], global_h,
+                linewidth=1.5,          # Un poil plus épais pour couvrir le bord du pixel
+                edgecolor='#3498db', 
+                facecolor='none', 
+                linestyle='--', 
+                alpha=0.9, 
+                zorder=30,              # On passe BIEN au-dessus de l'image (zorder 2)
+                snap=True               # Aligne le tracé sur la grille de l'écran
             )
             self.ax_img.add_patch(self.rect_overscan_patch)
-            # 5. Configuration des axes
-            # On ajuste les limites pour englober l'overscan + une petite marge de 2mm
-            self.ax_img.set_xlim(offX + rf[0] - 2, offX + rf[2] + 2)
-            self.ax_img.set_ylim(offY + rf[1] - 2, offY + rf[3] + 2)
-            
-            # Crucial pour que 1mm sur X = 1mm sur Y à l'écran
-            self.ax_img.set_aspect('equal', adjustable='box')
 
-            # Nettoyage et dessin du point d'origine machine (0,0)
+            # 6. Configuration des limites des axes
+            decal = 0.5
+            rect_x_min = offX + rf[0]
+            rect_x_max = offX + rf[2]
+            self.ax_img.set_xlim(rect_x_min-decal, rect_x_max+decal)
+            self.ax_img.set_ylim(global_y-decal, global_y + global_h+decal)
+
+            # --- NOUVEAU : AFFICHAGE UNITÉS HAUT ET DROITE ---
+            # On active les traits (ticks) en haut et à droite
+            self.ax_img.tick_params(top=True, right=True, which='both')
+            # On force l'affichage des chiffres (labels) sur tous les côtés
+            self.ax_img.xaxis.set_tick_params(labelbottom=True, labeltop=True)
+            self.ax_img.yaxis.set_tick_params(labelleft=True, labelright=True)
+            # On s'assure que la couleur grise s'applique à tous ces nouveaux labels
+            self.ax_img.tick_params(axis='both', colors='#888888', labelsize=9)
+
+            # --- TA GRILLE CYAN ---
+            self.ax_img.set_axisbelow(False)  
+            self.ax_img.grid(False, which='both')
+
+            self.ax_img.grid(
+                True, 
+                color='#00ffff', # Cyan
+                linestyle='-', 
+                linewidth=1, 
+                alpha=0.5, 
+                zorder=15
+            )
+
+            for line in self.ax_img.xaxis.get_gridlines() + self.ax_img.yaxis.get_gridlines():
+                line.set_zorder(15)
+
+
+
+
+            # 7. Dessin du point d'origine machine (0,0)
             if hasattr(self, 'origin_marker'):
                 try: self.origin_marker[0].remove()
                 except: pass
             self.origin_marker = self.ax_img.plot(0, 0, 'ro', markersize=6, zorder=25)
 
-            # Style visuel
-            self.ax_img.tick_params(axis='both', colors='#888888', labelsize=10)
-            self.ax_img.grid(True, color='#444444', linestyle=':', linewidth=0.5, alpha=0.6, zorder=1)
+            # 8. Mise à jour des Stats et Histogramme
+            # On utilise directement les données du dictionnaire geom
+            est_min = geom.get("est_min", 0.0)
 
-            # 6. Mise à jour des Stats et Histogramme
+            total_seconds = int(est_min * 60)
+
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+
             self._update_dashboard_stats(
-                geom["w_px"], geom["h_px"], real_w, real_h, x_st, l_step,
-                hours, minutes, seconds,
-                getattr(self, 'estimated_file_size', "N/A")
+                geom["w_px"],
+                geom["h_px"],
+                real_w,
+                real_h,
+                geom["scan_step"],   # <-- toujours celui-ci
+                geom["l_step"],      # <-- toujours celui-ci
+                hours,
+                minutes,
+                seconds,
+                self.estimated_file_size
             )
+        
+
             self._update_histogram_async(matrix, v_min, v_max)
             
-            # Rafraîchissement du canvas
             self.canvas_img.draw_idle()
 
         except Exception as e:
@@ -1140,37 +1239,28 @@ class RasterView(ctk.CTkFrame):
         except AttributeError: 
             return
 
-        # --- 1. RÉCUPÉRATION / CALCUL DES DONNÉES DE BASE ---
-        if hasattr(self, '_last_result'):
-            matrix, h_px, w_px, l_step, x_st, est_min = self._last_result[0:6]
-        else:
-            res = self.process_logic()
-            if not res: return
-            matrix, h_px, w_px, l_step, x_st, est_min = res[0:6]
-        
-        estimated_file_size = getattr(self, 'estimated_file_size', "N/A")
-        if matrix is None: return
+        # --- 1. RÉCUPÉRATION DES DONNÉES DEPUIS L'ENGINE ---
+        res = self.process_logic()
+        if not res or res[0] is None:
+            return
 
-        # --- LOGIQUE DE DIMENSION (Synchronisée avec le switch) ---
-        ent_w = self.controls.get("width")
-        ent_h = self.controls.get("height")
+        matrix, geom = res
 
-        # On lit la variable source de vérité (utilisée aussi dans update_preview)
-        is_forced = self.force_width_var.get() in [1, True]
+        # On extrait les valeurs calculées et VALIDÉES par l'Engine
+        h_px = geom["h_px"]
+        w_px = geom["w_px"]
 
-        if is_forced:
-            # On utilise le calcul exact (le même que celui injecté dans l'affichage)
-            real_w = (w_px - 1) * x_st
-            real_h = (h_px - 1) * l_step
-        else:
-            # Mode libre : on prend la valeur actuellement écrite dans les cases
-            try:
-                real_w = float(ent_w.get()) if ent_w else (w_px - 1) * x_st
-                real_h = float(ent_h.get()) if ent_h else (h_px - 1) * l_step
-            except (ValueError, TypeError, AttributeError):
-                real_w = (w_px - 1) * x_st
-                real_h = (h_px - 1) * l_step
+        # IMPORTANT : On récupère les pas physiques réels (X et Y) 
+        # calculés par l'Engine (qui a déjà géré le mode Horizontal/Vertical)
+        x_step_final = geom["x_step"]
+        y_step_final = geom["y_step"]
+        est_min = geom["est_min"]
 
+        real_w = geom["real_w"]
+        real_h = geom["real_h"]
+        estimated_file_size = geom.get("file_size_str", "N/A")
+
+        # Calcul des offsets basé sur les dimensions réelles validées
         offX, offY = self.calculate_offsets(real_w, real_h)
 
         # --- 2. GESTION DES BLOCS DE TEXTE (FUSION GLOBAL + RASTER) ---
@@ -1182,12 +1272,11 @@ class RasterView(ctk.CTkFrame):
 
         full_header = f"{global_h}\n{raster_h}".strip() if global_h and raster_h else (global_h or raster_h)
         full_footer = f"{raster_f}\n{global_f}".strip() if global_f and raster_f else (global_f or raster_f)
-
-
+        print(f"h:{h_px}, w_px:{w_px}, y_step_final:{y_step_final}, x_step_final{x_step_final}")
         # --- 3. PACKAGING DU PAYLOAD ---
         payload = {
             'matrix': matrix,
-            'dims': (h_px, w_px, l_step, x_st),
+            'dims': (h_px, w_px, y_step_final, x_step_final),
             'estimated_size': estimated_file_size,
             'offsets': (offX, offY),
             'params': {
@@ -1231,6 +1320,7 @@ class RasterView(ctk.CTkFrame):
                 'raster_direction': current_raster_mode 
             }
         }
+
         # --- 4. LANCEMENT ---
         self.app.show_simulation(
             self.engine, 
@@ -1515,10 +1605,12 @@ class RasterView(ctk.CTkFrame):
         self.txt_global_footer_preview.configure(state="disabled")
 
     def update_histogram_ctk(self, matrix, v_min, v_max):
-        if not hasattr(self, "hist_canvas"):
-            return
+        # --- STOCKAGE SYSTEMATIQUE POUR LE RESIZE ---
+        self.last_hist_matrix = matrix
+        self.last_hist_vmin = v_min
+        self.last_hist_vmax = v_max
 
-        if matrix is None:
+        if not hasattr(self, "hist_canvas") or matrix is None:
             return
 
         canvas = self.hist_canvas
@@ -1527,136 +1619,105 @@ class RasterView(ctk.CTkFrame):
 
         width = canvas.winfo_width()
         height = canvas.winfo_height()
+        if width <= 50 or height <= 50: return
 
-        if width <= 50 or height <= 50:
-            return
-
-        # Data sampling
+        # 1. PRÉPARATION DES DONNÉES
         flat_data = matrix.ravel()[::10]
-        if flat_data.size == 0:
-            return
+        total_pixels = flat_data.size
+        if total_pixels == 0: return
 
-        # Histogram compute
-        bins = 80
-        counts, bin_edges = np.histogram(
-            flat_data,
-            bins=bins,
-            range=(v_min - 5, v_max + 5)
-        )
+        data_zero = flat_data[flat_data == 0]
+        data_active = flat_data[flat_data > 0]
+        
+        # 2. CALCUL DE L'HISTOGRAMME
+        bins = 60
+        counts, bin_edges = np.histogram(data_active, bins=bins, range=(v_min, v_max))
+        
+        # Conversion en POURCENTAGE
+        counts_pct = (counts / total_pixels) * 100
+        count_zero_pct = (data_zero.size / total_pixels) * 100
+        
+        # --- LOGIQUE D'ÉCHELLE Y OPTIMISÉE POUR ENTIERS ---
+        real_max = np.max(counts_pct) if counts_pct.size > 0 else 0
+        
+        if real_max > 0:
+            # On arrondit à l'entier supérieur (ex: 6.7 -> 7)
+            # On s'assure que c'est au moins pair pour que le milieu (50%) soit propre
+            y_limit = np.ceil(real_max)
+            if y_limit % 2 != 0: y_limit += 1 # Force un nombre pair pour le milieu
+        else:
+            y_limit = 10
 
-        max_count = np.max(counts) if np.max(counts) > 0 else 1
-
-        # ===== Layout margins =====
-        # On augmente légèrement la marge gauche pour accommoder les grands nombres
+        # 3. LAYOUT ET MARGES
         left_margin = 75 
-        right_margin = 30
-        top_margin = 40
-        bottom_margin = 50
+        right_margin = 40
+        top_margin = 30 
+        bottom_margin = 55
 
-        plot_width = width - left_margin - right_margin
+        total_plot_width = width - left_margin - right_margin
+        zero_zone_width = total_plot_width * 0.05 
+        active_plot_width = total_plot_width - zero_zone_width
         plot_height = height - top_margin - bottom_margin
 
-        # ===== Title =====
-        canvas.create_text(
-            width / 2,
-            18,
-            text="POWER DISTRIBUTION",
-            fill="white",
-            font=("Arial", 14, "bold")
-        )
+        # TITRE
+        canvas.create_text(width / 2, 20, text="POWER DISTRIBUTION", fill="white", font=("Arial", 11, "bold"))
 
-        # ===== Axis drawing =====
-        axis_color = "#888888"
+        # AXES
+        axis_color = "#555555"
         canvas.create_line(left_margin, height - bottom_margin, width - right_margin, height - bottom_margin, fill=axis_color)
         canvas.create_line(left_margin, top_margin, left_margin, height - bottom_margin, fill=axis_color)
 
-        # ===== Histogram bars =====
-        bin_width_px = plot_width / bins
-        domain_min = v_min - 5
-        domain_max = v_max + 5
+        # 4. ZONE OFF
+        if count_zero_pct > 0:
+            h_ratio = min(count_zero_pct / y_limit, 1.0)
+            bar_h = h_ratio * plot_height
+            x0_z, x1_z = left_margin + 2, left_margin + zero_zone_width - 2
+            canvas.create_rectangle(x0_z, height-bottom_margin, x1_z, height-bottom_margin-bar_h, fill="#EB984E", outline="#A0522D", width=1)
+            canvas.create_text((x0_z + x1_z)/2, height-bottom_margin + 12, text="OFF", fill="#EB984E", font=("Arial", 8, "bold"))
 
-        def scale_x(val):
-            if domain_max - domain_min == 0:
-                return left_margin
-            return left_margin + ((val - domain_min) / (domain_max - domain_min)) * plot_width
+        # 5. ZONE ACTIVE (Bleue)
+        active_start_px = left_margin + zero_zone_width
+        def scale_x_active(val):
+            if v_max == v_min: return active_start_px
+            return active_start_px + ((val - v_min) / (v_max - v_min)) * active_plot_width
 
-        for i in range(len(counts)):
-            h_norm = counts[i] / max_count
-            bar_height = h_norm * plot_height
-            x0 = left_margin + i * bin_width_px
-            y0 = height - bottom_margin
-            x1 = x0 + bin_width_px - 1
-            y1 = y0 - bar_height
-            canvas.create_rectangle(x0, y0, x1, y1, fill="#5dade2", width=0)
+        for i in range(len(counts_pct)):
+            if counts_pct[i] <= 0: continue
+            x0 = scale_x_active(bin_edges[i])
+            x1 = scale_x_active(bin_edges[i+1])
+            h_ratio = min(counts_pct[i] / y_limit, 1.0)
+            canvas.create_rectangle(x0, height-bottom_margin, x1, height-bottom_margin-(h_ratio * plot_height), fill="#5dade2", outline="#2E86C1", width=1)
 
-        # ===== Threshold lines =====
-        try:
-            min_pos = scale_x(v_min)
-            max_pos = scale_x(v_max)
-            canvas.create_line(min_pos, top_margin, min_pos, height - bottom_margin, fill="#ffcc00", dash=(4, 2))
-            canvas.create_line(max_pos, top_margin, max_pos, height - bottom_margin, fill="#ff3333", dash=(4, 2))
-        except:
-            pass
+        # 6. REPERES MIN / MAX
+        min_px = scale_x_active(v_min)
+        max_px = scale_x_active(v_max)
+        canvas.create_line(min_px, top_margin, min_px, height-bottom_margin, fill="#ffcc00", dash=(4,4))
+        canvas.create_line(max_px, top_margin, max_px, height-bottom_margin, fill="#ff3333", dash=(4,4))
+        canvas.create_text(min_px, height-bottom_margin + 32, text="MIN", fill="#ffcc00", font=("Arial", 8, "bold"))
+        canvas.create_text(max_px, height-bottom_margin + 32, text="MAX", fill="#ff3333", font=("Arial", 8, "bold"))
 
-        # ===== Axis labels (DYNAMIQUE) =====
-        # Label X
-        canvas.create_text(
-            left_margin + (plot_width / 2),
-            height - 15,
-            text="Laser Power (%)",
-            fill="#aaaaaa",
-            font=("Arial", 11)
-        )
+        # 7. TITRES DES AXES
+        canvas.create_text(left_margin + (total_plot_width / 2), height - 25, text="Power Value (%)", fill="#888888", font=("Arial", 9, "italic"))
+        canvas.create_text(20, top_margin + (plot_height / 2), text="Distribution (%)", fill="#888888", font=("Arial", 9, "bold"), angle=90)
 
-        # Label Y (Pixel Count) - Positionné par rapport au bord gauche, pas de l'axe
-        canvas.create_text(
-            15,  # Fixé près du bord gauche du canvas
-            top_margin + (plot_height / 2),
-            text="Pixel Count",
-            fill="#aaaaaa",
-            font=("Arial", 11, "bold"),
-            angle=90,
-            anchor="center"
-        )
+        # 8. GRADUATIONS X (Valeurs rondes)
+        step = 10 if (v_max - v_min) > 40 else 5
+        current_val = np.ceil(v_min / step) * step
+        while current_val <= v_max:
+            px = scale_x_active(current_val)
+            if px <= width - right_margin:
+                canvas.create_line(px, height-bottom_margin, px, height-bottom_margin + 5, fill=axis_color)
+                canvas.create_text(px, height-bottom_margin + 15, text=f"{int(current_val)}", fill="#aaaaaa", font=("Arial", 8))
+            current_val += step
 
-        # =====================================================
-        # TICKS X AXIS
-        # =====================================================
-        x_ticks = 6
-        for i in range(x_ticks + 1):
-            ratio = i / x_ticks
-            val = domain_min + ratio * (domain_max - domain_min)
-            px = left_margin + ratio * plot_width
-            py = height - bottom_margin
-            canvas.create_line(px, py, px, py + 6, fill=axis_color)
-            canvas.create_text(px, py + 18, text=f"{val:.0f}", fill="#aaaaaa", font=("Arial", 9))
-
-        # =====================================================
-        # Y TICKS (UNITÉS ALIGNÉES À DROITE)
-        # =====================================================
-        y_ticks = 5
-        for i in range(y_ticks + 1):
-            ratio = i / y_ticks
-            val = max_count * ratio
-            px = left_margin
+        # 9. GRADUATIONS Y (FORCÉES EN ENTIERS)
+        # On affiche 0, le milieu (entier ou .5) et le max entier
+        for ratio in [0, 0.5, 1.0]:
             py = height - bottom_margin - ratio * plot_height
-
-            # Tick mark
-            canvas.create_line(px - 6, py, px, py, fill=axis_color)
-
-            # Label des unités : anchor="e" (East/Droite) pour coller à l'axe
-            canvas.create_text(
-                px - 10,  # Espacement fixe de 10px entre le chiffre et l'axe
-                py,
-                text=f"{int(val)}",
-                fill="#aaaaaa",
-                font=("Arial", 8),
-                anchor="e" 
-            )
-            
-        self.last_hist_matrix = matrix
-        self.last_hist_vmin = v_min
-        self.last_hist_vmax = v_max
+            val_y = y_limit * ratio
+            # On affiche en entier si c'est un rond, sinon avec une décimale
+            label_text = f"{int(val_y)}%" if val_y == int(val_y) else f"{val_y:.1f}%"
+            canvas.create_text(left_margin - 10, py, text=label_text, fill="#888888", font=("Arial", 7), anchor="e")
 
     def on_hist_resize(self, event):
 
@@ -1729,11 +1790,12 @@ class RasterView(ctk.CTkFrame):
         dx = real_w / (matrix.shape[1] - 1) if matrix.shape[1] > 1 else 0
         dy = real_h / (matrix.shape[0] - 1) if matrix.shape[0] > 1 else 0
         img_extent = [
-            offX - dx/2, 
-            offX + real_w + dx/2, 
-            offY - dy/2, 
-            offY + real_h + dy/2
+            offX,
+            offX + real_w,
+            offY,
+            offY + real_h
         ]
+        
 
         if self.img_plot is None:
             self.img_plot = self.ax_img.imshow(
@@ -1745,7 +1807,7 @@ class RasterView(ctk.CTkFrame):
                 vmin=v_min,
                 vmax=v_max,
                 interpolation='nearest', # Garde les bords nets
-                zorder=2 # Au-dessus de la grille, sous l'overscan
+                zorder=1 # Au-dessus de la grille, sous l'overscan
             )
 
             # Configuration Colorbar
@@ -1760,13 +1822,17 @@ class RasterView(ctk.CTkFrame):
             self.img_plot.set_data(matrix)
             self.img_plot.set_extent(img_extent)
             self.img_plot.set_clim(v_min, v_max)
+            self.img_plot.set_zorder(1)
             if self.cbar is not None:
                 self.cbar.update_normal(self.img_plot)
             self.img_plot.set_visible(True)
+        
+
+
 
     def _update_dashboard_stats(self, w_px, h_px, real_w, real_h,
-                            x_st, l_step,
-                            hours, minutes, seconds, est_size="N/A"): # Ajout de est_size ici
+                                scan_step, line_step,
+                                hours, minutes, seconds, est_size="N/A"):
 
         if not hasattr(self, "stats_labels"):
             return
@@ -1781,22 +1847,40 @@ class RasterView(ctk.CTkFrame):
         except:
             final_font_size = 14
 
-        # On ajoute la ligne FILE SIZE dans la liste
         stats_lines = [
-            f"ESTIMATED TIME:   {hours:02d}:{minutes:02d}:{seconds:02d}",
-            f"FILE SIZE:        {est_size}", 
-            f"MATRIX SIZE:      {w_px} x {h_px} px",
             f"REAL DIMENSIONS:  {real_w:.2f} x {real_h:.2f} mm",
-            f"PIXEL PITCH X:    {x_st:.4f} mm",
-            f"PIXEL PITCH Y:    {l_step:.4f} mm"
+            f"ESTIMATED TIME:   {hours:02d}:{minutes:02d}:{seconds:02d}",
+            f"FILE SIZE:        {est_size}",
+            f"MATRIX SIZE:      {w_px} x {h_px} px",
+            f"SCAN STEP:        {scan_step:.4f} mm",
+            f"LINE STEP:        {line_step:.4f} mm"
         ]
 
-        # Mise à jour des labels (la boucle zip s'adaptera au nombre de labels dispo)
         for lbl, txt in zip(self.stats_labels, stats_lines):
             lbl.configure(
                 text=txt,
                 font=("Consolas", int(final_font_size))
             )
+
+    def _on_raster_dir_change(self, selected_translated_value):
+        tech_value = self.raster_map_inv.get(selected_translated_value)
+        self.raster_dir_var.set(tech_value)
+        
+        if tech_value == "vertical":
+            w_text = self.common.get("target_height", "Target Height")
+            f_text = self.common.get("force_height", "Force Exact Height")
+        else:
+            w_text = self.common.get("target_width", "Target Width")
+            f_text = self.common.get("force_width", "Force Exact Width")
+            
+        # Ces appels ne planteront plus car les widgets sont bien référencés
+        if hasattr(self, "width_label_widget"):
+            self.width_label_widget.configure(text=w_text)
+            
+        if hasattr(self, "force_w_label"):
+            self.force_w_label.configure(text=f_text)
+        
+        self.update_preview()
 
     def _update_histogram_async(self, matrix, v_min, v_max):
 
@@ -1810,30 +1894,43 @@ class RasterView(ctk.CTkFrame):
         self.hist_canvas.after(50, delayed_hist)
 
     def get_ui_params(self):
-        """Récupère les paramètres disponibles."""
+        """Récupère les paramètres de l'UI pour l'Engine."""
         try:
-            # On récupère la largeur (obligatoire)
+            # 1. Récupération de la largeur
             ctrl_w = self.controls.get("width") or self.controls.get("w")
             width = float(ctrl_w["entry"].get().replace(',', '.')) if ctrl_w else 10.0
             
-            # On récupère les autres paramètres
+            # 2. Récupération de la vitesse (on change 'speed' en 'feedrate')
+            ctrl_s = self.controls.get("speed")
+            feedrate = float(ctrl_s["entry"].get().replace(',', '.')) if ctrl_s else 3000.0
+            
+            # 3. DPI et Pas de ligne
             dpi = int(self.get_val(self.controls.get("dpi"))) if self.controls.get("dpi") else 254
-            speed = float(self.controls["speed"]["entry"].get().replace(',', '.')) if "speed" in self.controls else 3000
+            l_step = float(self.get_val(self.controls.get("line_step", 0.1)))
             
-            # L'overscan (premove)
-            overscan_dist = self.get_val(self.controls.get("premove")) if "premove" in self.controls else 2.0
+            # 4. Overscan (premove)
+            overscan = float(self.get_val(self.controls.get("premove"))) if "premove" in self.controls else 2.0
             
-            # On ne passe pas de "height" ici, ou on passe 0, 
-            # car l'engine va la recalculer avec le ratio de la matrice
+            # 5. Récupération du mode (Horizontal/Vertical)
+            # On vérifie si vous utilisez une variable tkinter ou un attribut
+            if hasattr(self, "raster_dir_var"):
+                r_mode = self.raster_dir_var.get()
+            else:
+                r_mode = getattr(self, "raster_mode", "Horizontal")
+
             return {
                 "width": width,
-                "height": 0, # Sera calculé par l'engine via le ratio image
+                "height": 0,       # Sera calculé via le ratio de l'image
                 "dpi": dpi,
-                "line_step": self.get_val(self.controls.get("line_step", 0.1)),
-                "speed": speed,
-                "overscan_dist": overscan_dist,
-                "raster_mode": getattr(self, "raster_mode", "Horizontal")
+                "line_step": l_step,
+                "feedrate": feedrate, 
+                "premove": overscan,  
+                "raster_mode": r_mode
             }
         except Exception as e:
             print(f"Erreur get_ui_params: {e}")
-            return {"width": 10, "height": 0, "dpi": 254, "line_step": 0.1, "speed": 3000, "overscan_dist": 2.0}
+            return {
+                "width": 10, "height": 0, "dpi": 254, 
+                "line_step": 0.1, "feedrate": 3000, 
+                "premove": 2.0, "raster_mode": "Horizontal"
+            }

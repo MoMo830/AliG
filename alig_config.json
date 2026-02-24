@@ -1,11 +1,11 @@
 {
     "window_settings": {
         "is_maximized": true,
-        "geometry": "1300x900+338+338"
+        "geometry": "1576x1133+394+188"
     },
     "machine_settings": {
         "theme": "System",
-        "language": "Fran\u00e7ais",
+        "language": "English",
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
         "gcode_extension": ".nc",
@@ -17,36 +17,36 @@
         "custom_footer": ""
     },
     "raster_settings": {
-        "width": 50.0,
+        "width": 100.0,
         "line_step": 0.1307,
-        "dpi": 254,
+        "dpi": 227,
         "custom_x": 0.0,
         "custom_y": 0.0,
-        "contrast": 0.0,
-        "gamma": 1.0,
-        "thermal": 1.5,
+        "contrast": 0.12,
+        "gamma": 1.55,
+        "thermal": 1.55,
         "feedrate": 3000,
         "premove": 10.0,
         "max_p": 40.0,
         "min_p": 10.0,
         "gray_steps": 256,
-        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/ALIG_Project/Ressources/AMC.jpg",
-        "output_dir": "//192.168.2.100/cnc/03_laser",
+        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/Original-image-512x512-pixels.png",
+        "output_dir": "C:/Users/momof/SynologyDrive/Python/CNC",
         "custom_header": "",
         "custom_footer": "",
-        "origin_mode": "Lower-Left",
-        "include_frame": true,
-        "include_pointer": true,
+        "origin_mode": "Center",
+        "include_frame": false,
+        "include_pointer": false,
         "frame_power": "2",
         "custom_pause_cmd": "M0",
         "framing_ratio": "20%",
-        "force_width": false,
+        "force_width": true,
         "invert_relief": false
     },
     "stats": {
-        "total_lines": 544526,
-        "total_gcodes": 10,
-        "total_time_seconds": 6525.81103515625,
-        "last_project_time": 739.0307006835938
+        "total_lines": 2506892,
+        "total_gcodes": 14,
+        "total_time_seconds": 48423.6953125,
+        "last_project_time": 2452.43359375
     }
 }

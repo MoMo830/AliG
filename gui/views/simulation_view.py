@@ -134,8 +134,12 @@ class SimulationView(ctk.CTkFrame):
             g_steps = params.get('gray_steps') 
             use_s_mode = params.get('use_s_mode') 
             raster_mode = params.get('raster_mode', 'horizontal') 
+            
+            # Récupération de la taille déjà estimée par la vue Raster
+            est_size_str = self.payload.get('estimated_size', "N/A")
 
-            # A. Génération du G-Code de Cadrage 
+
+            # A. Génération du G-Code de Cadrage (Framing)
             t_start = time.perf_counter()
             self.framing_gcode = self.engine.prepare_framing( 
                 self.payload['framing'],  
@@ -150,34 +154,26 @@ class SimulationView(ctk.CTkFrame):
                 'framing_code': self.framing_gcode,
                 'gray_steps': g_steps,
                 'use_s_mode': use_s_mode,
-                'raster_mode': raster_mode
+                'raster_mode': raster_mode,
+                'scan_axis': "X" if raster_mode == "horizontal" else "Y"
             })
             self.full_metadata = full_metadata 
-
+            print(f"[DEBUG] scan_axis = {self.full_metadata.get('scan_axis')}")
             # C. Génération du G-Code Final
             t_start = time.perf_counter()
+            
+            # APPEL À L'ENGINE
             self.final_gcode, determined_latence_mm = self.engine.build_final_gcode( 
-                self.payload['matrix'], self.payload['dims'], 
-                self.payload['offsets'], params, 
-                self.payload['text_blocks'], full_metadata 
+                self.payload['matrix'], 
+                self.payload['dims'], 
+                self.payload['offsets'], 
+                params, 
+                self.payload['text_blocks'], 
+                full_metadata 
             ) 
             
             self.latence_mm = float(determined_latence_mm)
             
-            # --- NOUVEAU : Estimation de la taille ---
-            # On prépare les paramètres pour l'estimation
-            gc_params_est = {
-                "use_s_mode": use_s_mode,
-                "raster_mode": raster_mode,
-                "ctrl_max": params.get('ctrl_max', 255)
-            }
-            # On appelle la nouvelle fonction de l'Engine
-            est_size_str, _ = self.engine.estimate_gcode_statistics(self.payload['matrix'], params, gc_params_est)
-            # -----------------------------------------
-
-            print(f"[DEBUG] Latence : {self.latence_mm} mm | Taille estimée : {est_size_str}")
-            print(f"[BENCH] C. Final G-Code Build: {time.perf_counter() - t_start:.4f}s")
-
             # D. PARSING (Récupération des limites réelles)
             t_start = time.perf_counter()
             
@@ -188,32 +184,75 @@ class SimulationView(ctk.CTkFrame):
             # Parsing du G-code final
             pts_array, _, limits = self.parser.parse(self.final_gcode) 
             
-            # --- CALCUL DES BORNES GLOBALES (Pour que tout tienne à l'écran) ---
-            # On prend le minimum et le maximum entre le framing et le dessin
-            all_min_x = min(f_limits[0], limits[0])
-            all_max_x = max(f_limits[1], limits[1])
-            all_min_y = min(f_limits[2], limits[2])
-            all_max_y = max(f_limits[3], limits[3])
+            # --- CALCUL DES BORNES GLOBALES ---
+            valid_limits = []
+
+            if f_limits is not None:
+                if not all(abs(v) < 1e-9 for v in f_limits):
+                    valid_limits.append(f_limits)
+
+            if limits is not None:
+                if not all(abs(v) < 1e-9 for v in limits):
+                    valid_limits.append(limits)
+
+            if valid_limits:
+                all_min_x = min(l[0] for l in valid_limits)
+                all_max_x = max(l[1] for l in valid_limits)
+                all_min_y = min(l[2] for l in valid_limits)
+                all_max_y = max(l[3] for l in valid_limits)
+            else:
+                all_min_x = all_max_x = all_min_y = all_max_y = 0.0
             
             print(f"[BENCH] D. Parsing G-Code ({len(pts_array) if pts_array is not None else 0} pts): {time.perf_counter() - t_start:.4f}s")
              
             # E. CALCUL DES TIMESTAMPS
-            t_start = time.perf_counter()
-            
             if pts_array is not None and len(pts_array) > 1:
+                # 1. Calcul de la progression réelle via NumPy
                 deltas = np.diff(pts_array[:, :2], axis=0) 
                 distances = np.sqrt(np.sum(deltas**2, axis=1))
-                
                 f_rates_sec = pts_array[1:, 4] / 60.0
                 durations = np.divide(distances, f_rates_sec, out=np.zeros_like(distances), where=f_rates_sec > 0)
                 
                 pts_array[0, 4] = 0.0
                 pts_array[1:, 4] = np.cumsum(durations)
-                final_dur = pts_array[-1, 4]
+
+                # 2. Calcul théorique synchronisé
+                m = self.payload.get('metadata', {})
+                p = self.payload.get('params', {})
+                dims = self.payload.get('dims', (0, 0, 0, 0)) # (H_px, W_px, ...)
+
+                # Correction : On récupère H_px et W_px depuis le tuple dims
+                h_px_real = dims[0]
+                w_px_real = dims[1]
+
+                if str(p.get('raster_mode', 'horizontal')).lower() == 'vertical':
+                    nb_lignes = float(w_px_real)
+                    dist_utile = float(m.get('real_h', 0.0))
+                else:
+                    nb_lignes = float(h_px_real)
+                    dist_utile = float(m.get('real_w', 0.0))
+
+                feedrate = float(p.get('feedrate', 3000.0))
+                overscan = float(p.get('premove', 2.0))
+                l_step = float(p.get('line_step', p.get('l_step', 0.1)))
+
+                # Formule identique au moteur
+                dist_ligne = dist_utile + (2 * overscan)
+                dist_decalage_total = (nb_lignes - 1) * l_step
+                total_dist = (nb_lignes * dist_ligne) + dist_decalage_total
+
+                # Calcul en secondes
+                total_engine_duration_sec = total_dist / (feedrate / 60.0)
+                
+                # On utilise le max pour être ultra-précis (inclut latences G-Code)
+                final_dur = max(pts_array[-1, 4], total_engine_duration_sec)
+                
+                # Debug pour confirmer que nb_lignes n'est plus à 0
+                print(f"[DEBUG SIM] Nb Lignes: {nb_lignes}, Dist: {total_dist:.2f}, Final: {final_dur/60:.2f}min")
             else:
                 final_dur = 0.0
 
-            print(f"[BENCH] E. Timestamps calculation: {time.perf_counter() - t_start:.4f}s")
+
 
             # F. PRÉPARATION DU RETOUR 
             self.raw_sim_data = { 
@@ -223,14 +262,12 @@ class SimulationView(ctk.CTkFrame):
                 'total_dur': final_dur, 
                 'full_metadata': full_metadata,
                 'latence_mm': self.latence_mm,
-                'est_size_str': est_size_str, # On passe la taille à l'UI
+                'est_size_str': est_size_str, 
                 'machine_bounds': (all_min_x, all_max_x, all_min_y, all_max_y)
             }
             
-            print(f"[BENCH] TOTAL GENERATION: {time.perf_counter() - start_global:.4f}s")
-             
             if self.winfo_exists(): 
-                self.after(0, self._on_gen_done) 
+                self.after(0, self._on_gen_done)
              
         except Exception as e: 
             print(f"[DEBUG ERROR] Erreur thread: {e}") 
@@ -266,10 +303,7 @@ class SimulationView(ctk.CTkFrame):
 
         # --- GESTION DYNAMIQUE DE L'INTERFACE ---
         
-        # A. Mise à jour de la taille estimée (si tu as un label prévu pour ça)
-        # Par exemple, si tu as self.stats_size_label :
-        # self.stats_size_label.configure(text=f"Size: {est_size_str}")
-        print(f"[UI] G-Code Size Estimation: {est_size_str}")
+        # A. Mise à jour de la taille estimée
 
         # B. Affichage conditionnel du switch de latence
         if hasattr(self, 'latence_switch') and self.latence_switch is not None:
@@ -397,8 +431,8 @@ class SimulationView(ctk.CTkFrame):
         # --- RÉCUPÉRATION ET AFFICHAGE DES DONNÉES ---
         dims = payload.get('dims', (0, 0, 0, 0))
         h_px, w_px, step_y, step_x = dims
-        w_mm = w_px * step_x
-        h_mm = h_px * step_y
+        w_mm = (w_px - 1) * step_x
+        h_mm = (h_px - 1) * step_y
         
         self._add_stat(info_container, "Final Size (mm):", f"{w_mm:.2f}x{h_mm:.2f}")
 
@@ -1383,6 +1417,7 @@ class SimulationView(ctk.CTkFrame):
 
 
     def _draw_segment(self, p1, p2, is_switch_on, latence_mm):
+        scan_axis = self.full_metadata.get("scan_axis", "X")
         # Sortie ultra-rapide si puissance nulle (G0)
         p2_pow = p2[2]
         if p2_pow <= 0:
@@ -1393,7 +1428,7 @@ class SimulationView(ctk.CTkFrame):
         x2, y2 = p2[0], p2[1]
 
         # Correction latence
-        if is_switch_on:
+        if is_switch_on and scan_axis =="X":
             dx_m = x2 - x1
             if dx_m > 1e-6:
                 x1 += latence_mm
@@ -1401,6 +1436,14 @@ class SimulationView(ctk.CTkFrame):
             elif dx_m < -1e-6:
                 x1 -= latence_mm
                 x2 -= latence_mm
+        elif is_switch_on and scan_axis =="Y":
+            dy_m = y2 - y1
+            if dy_m > 1e-6:
+                y1 += latence_mm
+                y2 += latence_mm
+            elif dy_m < -1e-6:
+                y1 -= latence_mm
+                y2 -= latence_mm
 
         # Inlining de screen_index (Calcul direct sans appel de fonction)
         # Gain énorme sur 200 000 appels

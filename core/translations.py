@@ -122,7 +122,13 @@ TRANSLATIONS = {
             "confirm_title": "Confirmation",
             "confirm_subtitle": "This action is irreversible.",
             "btn_cancel": "Cancel",
-            "btn_confirm": "Confirm"
+            "btn_confirm": "Confirm",
+            "horizontal": "Horizontal",
+            "vertical": "Vertical",
+            "target_height": "Target Height",
+            "force_height": "Force Exact Height",
+            "target_width": "Target Width",
+            "force_width": "Force Exact Width"
         }
     },
     "Français": {
@@ -244,7 +250,13 @@ TRANSLATIONS = {
             "confirm_title": "Confirmation",
             "confirm_subtitle": "Cette action est irréversible.",
             "btn_cancel": "Annuler",
-            "btn_confirm": "Confirmer"
+            "btn_confirm": "Confirmer",
+            "horizontal": "Horizontal",
+            "vertical": "Vertical",
+            "target_height": "Hauteur cible",
+            "force_height": "Forcer hauteur exacte",
+            "target_width": "Largeur cible",
+            "force_width": "Forcer largeur exacte"
         }
     }
 }
