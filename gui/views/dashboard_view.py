@@ -9,6 +9,7 @@ class DashboardView(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
+        self.is_rendering = False
 
         lang = self.controller.config_manager.get_item("machine_settings", "language", "English")
         self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"])["dashboard"]
@@ -87,78 +88,120 @@ class DashboardView(ctk.CTkFrame):
         if not os.path.exists(THUMBNAILS_DIR):
             os.makedirs(THUMBNAILS_DIR, exist_ok=True)
         
-        self.load_thumbnails() 
+        #self.after(100, self.load_thumbnails)
+        self.load_thumbnails()
 
         # 2. Statistiques Réelles (En bas)
         self.create_stats_card()
 
     def _on_resize(self, event):
-        # On ne recalcule que si la largeur change de plus de 50 pixels
-        if abs(event.width - self.last_width) > 50:
-            self.last_width = event.width
-            self.render_grid()
+        # On ignore si c'est un micro-changement (bruit d'événement)
+        if abs(event.width - self.last_width) < 20:
+            return
+            
+        self.last_width = event.width
+        
+        # Annuler le rendu précédent s'il est déjà planifié
+        if hasattr(self, "_resize_after_id"):
+            self.after_cancel(self._resize_after_id)
+        
+        # Planifier le rendu dans 200ms
+        self._resize_after_id = self.after(200, self.render_grid)
 
 
     def load_thumbnails(self):
-        """Lit les fichiers sur le disque et prépare les objets images"""
-        # Utilisation du chemin universel défini dans paths.py
         thumb_dir = THUMBNAILS_DIR 
         self.all_thumbnails = []
         
-        if os.path.exists(thumb_dir):
-            # Filtrage et tri des fichiers
+        # Sécurité : Création du dossier s'il manque
+        if not os.path.exists(thumb_dir):
+            os.makedirs(thumb_dir, exist_ok=True)
+            self.render_grid() # On dessine une grille vide et on quitte
+            return
+
+        try:
             files = [f for f in os.listdir(thumb_dir) if f.lower().endswith(".png")]
+            # Sécurité : vérifier que le fichier existe toujours avant le tri (cas de suppression rapide)
+            files = [f for f in files if os.path.isfile(os.path.join(thumb_dir, f))]
             files.sort(key=lambda x: os.path.getmtime(os.path.join(thumb_dir, x)), reverse=True)
             
             for file in files:
                 try:
                     path = os.path.join(thumb_dir, file)
-                    img_data = Image.open(path)
-                    # On garde un ratio carré de 200x200
-                    ctk_img = ctk.CTkImage(light_image=img_data, dark_image=img_data, size=(200, 200))
-                    self.all_thumbnails.append(ctk_img)
+                    # Vérifier que le fichier n'est pas vide (0 octets)
+                    if os.path.getsize(path) == 0: continue
+                    
+                    # Charger l'image en s'assurant qu'elle est bien lue
+                    with Image.open(path) as img_data:
+                        img_data.load() # Force le chargement en RAM
+                        ctk_img = ctk.CTkImage(light_image=img_data, dark_image=img_data, size=(200, 200))
+                        self.all_thumbnails.append(ctk_img)
                 except Exception as e:
                     print(f"Erreur chargement vignette {file}: {e}")
-                    continue
-        
+        except Exception as e:
+            print(f"Erreur accès dossier thumbnails: {e}")
+
         self.render_grid()
 
     def render_grid(self):
         """Réorganise les labels dans la grille selon la largeur disponible"""
-        # Nettoyage sécurisé
-        for widget in self.scroll_thumbs.winfo_children():
-            widget.destroy()
-
-        if not self.all_thumbnails:
-            lbl = ctk.CTkLabel(self.scroll_thumbs, text=self.texts.get("no_history", "No projects yet"), text_color="gray")
-            lbl.pack(pady=50)
-            return
-
-        # Calcul dynamique des colonnes
-        self.scroll_thumbs.update_idletasks()
-        container_width = self.scroll_thumbs.winfo_width()
-
-        # Ajustement de la largeur de cellule (Image 200 + Padding 16)
-        cell_width = 200 + 16 
         
-        if container_width <= 100: # Cas où le widget n'est pas encore dessiné
-            num_cols = 2
-        else:
-            num_cols = max(1, (container_width - 30) // cell_width)
+        # --- VERROU DE SÉCURITÉ (Anti-collision) ---
+        if getattr(self, "is_rendering", False):
+            return
+        self.is_rendering = True
+        
+        try:
+            # 1. NETTOYAGE DES ANCIENS WIDGETS
+            for widget in self.scroll_thumbs.winfo_children():
+                widget.destroy()
 
-        # Reset et configuration des colonnes
-        for i in range(10): # Nettoyage des anciennes colonnes
-            self.scroll_thumbs.grid_columnconfigure(i, weight=0)
-        for i in range(num_cols):
-            self.scroll_thumbs.grid_columnconfigure(i, weight=1)
+            # 2. SÉCURITÉ : VÉRIFICATION DES DONNÉES
+            if not hasattr(self, "all_thumbnails") or not self.all_thumbnails:
+                lbl = ctk.CTkLabel(
+                    self.scroll_thumbs, 
+                    text=self.texts.get("no_history", "No projects yet"), 
+                    text_color="gray",
+                    font=("Arial", 13, "italic")
+                )
+                lbl.pack(pady=50)
+                return
 
-        # Placement des vignettes
-        for i, ctk_img in enumerate(self.all_thumbnails):
-            row = i // num_cols
-            col = i % num_cols
+            # 3. CALCUL DYNAMIQUE DE LA LARGEUR
+            container_width = self.scroll_thumbs.winfo_width()
             
-            btn = ctk.CTkLabel(self.scroll_thumbs, image=ctk_img, text="", cursor="hand2")
-            btn.grid(row=row, column=col, padx=8, pady=8)
+            # Si le widget n'est pas encore "dessiné" par l'OS
+            if container_width <= 100:
+                num_cols = 2
+            else:
+                cell_width = 200 + 16 # Image (200) + Espacement (16)
+                num_cols = max(1, (container_width - 30) // cell_width)
+
+            # 4. CONFIGURATION DES COLONNES
+            # On remet à zéro les colonnes précédentes
+            for i in range(20): 
+                self.scroll_thumbs.grid_columnconfigure(i, weight=0)
+            
+            # On configure les nouvelles colonnes
+            for i in range(num_cols):
+                self.scroll_thumbs.grid_columnconfigure(i, weight=1)
+
+            # 5. PLACEMENT DES VIGNETTES
+            for i, ctk_img in enumerate(self.all_thumbnails):
+                row = i // num_cols
+                col = i % num_cols
+                
+                # Frame conteneur pour chaque vignette
+                thumb_frame = ctk.CTkFrame(self.scroll_thumbs, fg_color="transparent")
+                thumb_frame.grid(row=row, column=col, padx=8, pady=8)
+                
+                btn = ctk.CTkLabel(thumb_frame, image=ctk_img, text="", cursor="hand2")
+                btn.pack()
+                
+        finally:
+            # --- LIBÉRATION DU VERROU ---
+            # Le bloc finally garantit que le verrou est levé même en cas d'erreur
+            self.is_rendering = False
 
     def create_stats_card(self):
         stats_frame = ctk.CTkFrame(self.right_column, corner_radius=15, border_width=1, border_color=["#DCE4EE", "#3E454A"])
