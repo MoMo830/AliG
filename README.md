@@ -63,8 +63,8 @@ If you just want to use the software without installing Python, follow these ste
 - **Vertical Rastering Mode**: Introduced full support for vertical scanning trajectories. Users can now choose between Horizontal and Vertical engraving directions.
 - **Dynamic Histogram Engine**: Replaced heavy Matplotlib dependencies with a custom, high-performance histogram. Features real-time percentage-based distribution, integer-rounded axis scaling, and a dedicated "OFF" zone visualizer for better power range analysis.
 - **Export System Overhaul**:
-    * Added **Preferred Format** setting to define a default file extension (e.g., .gcode, .nc, .txt).
-    * Introduced **"Export As..."** option for quick, one-click file generation using the preferred format and automated naming.
+* Added **Preferred Format** setting to define a default file extension (e.g., .gcode, .nc, .txt).
+* Introduced **"Export As..."** option to allow manual naming and location selection.
 - **FreezeFix:** Resolved a critical UI freeze occurring when returning to the dashboard.
 
 <details>
