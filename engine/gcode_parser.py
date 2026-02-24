@@ -121,7 +121,6 @@ class GCodeParser:
             return None, 0.0, (0.0, 0.0, 0.0, 0.0)
 
         limits = (min_x, max_x, min_y, max_y)
-        print(limits)
         return points_array[:idx_point], 0.0, limits
 
 

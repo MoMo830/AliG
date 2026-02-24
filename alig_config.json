@@ -44,9 +44,9 @@
         "invert_relief": false
     },
     "stats": {
-        "total_lines": 2506892,
-        "total_gcodes": 14,
-        "total_time_seconds": 48423.6953125,
-        "last_project_time": 2452.43359375
+        "total_lines": 2675306,
+        "total_gcodes": 16,
+        "total_time_seconds": 52104.234375,
+        "last_project_time": 1840.2708740234375
     }
 }

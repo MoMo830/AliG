@@ -158,7 +158,6 @@ class SimulationView(ctk.CTkFrame):
                 'scan_axis': "X" if raster_mode == "horizontal" else "Y"
             })
             self.full_metadata = full_metadata 
-            print(f"[DEBUG] scan_axis = {self.full_metadata.get('scan_axis')}")
             # C. Génération du G-Code Final
             t_start = time.perf_counter()
             
@@ -247,8 +246,6 @@ class SimulationView(ctk.CTkFrame):
                 # On utilise le max pour être ultra-précis (inclut latences G-Code)
                 final_dur = max(pts_array[-1, 4], total_engine_duration_sec)
                 
-                # Debug pour confirmer que nb_lignes n'est plus à 0
-                print(f"[DEBUG SIM] Nb Lignes: {nb_lignes}, Dist: {total_dist:.2f}, Final: {final_dur/60:.2f}min")
             else:
                 final_dur = 0.0
 
@@ -437,32 +434,17 @@ class SimulationView(ctk.CTkFrame):
         self._add_stat(info_container, "Final Size (mm):", f"{w_mm:.2f}x{h_mm:.2f}")
 
         # --- CHEMIN DE SORTIE  ---
-
-        # --- CHEMIN DE SORTIE (Calcul via Payload) ---
         meta = self.payload.get('metadata', {}) # Utilise self.payload
         out_dir = meta.get('output_dir', 'C:/')
 
-        # 1. Récupération de l'extension
-        # Si 'file_extension' n'existe pas dans le payload, on met ".nc" par défaut
         extension = meta.get('file_extension', '.nc')
-        print(f"DEBUG: extension = {extension}")
-
-        # 2. Récupération du nom
         raw_name = meta.get('file_name', 'export')
-
-        # 3. Assemblage forcé (On ignore les vérifications de point pour tester)
         full_filename = f"{raw_name}{extension}"
-
-        # 4. Construction du chemin complet
         full_path = os.path.join(out_dir, full_filename).replace("\\", "/")
 
-        # IMPORTANT : On stocke pour le bouton QUICK EXPORT
         self.quick_export_full_path = full_path
-        print(f"DEBUG: full_path = {full_path}")
 
-        # 5. Envoi à l'affichage
-        # On change le label pour "Output File:" pour être plus précis
-        self.full_export_path = full_path # On le stocke ici
+        self.full_export_path = full_path
         self._add_stat(info_container, "Output File:", full_path, is_path=True)
 
         # --- ÉCHELLE DE PUISSANCE ---

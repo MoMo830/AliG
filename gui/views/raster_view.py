@@ -933,7 +933,6 @@ class RasterView(ctk.CTkFrame):
                 fg_color="#2d5a27",      # Vert succès
                 hover_color="#367a31"    # Survol vert
             )
-            #print(f"Output directory set to: {directory}")
 
     def calculate_offsets(self, real_w, real_h):
       """Méthode passerelle qui lit l'UI et appelle le moteur"""
@@ -952,7 +951,7 @@ class RasterView(ctk.CTkFrame):
         Regroupe le traitement d'image et les calculs géométriques (moteur).
         """
         if not self.input_image_path or not os.path.isfile(self.input_image_path):
-            print("DEBUG: Chargement / Image non disponible.")
+            print("Chargement / Image non disponible.")
             return None, None
 
         # 1. Préparation des paramètres consolidés
@@ -1272,7 +1271,7 @@ class RasterView(ctk.CTkFrame):
 
         full_header = f"{global_h}\n{raster_h}".strip() if global_h and raster_h else (global_h or raster_h)
         full_footer = f"{raster_f}\n{global_f}".strip() if global_f and raster_f else (global_f or raster_f)
-        print(f"h:{h_px}, w_px:{w_px}, y_step_final:{y_step_final}, x_step_final{x_step_final}")
+
         # --- 3. PACKAGING DU PAYLOAD ---
         payload = {
             'matrix': matrix,
