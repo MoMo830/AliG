@@ -114,7 +114,7 @@ If you just want to use the software without installing Python, follow these ste
 * **UI Enhancement & Custom Branding:** Replace emojis with custom icons (Theme-aware).
 * **Full Internationalization (i18n):** Completion of multi-language support for the entire interface.
 * **Onboarding Experience:** First-run setup wizard for essential machine configuration.
-~~* **Variable Raster Direction:** X-axis or Y-axis engraving.~~ _(Pending next release)_
+* ~~**Variable Raster Direction:** X-axis or Y-axis engraving.~~ _(Pending next release)_
 * **Async Streamed Parsing:** Implement a buffered G-code processing system to allow real-time simulation rendering while the generation is still in progress (eliminating UI freezing on large files).
 
 ---
