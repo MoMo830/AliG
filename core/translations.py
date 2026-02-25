@@ -31,7 +31,8 @@ TRANSLATIONS = {
             "reset_all_parameters": "Reset all parameters",
             "reset_all_parameters_confirm": "Sure ?",
             "reset_all_parameters_done": "Reset done !",
-            "reset_all_parameters_error": "Reset error"
+            "reset_all_parameters_error": "Reset error",
+            "export_extension": "Export Extension:"
         },
         "dashboard": {
             "raster_title": "IMAGE RASTERING",
@@ -128,8 +129,51 @@ TRANSLATIONS = {
             "target_height": "Target Height",
             "force_height": "Force Exact Height",
             "target_width": "Target Width",
-            "force_width": "Force Exact Width"
-        }
+            "force_width": "Force Exact Width",
+            "select_image": "SELECT IMAGE",
+            "select_output": "SELECT OUTPUT DIRECTORY",
+            "laser_power_level": "Laser Power Level (%)",
+            "power_distribution": "POWER DISTRIBUTION",
+            "power_value": "Power Value (%)",
+            "global_machine_params": "⚠️ GLOBAL MACHINE PARAMETERS",
+            "no_global_header": "(No Global Header)",
+            "no_global_footer": "(No Global Footer)",
+            "Distribution_label": "Distribution (%)"
+        }, 
+        "origin_options": {
+            "Lower-Left": "Lower-Left",
+            "Upper-Left": "Upper-Left",
+            "Lower-Right": "Lower-Right",
+            "Upper-Right": "Upper-Right",
+            "Center": "Center",
+            "Custom": "Custom"
+        },
+        "stats": {
+            "real_dims": "REAL DIMENSIONS",
+            "est_time": "ESTIMATED TIME",
+            "file_size": "FILE SIZE",
+            "matrix_size": "MATRIX SIZE",
+            "scan_step": "SCAN STEP",
+            "line_step": "LINE STEP"
+        }, 
+        "simulation": {
+            "path_sim": "PATH SIMULATION",
+            "final_size": "Final Size (mm):",
+            "output_file": "Output File:",
+            "power_range": "Power Range (%)",
+            "live_gcode": "LIVE G-CODE",
+            "active_options": "Active Options",
+            "quick_export": "QUICK EXPORT",
+            "export_as": "EXPORT AS...",
+            "cancel": "CANCEL",
+            "speed": "Speed:",
+            "progress": "Progress:",
+            "time" : "Time:",
+            "pointing_opt": "POINTING",
+            "framing_opt": "FRAMING"
+
+
+    }
     },
     "Français": {
         "settings": {
@@ -159,7 +203,8 @@ TRANSLATIONS = {
             "reset_all_parameters": "Réinitialiser tous les paramètres",
             "reset_all_parameters_confirm": "Réinitialiser tout ?",
             "reset_all_parameters_done": "Configuration réinitialisée !",
-            "reset_all_parameters_error": "Erreur durant la réinitialisation"
+            "reset_all_parameters_error": "Erreur durant la réinitialisation",
+            "export_extension": "Extension de sortie :"
         },
         "dashboard": {
             "raster_title": "GRAVURE RASTER",
@@ -256,7 +301,48 @@ TRANSLATIONS = {
             "target_height": "Hauteur cible",
             "force_height": "Forcer hauteur exacte",
             "target_width": "Largeur cible",
-            "force_width": "Forcer largeur exacte"
-        }
+            "force_width": "Forcer largeur exacte",
+            "select_image": "SELECTIONNER UNE IMAGE",
+            "select_output": "SELECTIONNER UN DOSSIER DE SORTIE",
+            "laser_power_level": "Niveau de puissance LASER (%)",
+            "power_distribution": "REPARTITION DE PUISSANCE",
+            "power_value": "Puissance (%)",
+            "global_machine_params": "⚠️ PARAMETRES GLOBAUX",
+            "no_global_header": "(Pas d'entête global)",
+            "no_global_footer": "(Pas de pied de page global)",
+            "Distribution_label": "Répartition (%)"
+        },
+        "origin_options": {
+            "Lower-Left": "Bas-Gauche",
+            "Upper-Left": "Haut-Gauche",
+            "Lower-Right": "Bas-Droite",
+            "Upper-Right": "Haut-Droite",
+            "Center": "Centre",
+            "Custom": "Personnalisé"
+        },
+        "stats": {
+            "real_dims": "DIMENSIONS RÉELLES",
+            "est_time": "TEMPS ESTIMÉ",
+            "file_size": "TAILLE DU FICHIER",
+            "matrix_size": "MATRICE",
+            "scan_step": "PAS DE SCAN",
+            "line_step": "PAS DE LIGNE"
+        },    
+        "simulation": {
+            "path_sim": "SIMULATION",
+            "final_size": "Taille finale (mm):",
+            "output_file": "Fichier de sortie:",
+            "power_range": "Plage de puissance (%)",
+            "live_gcode": "G-CODE de sortie",
+            "active_options": "Options actives",
+            "quick_export": "EXPORT RAPIDE",
+            "export_as": "EXPORTER VERS...",
+            "cancel": "ANNULER",
+            "speed": "Vitesse :",
+            "progress": "Progression :",
+            "time" : "Temps :",
+            "pointing_opt": "POINTAGE",
+            "framing_opt": "ENCADREMENT"
+    }
     }
 }

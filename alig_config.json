@@ -1,13 +1,19 @@
 {
+    "stats": {
+        "total_lines": 17708,
+        "total_gcodes": 1,
+        "total_time_seconds": 231.5837860107422,
+        "last_project_time": 231.5837860107422
+    },
     "machine_settings": {
-        "theme": "System",
+        "theme": "",
         "language": "Fran\u00e7ais",
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
         "gcode_extension": ".nc",
         "m67_e_num": 0,
         "ctrl_max": 100,
-        "m67_delay": 0.0,
+        "m67_delay": -11.5,
         "premove": 10.0,
         "custom_header": "",
         "custom_footer": ""
@@ -30,7 +36,7 @@
         "output_dir": "c:\\Users\\momof\\SynologyDrive\\Python\\CNC\\ALIG_Project",
         "custom_header": "",
         "custom_footer": "",
-        "origin_mode": "Lower-Left",
+        "origin_mode": "Bas-Gauche",
         "include_frame": false,
         "include_pointer": false,
         "frame_power": "0",
@@ -40,7 +46,7 @@
         "invert_relief": false
     },
     "window_settings": {
-        "is_maximized": false,
+        "is_maximized": true,
         "geometry": "1300x900+50+50"
     }
 }

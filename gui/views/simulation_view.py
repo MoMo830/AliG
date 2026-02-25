@@ -18,6 +18,7 @@ import cv2
 
 from engine.gcode_parser import GCodeParser
 from core.utils import save_dashboard_data, truncate_path
+from core.translations import TRANSLATIONS
 
 
 class SimulationView(ctk.CTkFrame):
@@ -26,6 +27,15 @@ class SimulationView(ctk.CTkFrame):
         self.controller = controller
         self.return_view = return_view
         self.parent = parent
+
+        lang = self.controller.config_manager.get_item("machine_settings", "language")
+
+        # Sécurité : si lang est None, vide ou n'est pas dans TRANSLATIONS
+        if not lang or lang not in TRANSLATIONS:
+            lang = "English" 
+
+        self.simulation = TRANSLATIONS[lang]["simulation"]
+
         
         # 1. Stockage
         self.engine = engine
@@ -419,7 +429,7 @@ class SimulationView(ctk.CTkFrame):
         self.left_panel.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
         self.left_panel.grid_propagate(False) 
         
-        ctk.CTkLabel(self.left_panel, text="PATH SIMULATION", font=("Arial", 14, "bold")).pack(pady=15)
+        ctk.CTkLabel(self.left_panel, text=self.simulation["path_sim"], font=("Arial", 14, "bold")).pack(pady=15)
         
         # 1. Conteneur des infos techniques
         info_container = ctk.CTkFrame(self.left_panel, fg_color="transparent")
@@ -431,7 +441,7 @@ class SimulationView(ctk.CTkFrame):
         w_mm = (w_px - 1) * step_x
         h_mm = (h_px - 1) * step_y
         
-        self._add_stat(info_container, "Final Size (mm):", f"{w_mm:.2f}x{h_mm:.2f}")
+        self._add_stat(info_container, self.simulation["final_size"], f"{w_mm:.2f}x{h_mm:.2f}")
 
         # --- CHEMIN DE SORTIE  ---
         meta = self.payload.get('metadata', {}) # Utilise self.payload
@@ -445,7 +455,7 @@ class SimulationView(ctk.CTkFrame):
         self.quick_export_full_path = full_path
 
         self.full_export_path = full_path
-        self._add_stat(info_container, "Output File:", full_path, is_path=True)
+        self._add_stat(info_container, self.simulation["output_file"], full_path, is_path=True)
 
         # --- ÉCHELLE DE PUISSANCE ---
         params = payload.get('params', {})
@@ -454,7 +464,7 @@ class SimulationView(ctk.CTkFrame):
         power_scale_frame = ctk.CTkFrame(info_container, fg_color="transparent")
         power_scale_frame.pack(fill="x", pady=10, padx=5)
         
-        ctk.CTkLabel(power_scale_frame, text="Power Range (%)", font=("Arial", 10, "bold")).pack(anchor="w")
+        ctk.CTkLabel(power_scale_frame, text=self.simulation["power_range"], font=("Arial", 10, "bold")).pack(anchor="w")
         
         raw_color = self.left_panel.cget("fg_color")
         if isinstance(raw_color, (list, tuple)):
@@ -496,7 +506,7 @@ class SimulationView(ctk.CTkFrame):
 
        # --- BLOC CENTRAL (G-Code View) ---
         # On le place avant les boutons "bottom" pour qu'il occupe l'espace restant au milieu
-        ctk.CTkLabel(self.left_panel, text="LIVE G-CODE", font=("Arial", 11, "bold")).pack(pady=(10, 0))
+        ctk.CTkLabel(self.left_panel, text=self.simulation["live_gcode"], font=("Arial", 11, "bold")).pack(pady=(10, 0))
         
         self.gcode_view = ctk.CTkTextbox(
             self.left_panel, font=("Consolas", 11), fg_color="#1a1a1a", 
@@ -512,7 +522,7 @@ class SimulationView(ctk.CTkFrame):
         
         # Bouton CANCEL (tout en bas)
         ctk.CTkButton(
-            btn_act, text="CANCEL", fg_color="#333", height=30, 
+            btn_act, text=self.simulation["cancel"], fg_color="#333", height=30, 
             command=self.on_cancel
         ).pack(fill="x", side="bottom", padx=10, pady=5)
         
@@ -524,7 +534,7 @@ class SimulationView(ctk.CTkFrame):
         # Couleur suggérée :
         self.btn_export = ctk.CTkButton(
             export_row, 
-            text="QUICK EXPORT", 
+            text=self.simulation["quick_export"], 
             fg_color="#2ecc71",      # Vert plus clair et moderne
             hover_color="#27ae60",   # Teinte un peu plus sombre au survol
             height=40, 
@@ -537,7 +547,7 @@ class SimulationView(ctk.CTkFrame):
         # EXPORT AS... 
         self.btn_export_as = ctk.CTkButton(
             export_row, 
-            text="Export As...", 
+            text=self.simulation["export_as"], 
             command=self.on_export_as,
             fg_color="#7ac99b", 
             hover_color="#27ae60",
@@ -551,13 +561,13 @@ class SimulationView(ctk.CTkFrame):
         self.options_group_frame = ctk.CTkFrame(self.left_panel, fg_color="#222222", border_width=1, border_color="#444444")
         self.options_group_frame.pack(side="bottom", pady=10, padx=10, fill="x")
         
-        ctk.CTkLabel(self.options_group_frame, text="Active Options", font=("Arial", 11, "bold")).pack(pady=(8, 2))
+        ctk.CTkLabel(self.options_group_frame, text=self.simulation["active_options"], font=("Arial", 11, "bold")).pack(pady=(8, 2))
         
         badge_cont = ctk.CTkFrame(self.options_group_frame, fg_color="transparent")
         badge_cont.pack(fill="x", padx=10, pady=(0, 5))
 
         # Affichage des badges POINTING / FRAMING
-        for key, text in [("is_pointing", "POINTING"), ("is_framing", "FRAMING")]:
+        for key, text in [("is_pointing", self.simulation["pointing_opt"]), ("is_framing", self.simulation["framing_opt"])]:
             active = self.payload.get('framing', {}).get(key, False)
             color, bg = ("#ff9f43", "#3d2b1f") if active else ("#666666", "#282828")
             ctk.CTkLabel(badge_cont, text=text, font=("Arial", 9, "bold"), 
@@ -741,7 +751,7 @@ class SimulationView(ctk.CTkFrame):
         speed_cont.pack(pady=5) # Centré par défaut
 
         # Petit label discret pour la vitesse actuelle
-        self.speed_title_label = ctk.CTkLabel(speed_cont, text="Speed:", font=("Arial", 11, "bold"))
+        self.speed_title_label = ctk.CTkLabel(speed_cont, text=self.simulation["speed"], font=("Arial", 11, "bold"))
         self.speed_title_label.pack(side="left", padx=(15, 10))
 
         self.speed_selector = ctk.CTkSegmentedButton(
@@ -767,7 +777,7 @@ class SimulationView(ctk.CTkFrame):
         text_row = ctk.CTkFrame(self.progress_container, fg_color="transparent")
         text_row.pack(fill="x")
 
-        self.progress_label = ctk.CTkLabel(text_row, text="Progress: 0%", font=("Arial", 11))
+        self.progress_label = ctk.CTkLabel(text_row, text=self.simulation["progress"], font=("Arial", 11))
         self.progress_label.pack(side="left")
 
         self.time_label = ctk.CTkLabel(text_row, text="Time: 00:00:00 / 00:00:00", font=("Arial", 11, "italic"))
@@ -890,9 +900,9 @@ class SimulationView(ctk.CTkFrame):
 
         # Mise à jour de l'UI (Labels de temps)
         t_total = self._format_seconds_to_hhmmss(self.total_sim_seconds)
-        self.time_label.configure(text=f"Time: 00:00:00 / {t_total}")
+        self.time_label.configure(text=f"{self.simulation["time"]} 00:00:00 / {t_total}")
         self.progress_bar.set(0)
-        self.progress_label.configure(text="Progress: 0%")
+        self.progress_label.configure(text=f"{self.simulation["progress"]} 0%")
 
         # Premier rendu visuel
         self.update_graphics()
@@ -1105,10 +1115,10 @@ class SimulationView(ctk.CTkFrame):
             
         # 4. Mise à jour de l'UI
         self.progress_bar.set(0)
-        self.progress_label.configure(text="Progress: 0%")
+        self.progress_label.configure(text=f"{self.simulation["progress"]} 0%")
         
         t_tot_str = self._format_seconds_to_hhmmss(self.total_sim_seconds)
-        self.time_label.configure(text=f"Time: 00:00:00 / {t_tot_str}")
+        self.time_label.configure(text=f"{self.simulation["time"]} 00:00:00 / {t_tot_str}")
         
         # Remet le bouton en mode PLAY standard
         self.btn_play_pause.configure(text="▶", fg_color="#27ae60")
@@ -1233,11 +1243,11 @@ class SimulationView(ctk.CTkFrame):
         total_pts = len(self.points_list)
         progress = target_idx / max(1, total_pts)
         self.progress_bar.set(progress)
-        self.progress_label.configure(text=f"Progress: {int(progress*100)}%")
+        self.progress_label.configure(text=f"{self.simulation["progress"]} {int(progress*100)}%")
 
         # 3. Calcul du temps
         self.time_label.configure(
-            text=f"Time: {self._format_seconds_to_hhmmss(ts)} / {self._format_seconds_to_hhmmss(self.total_sim_seconds)}"
+            text=f"{self.simulation["time"]} {self._format_seconds_to_hhmmss(ts)} / {self._format_seconds_to_hhmmss(self.total_sim_seconds)}"
         )
         
         # 4. Highlight G-code (Vérifie que cette fonction n'appelle pas de dessin !)
@@ -1507,7 +1517,7 @@ class SimulationView(ctk.CTkFrame):
             t_str = self._format_seconds_to_hhmmss(self.total_sim_seconds)
             self.time_label.configure(text=f"Time: {t_str} / {t_str}")
             self.progress_bar.set(1.0)
-            self.progress_label.configure(text="Progress: 100%")
+            self.progress_label.configure(text=f"{self.simulation["progress"]} 100%")
             
             # On ne fait défiler le G-Code qu'une fois
             self.update_gcode_highlight(self.current_point_idx)

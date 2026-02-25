@@ -112,7 +112,7 @@ class SettingsView(ctk.CTkFrame):
         self.create_simple_input(self.current_sec, self.texts["label_output_e"], 0, "m67_e_num", precision=0)
         self.create_simple_input(self.current_sec, self.texts["label_ctrl_max"], 100, "ctrl_max", precision=0)
         self.create_dropdown_pair(self.current_sec, self.texts["label_firing"], ["M3/M5", "M4/M5"], "firing_mode")
-        self.create_simple_input(self.current_sec, self.texts.get("label_extension", "Export Extension"), ".nc", "gcode_extension")
+        self.create_simple_input(self.current_sec, self.texts.get("label_extension", self.texts["export_extension"]), ".nc", "gcode_extension")
 
         self.create_section(self.left_col, self.texts["sec_hardware"])
         self.create_input_pair(self.current_sec, self.texts["label_latency"], -20,20, 0, "m67_delay")

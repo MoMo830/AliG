@@ -44,6 +44,9 @@ class RasterView(ctk.CTkFrame):
             lang = "English" 
 
         self.common = TRANSLATIONS[lang]["common"]
+        self.stats = TRANSLATIONS[lang]["stats"]
+        self.origin_translations = TRANSLATIONS[lang]["origin_options"]
+        
         self.version = self.app.version
         
         self.after_id = None
@@ -121,7 +124,7 @@ class RasterView(ctk.CTkFrame):
 
         self.btn_input = ctk.CTkButton(
             file_frame,
-            text="SELECT IMAGE",
+            text=self.common["select_image"],
             height=32,
             command=self.select_input
         )
@@ -129,7 +132,7 @@ class RasterView(ctk.CTkFrame):
 
         self.btn_output = ctk.CTkButton(
             file_frame,
-            text="SELECT OUTPUT DIRECTORY",
+            text=self.common["select_output"],
             height=32,
             command=self.select_output
         )
@@ -450,15 +453,41 @@ class RasterView(ctk.CTkFrame):
 
         # --- TAB 1: GEOMETRY ---
         t_geo = prepare_tab(self.tab_geom_name)
+
+        # --- SENS DU RASTER  ---
+        raster_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
+        raster_frame.pack(fill="x", padx=10, pady=(10, 5))
         
-        # 1. Correction pour le label de largeur (on capture l'objet renvoyé)
-        # Assure-toi que create_input_pair renvoie le widget label en premier ou seul.
+        ctk.CTkLabel(raster_frame, text=self.common["raster_mode"], font=("Segoe UI", 11)).pack(side="left")
+        
+        self.raster_map = {
+            "horizontal": self.common["horizontal"],
+            "vertical": self.common["vertical"]
+        }
+
+        self.raster_map_inv = {v: k for k, v in self.raster_map.items()}
+
+
+        self.raster_dir_var = ctk.StringVar(value="horizontal") 
+
+        self.raster_dir_btn = ctk.CTkSegmentedButton(
+            t_geo, 
+            values=list(self.raster_map.values()), # ON AFFICHE LES TEXTES TRADUITS
+            command=self._on_raster_dir_change,     # FONCTION DE PONT
+            height=28,
+        )
+        self.raster_dir_btn.pack(pady=(0, 10), padx=10, fill="x")
+
+        # On définit la position visuelle initiale basée sur "Horizontal"
+        self.raster_dir_btn.set(self.raster_map["horizontal"])
+
+        
+
         self.width_label_widget = self.create_input_pair(t_geo, self.common["target_width"], 5, 400, 30.0, "width")
         
         force_w_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
         force_w_frame.pack(fill="x", padx=10, pady=(0, 10))
         
-        # 2. Correction cruciale : Séparer la création du pack pour self.force_w_label
         self.force_w_label = ctk.CTkLabel(force_w_frame, text=self.common["force_width"], font=("Segoe UI", 11))
         self.force_w_label.pack(side="left") # On pack sur une ligne séparée
         
@@ -475,40 +504,31 @@ class RasterView(ctk.CTkFrame):
         self.create_input_pair(t_geo, self.common["line_step"], 0.01, 1.0, 0.1307, "line_step", precision=4)
         self.create_input_pair(t_geo, self.common["dpi_resolution"], 10, 1200, 254, "dpi", is_int=True)
         
-        # --- AJOUT DU SENS DU RASTER (Intégré dans l'onglet Geometry) ---
-        raster_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
-        raster_frame.pack(fill="x", padx=10, pady=(10, 5))
+
+
         
-        ctk.CTkLabel(raster_frame, text=self.common["raster_mode"], font=("Segoe UI", 11)).pack(side="left")
         
-        # 1. On définit le mapping (Technique -> Traduit)
-        self.raster_map = {
-            "horizontal": self.common["horizontal"],
-            "vertical": self.common["vertical"]
-        }
 
-        # 2. On crée une liste inversée pour retrouver la clé technique lors du clic
-        self.raster_map_inv = {v: k for k, v in self.raster_map.items()}
+        #self.create_dropdown_pair(t_geo, self.common["origin_point"], ["Lower-Left", "Upper-Left", "Lower-Right", "Upper-Right", "Center", "Custom"], "origin_mode")
+        ORIGIN_KEYS = [
+            "Lower-Left",
+            "Upper-Left",
+            "Lower-Right",
+            "Upper-Right",
+            "Center",
+            "Custom"
+        ]
+        options = [
+            (key, self.origin_translations[key])
+            for key in ORIGIN_KEYS
+        ]
 
-        # 3. Initialisation du bouton
-        self.raster_dir_var = ctk.StringVar(value="horizontal") # TA VARIABLE TECHNIQUE
-
-        self.raster_dir_btn = ctk.CTkSegmentedButton(
-            t_geo, 
-            values=list(self.raster_map.values()), # ON AFFICHE LES TEXTES TRADUITS
-            command=self._on_raster_dir_change,     # FONCTION DE PONT
-            height=28,
+        self.create_dropdown_pair(
+            t_geo,
+            self.common["origin_point"],
+            options,
+            "origin_mode"
         )
-        self.raster_dir_btn.pack(pady=(0, 10), padx=10, fill="x")
-
-        # On définit la position visuelle initiale basée sur "Horizontal"
-        self.raster_dir_btn.set(self.raster_map["horizontal"])
-        #self.raster_dir_btn.configure(state="disabled")
-        
-        
-        # --- SUITE DE LA GÉOMÉTRIE ---
-        self.create_dropdown_pair(t_geo, self.common["origin_point"], ["Lower-Left", "Upper-Left", "Lower-Right", "Upper-Right", "Center", "Custom"], "origin_mode")
-        
         self.custom_offset_frame = ctk.CTkFrame(t_geo, fg_color="transparent")
         self.create_simple_input(self.custom_offset_frame, self.common["custom_offset_x"], 0.0, "custom_x")
         self.create_simple_input(self.custom_offset_frame, self.common["custom_offset_y"], 0.0, "custom_y")
@@ -562,7 +582,7 @@ class RasterView(ctk.CTkFrame):
         header_row = ctk.CTkFrame(global_frame, fg_color="transparent")
         header_row.pack(fill="x", padx=10, pady=5)
         
-        ctk.CTkLabel(header_row, text="⚠️ GLOBAL MACHINE PARAMETERS", 
+        ctk.CTkLabel(header_row, text=self.common["global_machine_params"], 
                      font=("Arial", 11, "bold"), text_color="#FF9500").pack(side="left")
         
         # Le bouton cadenas (Toggle)
@@ -810,32 +830,56 @@ class RasterView(ctk.CTkFrame):
     def create_dropdown_pair(self, parent, label_text, options, attr_name):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.pack(fill="x", pady=2, padx=10)
-        
+
         ctk.CTkLabel(frame, text=label_text, font=("Arial", 11)).pack(anchor="w")
-        
+
+        # --- Détection du format ---
+        is_tuple_format = (
+            isinstance(options, list)
+            and len(options) > 0
+            and isinstance(options[0], tuple)
+        )
+
+        if is_tuple_format:
+            # Nouveau format : [(key, label), ...]
+            key_to_label = dict(options)
+            label_to_key = {label: key for key, label in options}
+            display_values = [label for key, label in options]
+        else:
+            # Ancien format : ["Lower-Left", ...]
+            key_to_label = {value: value for value in options}
+            label_to_key = key_to_label
+            display_values = options
+
         def on_change(choice):
-            # Logique spécifique à l'Origin Point
+            # Récupération valeur interne propre
+            internal_value = label_to_key[choice]
+
+            # Logique spécifique Origin
             if attr_name == "origin_mode":
-                if choice == "Custom":
+                if internal_value == "Custom":
                     self.custom_offset_frame.pack(fill="x", padx=10, pady=5)
                 else:
                     self.custom_offset_frame.pack_forget()
-            
-            # Mise à jour de la simulation pour TOUS les menus
+
+            # Stockage valeur interne si besoin
+            setattr(self, f"{attr_name}_value", internal_value)
+
             self.delayed_update(100)
 
         dropdown = ctk.CTkOptionMenu(
-            frame, 
-            values=options,
+            frame,
+            values=display_values,
             dynamic_resizing=False,
             height=28,
             fg_color="#444444",
             button_color="#555555",
-            command=on_change 
+            command=on_change
         )
         dropdown.pack(fill="x", pady=(2, 5))
-        
+
         setattr(self, attr_name, dropdown)
+
         return dropdown
         
     def get_val(self, ctrl):
@@ -1509,12 +1553,12 @@ class RasterView(ctk.CTkFrame):
             file_name = os.path.basename(self.input_image_path).upper()
             self._update_button_style(self.btn_input, file_name, True)
         else:
-            self._update_button_style(self.btn_input, "SELECT IMAGE", False)
+            self._update_button_style(self.btn_input, self.common["select_image"], False)
 
         # Gestion du dossier de sortie
         self.output_dir = data.get("output_dir", self.application_path)
         is_custom_out = self.output_dir and self.output_dir != self.application_path
-        out_text = f"OUT: {os.path.basename(self.output_dir).upper()}/" if is_custom_out else "SELECT OUTPUT DIRECTORY"
+        out_text = f"OUT: {os.path.basename(self.output_dir).upper()}/" if is_custom_out else self.common["select_output"]
         self._update_button_style(self.btn_output, out_text, is_custom_out)
 
         # --- FILTRAGE DES TEXTBOXES ---
@@ -1593,14 +1637,14 @@ class RasterView(ctk.CTkFrame):
         h_glob = self.app.config_manager.get_item("machine_settings", "custom_header", "")
         self.txt_global_header_preview.configure(state="normal")
         self.txt_global_header_preview.delete("1.0", "end")
-        self.txt_global_header_preview.insert("1.0", h_glob if h_glob else "(No Global Header)")
+        self.txt_global_header_preview.insert("1.0", h_glob if h_glob else self.common["no_global_header"])
         self.txt_global_header_preview.configure(state="disabled")
 
         # Footer
         f_glob = self.app.config_manager.get_item("machine_settings", "custom_footer", "")
         self.txt_global_footer_preview.configure(state="normal")
         self.txt_global_footer_preview.delete("1.0", "end")
-        self.txt_global_footer_preview.insert("1.0", f_glob if f_glob else "(No Global Footer)")
+        self.txt_global_footer_preview.insert("1.0", f_glob if f_glob else self.common["no_global_footer"])
         self.txt_global_footer_preview.configure(state="disabled")
 
     def update_histogram_ctk(self, matrix, v_min, v_max):
@@ -1659,7 +1703,7 @@ class RasterView(ctk.CTkFrame):
         plot_height = height - top_margin - bottom_margin
 
         # TITRE
-        canvas.create_text(width / 2, 20, text="POWER DISTRIBUTION", fill="white", font=("Arial", 11, "bold"))
+        canvas.create_text(width / 2, 20, text=self.common["power_distribution"], fill="white", font=("Arial", 11, "bold"))
 
         # AXES
         axis_color = "#555555"
@@ -1696,8 +1740,8 @@ class RasterView(ctk.CTkFrame):
         canvas.create_text(max_px, height-bottom_margin + 32, text="MAX", fill="#ff3333", font=("Arial", 8, "bold"))
 
         # 7. TITRES DES AXES
-        canvas.create_text(left_margin + (total_plot_width / 2), height - 25, text="Power Value (%)", fill="#888888", font=("Arial", 9, "italic"))
-        canvas.create_text(20, top_margin + (plot_height / 2), text="Distribution (%)", fill="#888888", font=("Arial", 9, "bold"), angle=90)
+        canvas.create_text(left_margin + (total_plot_width / 2), height - 25, text=self.common["power_value"], fill="#888888", font=("Arial", 9, "italic"))
+        canvas.create_text(20, top_margin + (plot_height / 2), text=self.common["Distribution_label"], fill="#888888", font=("Arial", 9, "bold"), angle=90)
 
         # 8. GRADUATIONS X (Valeurs rondes)
         step = 10 if (v_max - v_min) > 40 else 5
@@ -1813,7 +1857,7 @@ class RasterView(ctk.CTkFrame):
             self.ax_cbar.set_visible(True)
             self.ax_cbar.set_axis_on()
             self.cbar = self.fig_img.colorbar(self.img_plot, cax=self.ax_cbar)
-            self.cbar.set_label("Laser Power Level (%)", color='#888888', fontsize=14, labelpad=8)
+            self.cbar.set_label(self.common["laser_power_level"], color='#888888', fontsize=14, labelpad=8)
             self.cbar.ax.tick_params(colors='#888888', labelsize=11)
             self.cbar.outline.set_visible(False)
         else:
@@ -1847,12 +1891,12 @@ class RasterView(ctk.CTkFrame):
             final_font_size = 14
 
         stats_lines = [
-            f"REAL DIMENSIONS:  {real_w:.2f} x {real_h:.2f} mm",
-            f"ESTIMATED TIME:   {hours:02d}:{minutes:02d}:{seconds:02d}",
-            f"FILE SIZE:        {est_size}",
-            f"MATRIX SIZE:      {w_px} x {h_px} px",
-            f"SCAN STEP:        {scan_step:.4f} mm",
-            f"LINE STEP:        {line_step:.4f} mm"
+            f"{self.stats.get('real_dims', 'REAL DIMENSIONS'):<20}: {real_w:.2f} x {real_h:.2f} mm",
+            f"{self.stats.get('est_time', 'ESTIMATED TIME'):<20}: {hours:02d}:{minutes:02d}:{seconds:02d}",
+            f"{self.stats.get('file_size', 'FILE SIZE'):<20}: {est_size}",
+            f"{self.stats.get('matrix_size', 'MATRIX SIZE'):<20}: {w_px} x {h_px} px",
+            f"{self.stats.get('scan_step', 'SCAN STEP'):<20}: {scan_step:.4f} mm",
+            f"{self.stats.get('line_step', 'LINE STEP'):<20}: {line_step:.4f} mm"
         ]
 
         for lbl, txt in zip(self.stats_labels, stats_lines):

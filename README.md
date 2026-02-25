@@ -117,7 +117,7 @@ If you just want to use the software without installing Python, follow these ste
 
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
 * **UI Enhancement & Custom Branding:** Replace emojis with custom icons (Theme-aware).
-* **Full Internationalization (i18n):** Completion of multi-language support for the entire interface.
+* ~~**Full Internationalization (i18n):** Completion of multi-language support for the entire interface.~~ _(Pending next release)_
 * **Onboarding Experience:** First-run setup wizard for essential machine configuration.
 * **Async Streamed Parsing:** Implement a buffered G-code processing system to allow real-time simulation rendering while the generation is still in progress (eliminating UI freezing on large files).
 
@@ -144,6 +144,7 @@ If you just want to use the software without installing Python, follow these ste
 * Simulation is not yet pixel-perfect.
 * Framing during simulation not rendering correctly.
 * Translations not yet finished.
+* Path simulation not adapting when window resizing.
 
 
 ---
