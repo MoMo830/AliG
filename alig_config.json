@@ -1,7 +1,7 @@
 {
     "window_settings": {
         "is_maximized": true,
-        "geometry": "1300x900+50+50"
+        "geometry": "1300x900+162+179"
     },
     "machine_settings": {
         "theme": "Dark",
@@ -11,7 +11,7 @@
         "gcode_extension": ".nc",
         "m67_e_num": 0,
         "ctrl_max": 0,
-        "m67_delay": 0.0,
+        "m67_delay": -11.5,
         "premove": 10.0,
         "custom_header": "",
         "custom_footer": ""

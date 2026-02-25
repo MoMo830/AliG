@@ -73,12 +73,16 @@ LATENCY_EXPLAIN_LIGHT = None
 LINESTEP_DARK = None
 LINESTEP_LIGHT = None
 POWER_COM = None
-
+POWER_EXPLAIN_DARK = None
+POWER_EXPLAIN_LIGHT = None
+LINESTEP_EXPLAIN_DARK = None
+LINESTEP_EXPLAIN_LIGHT = None
 
 def load_all_images():
     global HOME_DARK, HOME_LIGHT, RASTER_DARK, RASTER_LIGHT
     global LATENCY_DARK, LATENCY_LIGHT, LATENCY_EXPLAIN_DARK, LATENCY_EXPLAIN_LIGHT
-    global LINESTEP_DARK, LINESTEP_LIGHT, POWER_COM
+    global LINESTEP_DARK, LINESTEP_LIGHT, POWER_COM, LINESTEP_EXPLAIN_DARK, LINESTEP_EXPLAIN_LIGHT
+    global POWER_EXPLAIN_DARK, POWER_EXPLAIN_LIGHT
 
     try:
         HOME_DARK = load_image("home_white.png")
@@ -91,7 +95,12 @@ def load_all_images():
         LATENCY_EXPLAIN_LIGHT = load_image("latency_calibration_explain_black.png")
         LINESTEP_DARK = load_image("linestep_calibration_white.png")
         LINESTEP_LIGHT = load_image("linestep_calibration_black.png")
+        LINESTEP_EXPLAIN_DARK = load_image("linestep_explain_white.png")
+        LINESTEP_EXPLAIN_LIGHT = load_image("linestep_explain_black.png")
         POWER_COM = load_image("power_calibration.png")
+        POWER_EXPLAIN_DARK = load_image("power_explain_white.png")
+        POWER_EXPLAIN_LIGHT= load_image("power_explain_black.png")
+
 
 
     except Exception as e:

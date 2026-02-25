@@ -4,8 +4,8 @@ from PIL import Image, ImageDraw
 from core.utils import get_app_paths
 from engine.calibrate_engine import CalibrateEngine
 from core.translations import TRANSLATIONS
-from utils.paths import LATENCY_LIGHT, LATENCY_DARK, LATENCY_EXPLAIN_LIGHT, LATENCY_EXPLAIN_DARK
-from utils.paths import LINESTEP_DARK, LINESTEP_LIGHT, POWER_COM
+from utils.paths import LATENCY_LIGHT, LATENCY_DARK, LATENCY_EXPLAIN_LIGHT, LATENCY_EXPLAIN_DARK, POWER_EXPLAIN_DARK, POWER_EXPLAIN_LIGHT
+from utils.paths import LINESTEP_DARK, LINESTEP_LIGHT, POWER_COM, LINESTEP_EXPLAIN_DARK, LINESTEP_EXPLAIN_LIGHT
 
 class CalibrationView(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -66,23 +66,40 @@ class CalibrationView(ctk.CTkFrame):
         self.right_column = ctk.CTkFrame(self.main_grid, fg_color=["#EBEBEB", "#202020"], corner_radius=15)
         self.right_column.grid(row=0, column=1, sticky="nsew")
 
-        self.right_column = ctk.CTkFrame(self.main_grid, fg_color=["#EBEBEB", "#202020"], corner_radius=15)
-        self.right_column.grid(row=0, column=1, sticky="nsew")
-
-        # --- FIXATION DE LA STRUCTURE (Éléments qui ne bougent jamais) ---
         self.desc_title = ctk.CTkLabel(self.right_column, font=("Arial", 30, "bold"), text_color=self.accent_color)
         self.desc_title.pack(pady=(40, 10), padx=40, anchor="w")
 
+        # --- BLOC DESCRIPTION & ILLUSTRATION ---
         self.desc_info_row = ctk.CTkFrame(self.right_column, fg_color="transparent")
         self.desc_info_row.pack(fill="x", padx=40, pady=10)
 
-        self.desc_text = ctk.CTkLabel(self.desc_info_row, font=("Arial", 15), justify="left", anchor="nw")
-        self.desc_text.pack(side="left", fill="both", expand=True)
-        # Gestion auto du retour à la ligne
-        self.desc_text.bind("<Configure>", lambda e: self.desc_text.configure(wraplength=self.desc_text.winfo_width() - 10))
+        # Ratio 
+        self.desc_info_row.grid_columnconfigure(0, weight=5)
+        self.desc_info_row.grid_columnconfigure(1, weight=5, minsize=180)
 
+        # TEXTE
+        self.desc_text = ctk.CTkLabel(
+            self.desc_info_row,
+            font=("Arial", 15),
+            justify="left",
+            anchor="nw"
+        )
+        self.desc_text.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
+
+        # IMAGE
         self.illustration_label = ctk.CTkLabel(self.desc_info_row, text="")
-        self.illustration_label.pack(side="right", padx=(20, 0))
+        self.illustration_label.grid(row=0, column=1, sticky="nsew")
+
+        # Wrap auto du texte
+        self.desc_text.bind(
+            "<Configure>",
+            lambda e: self.desc_text.configure(
+                wraplength=self.desc_text.winfo_width() - 15
+            )
+        )
+
+        # Resize global du bloc
+        self.desc_info_row.bind("<Configure>", self._on_desc_row_resize)
 
         # --- ZONE DYNAMIQUE (C'est elle qu'on vide) ---
         self.dynamic_params_frame = ctk.CTkFrame(self.right_column, fg_color="transparent")
@@ -137,12 +154,12 @@ class CalibrationView(ctk.CTkFrame):
         self.params_grid = ctk.CTkFrame(self.settings_container, fg_color="transparent")
         self.params_grid.pack(fill="x", padx=15, pady=15)
 
-        # Ligne 0 : Feedrate & Latency
-        ctk.CTkLabel(self.params_grid, text="Feedrate (mm/min):").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        # Ligne 0 : Feedrate & Latency  
+        ctk.CTkLabel(self.params_grid, text=self.texts.get("feedrate_calc", "Feedrate (mm/min):")).grid(row=0, column=0, padx=5, pady=5, sticky="w")
         self.speed_entry = ctk.CTkEntry(self.params_grid, width=100)
         self.speed_entry.grid(row=0, column=1, padx=5, pady=5)
-
-        ctk.CTkLabel(self.params_grid, text="Latency (ms):").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        
+        ctk.CTkLabel(self.params_grid, text=self.texts.get("latency_calc", "Latency (ms):")).grid(row=0, column=2, padx=5, pady=5, sticky="w")
         self.latency_entry = ctk.CTkEntry(self.params_grid, width=100)
         self.latency_entry.grid(row=0, column=3, pady=5)
 
@@ -150,8 +167,8 @@ class CalibrationView(ctk.CTkFrame):
         self.mm_info_label = ctk.CTkLabel(self.params_grid, text="= 0.000 mm", font=("Arial", 12, "bold"), text_color="#1f538d")
         self.mm_info_label.grid(row=0, column=4, padx=(10, 0), sticky="w")
 
-        # Ligne 1 : Power & Info Mode
-        ctk.CTkLabel(self.params_grid, text="Power (%):").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        # Ligne 1 : Power & Info Mode  
+        ctk.CTkLabel(self.params_grid, text=self.texts.get("power_pct", "Power (%):")).grid(row=1, column=0, padx=5, pady=5, sticky="w")
         self.power_entry = ctk.CTkEntry(self.params_grid, width=100)
         self.power_entry.grid(row=1, column=1, padx=5, pady=5)
 
@@ -163,21 +180,30 @@ class CalibrationView(ctk.CTkFrame):
         self.calc_container = ctk.CTkFrame(self.dynamic_params_frame, fg_color=["#DCE4EE", "#2B2B2B"], corner_radius=10)
         self.calc_container.pack(fill="x", pady=10)
         
-        self.calc_header = ctk.CTkLabel(self.calc_container, text="Latency Calculator (from measurement):", 
-                                        font=("Arial", 13, "bold"), text_color=self.accent_color)
+        self.calc_header = ctk.CTkLabel(
+            self.calc_container, 
+            text=self.texts.get("latency_calculator", "Latency Calculator (from measurement):"),
+            font=("Arial", 13, "bold"), 
+            text_color=self.accent_color
+        )
         self.calc_header.pack(padx=15, pady=(10, 5), anchor="w")
 
         self.calc_grid = ctk.CTkFrame(self.calc_container, fg_color="transparent")
         self.calc_grid.pack(fill="x", padx=15, pady=(0, 10))
 
-        ctk.CTkLabel(self.calc_grid, text="Measured Offset (mm):").grid(row=0, column=0, padx=(0, 10), sticky="w")
+        ctk.CTkLabel(self.calc_grid, text=self.texts.get("measured_offset", "Measured Offset (mm):")).grid(row=0, column=0, padx=(0, 10), sticky="w")
         self.measured_mm_entry = ctk.CTkEntry(self.calc_grid, width=100, placeholder_text="ex: 0.25")
         self.measured_mm_entry.grid(row=0, column=1, sticky="w")
 
-        self.calc_result_label = ctk.CTkLabel(self.calc_grid, text="Result: -- ms", font=("Arial", 12, "bold"), text_color=self.accent_color)
+        self.calc_result_label = ctk.CTkLabel(
+            self.calc_grid, 
+            text=f"{self.texts.get('latency_results', 'Result:')} -- ms", 
+            font=("Arial", 12, "bold"), 
+            text_color=self.accent_color
+        )
         self.calc_result_label.grid(row=0, column=2, padx=(15, 0), sticky="w")
 
-        self.save_latency_btn = ctk.CTkButton(self.calc_grid, text="Apply & Save", width=120, height=28, command=self.apply_calculated_latency)
+        self.save_latency_btn = ctk.CTkButton(self.calc_grid, text=self.texts.get("apply_save", "Apply & Save"), width=120, height=28, command=self.apply_calculated_latency)
         self.save_latency_btn.grid(row=0, column=3, padx=(20, 0), sticky="w")
 
         self.calc_hint_label = ctk.CTkLabel(self.calc_container, text="", font=("Arial", 11, "italic"), text_color="gray")
@@ -271,16 +297,19 @@ class CalibrationView(ctk.CTkFrame):
         linestep_img = ctk.CTkImage(light_image=LINESTEP_LIGHT, dark_image=LINESTEP_DARK, size=(35, 35))
         power_img = ctk.CTkImage(light_image=POWER_COM, dark_image=POWER_COM, size=(35, 35))
         # Images plus grandes pour la description
-        latency_preview = ctk.CTkImage(light_image=LATENCY_EXPLAIN_LIGHT, dark_image=LATENCY_EXPLAIN_DARK, size=(600, 120))
+        latency_explain = ctk.CTkImage(light_image=LATENCY_EXPLAIN_LIGHT, dark_image=LATENCY_EXPLAIN_DARK, size=(500, 100))
+        linestep_explain = ctk.CTkImage(light_image=LINESTEP_EXPLAIN_LIGHT, dark_image=LINESTEP_EXPLAIN_DARK, size=(500, 100))
+        power_explain = ctk.CTkImage(light_image=POWER_EXPLAIN_LIGHT, dark_image=POWER_EXPLAIN_DARK, size=(500, 100))
 
         self.test_list = [
             {
                 "title": self.texts["latency_title"],
                 "short": self.texts["latency_short"],
                 "long": self.texts["latency_long"],
-                "params": "• Square Size: 20x10mm\n• Center Origin (G54)\n• Variable: m67_delay",
+                "params": "",
                 "icon": latency_img,
-                "preview": latency_preview,
+                "preview": latency_explain,
+                "img_ratio": 5.0,
                 "is_image": True,
                 "callback": self.run_latency_test
             },
@@ -289,7 +318,8 @@ class CalibrationView(ctk.CTkFrame):
                 "short": self.texts["linestep_short"],
                 "long": self.texts["linestep_long"],
                 "icon": linestep_img,
-                "preview": None,
+                "preview": linestep_explain,
+                "img_ratio": 5.0,
                 "is_image": True,
                 "callback": self.linestep_window
             },
@@ -299,7 +329,8 @@ class CalibrationView(ctk.CTkFrame):
                 "long": self.texts["power_long"],
                 "params": "• Steps: 10 levels\n• Power Range: 0-100%\n• Variable: S-Mode / M67",
                 "icon": power_img,
-                "preview": None,
+                "preview": power_explain,
+                "img_ratio": 5.0,
                 "is_image": True,
                 "callback": self.power_test_window
             }
@@ -309,10 +340,75 @@ class CalibrationView(ctk.CTkFrame):
             self.create_calibration_card(test, i)
 
     def update_detail_view(self, test):
-        """Sélectionne le test, met à jour l'UI et lie les actions."""
+        """Sélectionne le test et délègue la configuration selon le type."""
+        # 1. Visuel de la sidebar
+        self._update_sidebar_selection(test)
+
+        # 2. Reset du bouton d'action
+        self.action_btn.configure(text=self.texts["btn_prepare"], fg_color=self.accent_color)
+
+        # 3. DÉLÉGATION PAR TEST
+        title = test["title"]
         
-        # 1. GESTION VISUELLE DE LA SÉLECTION (SIDEBAR)
-        if hasattr(self, "selected_test") and self.selected_test is not None:
+        if title == self.texts["latency_title"]:
+            self._setup_latency_test_logic()
+            
+        elif title == self.texts.get("power_title", "Power Test"):
+            self._setup_power_test_logic()
+
+        elif title == self.texts.get("linestep_title", "Line Step"):
+            self._setup_linestep_test_logic()
+
+        # 4. Mise à jour des textes et images communs
+        self._update_description_zone(test)
+
+
+
+    def _setup_latency_test_logic(self):
+        """Regroupe toute la logique spécifique au test de latence."""
+        # Affichage des widgets de calcul/champs
+        self.latency_test_window() 
+        
+        # Liaison de l'action de génération
+        self.action_btn.configure(command=self.validate_and_generate)
+        
+        # Chargement des données de configuration (Vitesse, Mode, etc.)
+        cfg = self.config_manager
+        cmd_mode = cfg.get_item("machine_settings", "cmd_mode", "Unknown")
+        is_s_mode = "S (" in cmd_mode
+        
+        if hasattr(self, "speed_entry") and self.speed_entry.winfo_exists():
+            self.speed_entry.delete(0, "end")
+            self.speed_entry.insert(0, str(cfg.get_item("machine_settings", "base_feedrate", 3000)))
+        
+        if hasattr(self, "latency_entry") and self.latency_entry.winfo_exists():
+            self.latency_entry.delete(0, "end")
+            self.latency_entry.insert(0, "0.0")
+
+        # Mise à jour des infos dynamiques sur le mode de tir
+        info = f"Mode: {cmd_mode} | Max: {cfg.get_item('machine_settings', 'ctrl_max', '??')}"
+        if not is_s_mode:
+            info += f" | M67 Reg: {cfg.get_item('machine_settings', 'm67_e_num', '??')}"
+        
+        if hasattr(self, "fire_mode_info") and self.fire_mode_info.winfo_exists():
+            self.fire_mode_info.configure(text=info)
+
+        self.update_mm_display()
+
+    def _setup_power_test_logic(self):
+        """Logique pour le test de puissance."""
+        self.power_test_window()
+        self.action_btn.configure(command=self.run_power_test)
+
+    def _setup_linestep_test_logic(self):
+        """Logique pour le test d'intervalle de lignes."""
+        self.linestep_window()
+        # self.action_btn.configure(command=self.votre_methode)
+
+    def _update_sidebar_selection(self, test):
+        """Gère l'apparence visuelle des cartes lors du changement de sélection."""
+        # Désélection de l'ancienne carte (si elle existe)
+        if hasattr(self, "selected_test") and self.selected_test:
             try:
                 if self.selected_test["card_widget"].winfo_exists():
                     self.selected_test["card_widget"].configure(
@@ -322,6 +418,7 @@ class CalibrationView(ctk.CTkFrame):
             except Exception: 
                 pass
 
+        # Mise à jour de la référence et sélection visuelle de la nouvelle
         self.selected_test = test
         if "card_widget" in test and test["card_widget"].winfo_exists():
             test["card_widget"].configure(
@@ -329,65 +426,20 @@ class CalibrationView(ctk.CTkFrame):
                 border_color=self.accent_color 
             )
 
-        # 2. CONSTRUCTION DE L'INTERFACE SPÉCIFIQUE
-        # On définit d'abord le comportement par défaut du bouton
-        self.action_btn.configure(text=self.texts["btn_prepare"], fg_color=self.accent_color)
+    def _update_description_zone(self, test):
+        """Met à jour le titre, le texte et l'image."""
+        self.desc_title.configure(text=test.get("title", ""))
+        self.desc_text.configure(text=test.get("long", ""))
 
-        if test["title"] == self.texts["latency_title"]:
-            self.latency_test_window() 
-            self.action_btn.configure(command=self.validate_and_generate) # Action G-Code
-            
-            # Remplissage des données depuis la config
-            cfg = self.config_manager
-            cmd_mode = cfg.get_item("machine_settings", "cmd_mode", "Unknown")
-            is_s_mode = "S (" in cmd_mode
-            
-            if hasattr(self, "speed_entry") and self.speed_entry.winfo_exists():
-                self.speed_entry.delete(0, "end")
-                self.speed_entry.insert(0, str(cfg.get_item("machine_settings", "base_feedrate", 3000)))
-            
-            if hasattr(self, "latency_entry") and self.latency_entry.winfo_exists():
-                self.latency_entry.delete(0, "end")
-                self.latency_entry.insert(0, "0.0")
+        preview = test.get("preview")
 
-            # Info dynamique
-            info = f"Mode: {cmd_mode} | Max: {cfg.get_item('machine_settings', 'ctrl_max', '??')}"
-            if not is_s_mode:
-                info += f" | M67 Reg: {cfg.get_item('machine_settings', 'm67_e_num', '??')}"
-            
-            if hasattr(self, "fire_mode_info") and self.fire_mode_info.winfo_exists():
-                self.fire_mode_info.configure(text=info)
+        if preview:
+            self.illustration_label.configure(image=preview, text="")
+        else:
+            self.illustration_label.configure(image=None, text="")
 
-            self.update_mm_display()
-
-        elif test["title"] == self.texts.get("power_title", "Power Test"):
-            self.power_test_window()
-            self.action_btn.configure(command=self.run_power_test) # Action Image/Raster
-
-        elif test["title"] == self.texts.get("linestep_title", "Line Step"):
-            self.linestep_window()
-            # self.action_btn.configure(command=self.run_linestep_test) # À définir plus tard
-
-        # 3. MISE À JOUR DES TEXTES COMMUNS ET IMAGES
-        if hasattr(self, "desc_title") and self.desc_title.winfo_exists():
-            self.desc_title.configure(text=test["title"])
-            
-        if hasattr(self, "desc_text") and self.desc_text.winfo_exists():
-            self.desc_text.configure(text=test["long"])
-        
-        if hasattr(self, "illustration_label") and self.illustration_label.winfo_exists():
-            if test.get("preview") is not None:
-                self.illustration_label.configure(image=test["preview"], text="")
-            else:
-                # Si pas de preview, on s'assure que RIEN ne s'affiche (ni image, ni texte [No Preview])
-                self.illustration_label.configure(image="", text="")
-
-        # 4. AJUSTEMENT FINAL DU RENDU
-        self.update_idletasks()
-        if hasattr(self, "desc_text") and self.desc_text.winfo_exists():
-            new_wrap = self.desc_text.winfo_width() - 10
-            if new_wrap > 0:
-                self.desc_text.configure(wraplength=new_wrap)
+        # Force un resize immédiat propre
+        self.after(10, self._on_desc_row_resize)
 
     def run_latency_test(self):
         try:
@@ -546,14 +598,25 @@ class CalibrationView(ctk.CTkFrame):
                     hint = "Early firing: Decrease latency (-)"
                     color = "#3498db" # Blue
 
-                self.calc_result_label.configure(text=f"Result: {status}", text_color=color)
+                self.calc_result_label.configure(text=f"{self.texts.get('latency_results', 'Result:')} {status}", text_color=color)
                 self.calc_hint_label.configure(text=f"ℹ️ {hint}")
             
             elif dist_mm == 0:
-                self.calc_result_label.configure(text="Result: 0.00 ms", text_color="gray")
-                self.calc_hint_label.configure(text="Perfectly aligned")
+                # Affiche "Result: 0.00 ms" en utilisant la traduction
+                self.calc_result_label.configure(
+                    text=f"{self.texts.get('latency_results', 'Result:')} 0.00 ms", 
+                    text_color="gray"
+                )
+                # Affiche "Perfectly aligned" traduit
+                self.calc_hint_label.configure(
+                    text=self.texts.get("latency_perfect", "Perfectly aligned")
+                )
             else:
-                self.calc_result_label.configure(text="Result: -- ms", text_color="gray")
+                # Réinitialisation si la valeur est invalide
+                self.calc_result_label.configure(
+                    text=f"{self.texts.get('latency_results', 'Result:')} -- ms", 
+                    text_color="gray"
+                )
                 self.calc_hint_label.configure(text="")
                 
         except ValueError:
@@ -579,6 +642,58 @@ class CalibrationView(ctk.CTkFrame):
                 self.after(1500, lambda: self.save_latency_btn.configure(text="Apply & Save", fg_color=self.accent_color))
         except Exception as e:
             print(f"Error saving latency: {e}")
+
+    def _on_desc_row_resize(self, event=None):
+        """Resize dynamique avec une part plus large pour l'image."""
+        if not getattr(self, "selected_test", None):
+            return
+
+        preview = self.selected_test.get("preview")
+        if not preview:
+            return
+
+        total_width = self.desc_info_row.winfo_width()
+        if total_width <= 1:
+            return
+
+        # --- MODIFICATIONS ICI ---
+        # On passe à 45% de la largeur totale
+        # On augmente la limite max à 600px (au lieu des 350-400 précédents)
+        target_width = min(int(total_width * 0.45), 600) 
+
+        ratio = self.selected_test.get("img_ratio", 5.0)
+        target_height = int(target_width / ratio)
+
+        new_size = (target_width, target_height)
+
+        # Mise à jour uniquement si la taille a réellement changé
+        if preview._size != new_size:
+            preview.configure(size=new_size)
+
+
+    
+    def _on_desc_row_resize(self, event=None):
+        if not getattr(self, "selected_test", None):
+            return
+
+        preview = self.selected_test.get("preview")
+        if not preview:
+            return
+
+        total_width = self.desc_info_row.winfo_width()
+        if total_width <= 1:
+            return
+
+        ratio = self.selected_test.get("img_ratio", 5.0)
+
+        # 30% strict pour l'image
+        target_width = int(total_width * 0.30)
+        target_height = int(target_width / ratio)
+
+        new_size = (target_width, target_height)
+
+        if preview._size != new_size:
+            preview.configure(size=new_size)
 
     def show_error_feedback(self, message="⚠️ Check Parameters"):
         """Animation visuelle du bouton en cas d'erreur."""
