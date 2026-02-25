@@ -10,3 +10,5 @@ numpy
 matplotlib
 >>>>>>> ffa54c99651cc0108bcb6eba663d7aacba5dc4b8
 opencv-python
+
+PyQt6
