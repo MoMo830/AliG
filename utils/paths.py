@@ -99,7 +99,7 @@ def load_all_images():
         LINESTEP_EXPLAIN_LIGHT = load_image("linestep_explain_black.png")
         POWER_COM = load_image("power_calibration.png")
         POWER_EXPLAIN_DARK = load_image("power_explain_white.png")
-        POWER_EXPLAIN_LIGHT= load_image("power_explain_black.png")
+        POWER_EXPLAIN_LIGHT = load_image("power_explain_black.png")
 
 
 

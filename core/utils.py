@@ -108,7 +108,6 @@ def ask_confirmation(parent, message, action_callback, danger_color="#8b0000"):
     dialog = ctk.CTkToplevel(parent)
     dialog.title(texts.get("confirm_title", "Confirmation"))
     
-    # ... (code de géométrie inchangé) ...
     width, height = 300, 160
     x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
     y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
