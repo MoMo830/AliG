@@ -27,8 +27,9 @@ class SettingsView(ctk.CTkFrame):
 
         # 1. Charger la langue
         lang_code = self.app.config_manager.get_item("machine_settings", "language", "English")
+        if not lang_code or lang_code not in TRANSLATIONS:
+            lang_code = "English"
         self.texts = TRANSLATIONS.get(lang_code, TRANSLATIONS["English"])["settings"]
-        
         # --- TITRE & BOUTON SAUVEGARDER ---
         self.top_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.top_frame.pack(fill="x", padx=40, pady=(30, 0))
@@ -308,47 +309,52 @@ class SettingsView(ctk.CTkFrame):
         self.loading = True  # Bloque temporairement les événements de modification
         data = self.app.config_manager.get_section("machine_settings")
         
-        if not data:
-            self.loading = False
-            return
+        # Si le fichier est absent ou vide, on travaille sur un dictionnaire vide
+        # pour permettre aux .get() d'appliquer les valeurs par défaut ci-dessous.
+        if data is None:
+            data = {}
 
         # 1. Menus déroulants et Options Segmentées
-        self.appearance_mode.set(data.get("theme", "System"))
+        # On force "Dark" par défaut ici au lieu de "System"
+        self.appearance_mode.set(data.get("theme", "Dark"))
         self.app_language.set(data.get("language", "English"))
         self.cmd_mode.set(data.get("cmd_mode", "M67 (Analog)"))
         self.firing_mode.set(data.get("firing_mode", "M3/M5"))
 
         # 2. Champs de texte simples (Nombres entiers et Extension)
-        # On ajoute "gcode_extension" à la boucle des entrées textuelles
         for key in ["m67_e_num", "ctrl_max", "gcode_extension"]:
-            if key in data and key in self.controls:
-                # Valeur par défaut spécifique pour l'extension si vide dans le JSON
-                val = data.get(key, ".nc" if key == "gcode_extension" else "0")
+            if key in self.controls:
+                # Valeur par défaut : .nc pour l'extension, 0 pour le reste
+                default_val = ".nc" if key == "gcode_extension" else "0"
+                val = data.get(key, default_val)
+                
                 self.controls[key]["entry"].delete(0, tk.END)
                 self.controls[key]["entry"].insert(0, str(val))
         
         # 3. Sliders avec entrées numériques (Précision float)
         for key in ["m67_delay", "premove"]:
-            if key in data and key in self.controls:
-                val = float(data[key])
+            if key in self.controls:
+                # Valeurs par défaut : 0.0 pour le délai, 10.0 pour l'overscan
+                default_val = 10.0 if key == "premove" else 0.0
+                val = float(data.get(key, default_val))
+                
                 self.controls[key]["slider"].set(val)
                 self.controls[key]["entry"].delete(0, tk.END)
                 self.controls[key]["entry"].insert(0, f"{val:.2f}")
         
         # 4. Blocs de texte (Scripts)
-        if "custom_header" in data:
-            self.txt_header.delete("1.0", tk.END)
-            self.txt_header.insert("1.0", data["custom_header"])
-        if "custom_footer" in data:
-            self.txt_footer.delete("1.0", tk.END)
-            self.txt_footer.insert("1.0", data["custom_footer"])
+        self.txt_header.delete("1.0", tk.END)
+        self.txt_header.insert("1.0", data.get("custom_header", ""))
+        
+        self.txt_footer.delete("1.0", tk.END)
+        self.txt_footer.insert("1.0", data.get("custom_footer", ""))
 
         # 5. Switches (Paramètres d'affichage)
-        if "enable_thumbnails" in data:
-            if data["enable_thumbnails"]: 
-                self.sw_thumbnails.select()
-            else: 
-                self.sw_thumbnails.deselect()
+        # Par défaut, on active les vignettes (True)
+        if data.get("enable_thumbnails", True): 
+            self.sw_thumbnails.select()
+        else: 
+            self.sw_thumbnails.deselect()
 
         self.loading = False
         self.has_changes = False # On réinitialise l'état après chargement
