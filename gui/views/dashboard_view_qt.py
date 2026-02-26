@@ -9,7 +9,9 @@ from PyQt6.QtGui import QColor
 
 
 from core.translations import TRANSLATIONS
-from utils.paths import THUMBNAILS_DIR, ASSETS_DIR
+from utils.paths import THUMBNAILS_DIR, ASSETS_DIR, SVG_ICONS
+from utils.paths import SVG_ICONS
+from gui.utils_qt import get_svg_pixmap
 
 class DashboardViewQt(QWidget):
     def __init__(self, controller):
@@ -36,14 +38,14 @@ class DashboardViewQt(QWidget):
         self.load_thumbnails()
         QTimer.singleShot(100, self.render_grid)
 
+
     def setup_left_column(self):
         left_container = QFrame()
         left_container.setFixedWidth(420)
-        # On donne un peu de marge en bas pour le texte de crédits
         layout = QVBoxLayout(left_container)
         layout.setContentsMargins(0, 0, 0, 10) 
 
-        # 1. Zone de défilement pour les cartes
+        # 1. Zone de défilement
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -54,49 +56,41 @@ class DashboardViewQt(QWidget):
         self.modes_layout.setSpacing(15)
         self.modes_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Liste des modes
+        # --- LISTE DES MODES MISE À JOUR ---
+        # On utilise maintenant SVG_ICONS pour les chemins
         modes = [
-            (self.texts["raster_title"], self.texts["raster_desc"], self.controller.show_raster_mode, "raster_white.png", "normal"),
+            # (Titre, Description, Callback, Icône (Path ou Emoji), État)
+            (self.texts["raster_title"], self.texts["raster_desc"], self.controller.show_raster_mode, SVG_ICONS["RASTER"], "normal"),
             (self.texts["dithering_title"], self.texts["dithering_desc"], None, "🏁", "disabled"),
             (self.texts["infill_title"], self.texts["infill_desc"], None, "📐", "disabled"),
             (self.texts["parser_title"], self.texts["parser_desc"], None, "📐", "disabled"),
-            (self.texts["calibration_title"], self.texts["calibration_desc"], self.controller.show_calibration_mode, "🔧", "normal"),
+            (self.texts["calibration_title"], self.texts["calibration_desc"], self.controller.show_calibration_mode, SVG_ICONS["LATENCY"], "normal"),
+            # Utilisation de l'icône Home ou Settings (ici Home pour l'exemple)
             (self.texts["settings_title"], self.texts["settings_desc"], self.controller.show_settings_mode, "⚙️", "normal"),
         ]
 
-        for title, desc, callback, icon, state in modes:
-            card = self.create_mode_card(title, desc, callback, icon, state)
+        for title, desc, callback, icon_source, state in modes:
+            # On passe icon_source qui peut être soit un chemin SVG, soit un Emoji
+            card = self.create_mode_card(title, desc, callback, icon_source, state)
             self.modes_layout.addWidget(card)
 
         scroll.setWidget(content)
-        
-        # 2. Ajout du scroll au layout
         layout.addWidget(scroll)
 
-        # --- NOUVEAUTÉ : SECTION CRÉDITS ---
-        # On ajoute un petit espace (stretch) si jamais la fenêtre est très grande
-        # mais ici le scroll prend déjà toute la place, donc on ajoute juste le texte après.
-        
+        # --- SECTION CRÉDITS ---
         credits_label = QLabel(self.text.get("credits", "By MoMo"))
         credits_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        credits_label.setStyleSheet("""
-            color: #444444; 
-            font-size: 12px; 
-            font-weight: 300; 
-            margin-top: 10px;
-            border: none;
-            background: transparent;
-        """)
-        
+        credits_label.setStyleSheet("color: #444444; font-size: 12px; border: none; background: transparent;")
         layout.addWidget(credits_label)
-        # -----------------------------------
 
         self.main_layout.addWidget(left_container)
 
         
 
     def create_mode_card(self, title, desc, callback, icon_data, state):
-        """Crée une carte de mode avec hauteur fixe et gestion d'état"""
+        """Crée une carte de mode avec hauteur fixe et gestion d'état (SVG/PNG/Emoji)"""
+        from gui.utils_qt import get_svg_pixmap  # Import local ou en haut de fichier
+        
         card = QFrame()
         card.setObjectName("modeCard")
         
@@ -109,6 +103,8 @@ class DashboardViewQt(QWidget):
         border_color = "#252525" if is_disabled else "#3d3d3d"
         title_color = "#777777" if is_disabled else "white"
         desc_color = "#555555" if is_disabled else "gray"
+        # Couleur pour l'icône SVG : Gris si désactivé, Blanc si actif
+        icon_color = "#555555" if is_disabled else "#FFFFFF"
 
         # 2. STYLE QSS (Design Moderne)
         style = f"""
@@ -134,16 +130,26 @@ class DashboardViewQt(QWidget):
         layout.setContentsMargins(15, 10, 15, 10)
         layout.setSpacing(15)
 
-        # 4. ICONE (Image ou Emoji)
+        # 4. LOGIQUE D'ICÔNE MULTI-FORMAT
         icon_label = QLabel()
-        if icon_data.endswith(".png"):
-            path = os.path.join(ASSETS_DIR, icon_data)
-            pix = QPixmap(path).scaled(45, 45, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        icon_label.setFixedWidth(45) # Largeur fixe pour aligner les textes
+        
+        if isinstance(icon_data, str) and icon_data.endswith(".svg"):
+            # CAS 1 : SVG dynamique
+            pix = get_svg_pixmap(icon_data, size=QSize(35, 35), color_hex=icon_color)
             icon_label.setPixmap(pix)
+            
+        elif isinstance(icon_data, str) and icon_data.endswith(".png"):
+            # CAS 2 : PNG classique
+            path = os.path.join(ASSETS_DIR, icon_data)
+            pix = QPixmap(path).scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            icon_label.setPixmap(pix)
+            
         else:
+            # CAS 3 : Emoji ou Texte
             icon_label.setText(icon_data)
-            icon_label.setFont(QFont("Arial", 28))
-            icon_label.setStyleSheet(f"color: {title_color};")
+            icon_label.setFont(QFont("Arial", 24))
+            icon_label.setStyleSheet(f"color: {title_color}; border: none; background: transparent;")
         
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_label)
@@ -156,7 +162,7 @@ class DashboardViewQt(QWidget):
         t_lbl = QLabel(title)
         t_lbl.setStyleSheet(f"color: {title_color}; font-weight: bold; font-size: 15px; border: none; background: transparent;")
         
-        # Description (avec retour à la ligne automatique et alignement en haut)
+        # Description
         d_lbl = QLabel(desc)
         d_lbl.setWordWrap(True)
         d_lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -164,12 +170,10 @@ class DashboardViewQt(QWidget):
         
         text_layout.addWidget(t_lbl)
         text_layout.addWidget(d_lbl)
-        
-        # Bonus : Le Stretch pousse le texte vers le haut pour un alignement parfait du titre
         text_layout.addStretch()
         
         layout.addLayout(text_layout)
-        layout.setStretch(1, 1) # Donne toute la place au texte
+        layout.setStretch(1, 1)
 
         # 6. GESTION DU CLIC
         if not is_disabled:

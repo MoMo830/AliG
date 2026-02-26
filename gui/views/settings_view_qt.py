@@ -7,7 +7,10 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QMessageBox
 import os
 import shutil
-from utils.paths import ARROW_DOWN
+from utils.paths import SVG_ICONS
+#from utils.paths import ARROW_DOWN, CIRCLE
+from gui.switch import Switch
+
 
 class SettingsViewQt(QWidget):
     def __init__(self, controller):
@@ -169,6 +172,7 @@ class SettingsViewQt(QWidget):
                 border: 1px solid #3d3d3d;
                 border-radius: 12px;
             }
+            QLabel { border: none; background: transparent; } 
         """)
         sec_layout = QVBoxLayout(section_frame)
         sec_layout.setContentsMargins(15, 15, 15, 15)
@@ -236,7 +240,7 @@ class SettingsViewQt(QWidget):
         if not self.loading:
             self.set_button_style("changed")
 
-    # --- LOGIQUE DE SAUVEGARDE (Exemple simplifié) ---
+    # --- LOGIQUE DE SAUVEGARDE ---
     def save_all_settings(self):
         """Récupère toutes les valeurs de l'interface et les sauvegarde"""
         try:
@@ -267,10 +271,16 @@ class SettingsViewQt(QWidget):
                 self.set_button_style("saved")
                 self.btn_save.setText(f"✓ {self.texts['btn_save']}")
                 
-                # --- L'AJOUT CRUCIAL ICI ---
+                # --- MISE À JOUR DYNAMIQUE DE L'INTERFACE ---
                 main_window = self.window()
+                
+                # 1. Mise à jour de la langue
                 if hasattr(main_window, 'update_ui_language'):
                     main_window.update_ui_language() 
+                
+                # 2. Mise à jour du thème (Couleurs et Icônes SVG)
+                if hasattr(main_window, 'update_ui_theme'):
+                    main_window.update_ui_theme()
                 
                 QTimer.singleShot(2000, self.reset_save_btn)
             else:
@@ -317,7 +327,7 @@ class SettingsViewQt(QWidget):
         row_layout.setContentsMargins(0, 5, 0, 5)
         
         lbl = QLabel(label_text)
-        lbl.setStyleSheet("color: #ddd; font-size: 12px;")
+        lbl.setStyleSheet("color: #ddd; font-size: 12px; border: none; background: transparent;")
         
         # Le Slider
         slider = QSlider(Qt.Orientation.Horizontal)
@@ -364,7 +374,7 @@ class SettingsViewQt(QWidget):
         v_box.setSpacing(5)
         
         lbl = QLabel(label_text)
-        lbl.setStyleSheet("color: #bbb; font-size: 11px; font-weight: bold;")
+        lbl.setStyleSheet("color: #bbb; font-size: 11px; font-weight: bold; border: none; background: transparent;")
         lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         
         text_edit = QTextEdit()
@@ -391,7 +401,7 @@ class SettingsViewQt(QWidget):
         combo = QComboBox()
         combo.addItems(options)
         combo.setFixedWidth(150)
-
+        arrow_path = SVG_ICONS["ARROW_DOWN"].replace("\\", "/")
         combo.setStyleSheet(f"""
             QComboBox {{
                 background-color: #1e1e1e;
@@ -410,7 +420,7 @@ class SettingsViewQt(QWidget):
             }}
 
             QComboBox::down-arrow {{
-                image: url({ARROW_DOWN.replace("\\", "/")});
+                image: url({arrow_path});
                 width: 12px;
                 height: 8px;
             }}
@@ -428,20 +438,11 @@ class SettingsViewQt(QWidget):
         self.controls[key] = {"combo": combo}
 
     def create_switch(self, layout, label_text, key):
-        """Case à cocher stylisée en Switch"""
-        check = QCheckBox()
-        check.setCursor(Qt.CursorShape.PointingHandCursor)
-        check.setStyleSheet("""
-            QCheckBox::indicator { width: 40px; height: 20px; }
-            /* Ici tu peux ajouter un style d'image pour faire un vrai switch */
-        """)
+        check = Switch()
+        check.toggled.connect(lambda v: print("Switch:", v))
         check.stateChanged.connect(self.mark_as_changed)
-        
         self.create_input_row(layout, label_text, check)
         self.controls[key] = {"check": check}
-
-
-
 
     def ask_confirmation(self, title, message):
         """Affiche une boîte de dialogue de confirmation stylisée"""
@@ -600,3 +601,33 @@ class SettingsViewQt(QWidget):
         if self.ask_confirmation(self.texts["reset_all_parameters"], self.texts["reset_all_parameters_confirm"]):
             if self.controller.reset_all(): 
                 self.load_settings()
+
+    def apply_theme(self, colors):
+        """Met à jour dynamiquement les couleurs de la vue Settings"""
+        # 1. Mise à jour du style des sections (les cadres)
+        # On utilise le sélecteur QFrame pour ne pas impacter les enfants
+        section_style = f"""
+            QFrame {{
+                background-color: {colors['bg_card']};
+                border: 1px solid {colors['border']};
+                border-radius: 12px;
+            }}
+            QLabel {{ border: none; background: transparent; color: {colors['text']}; }}
+        """
+
+        # On parcourt tous les widgets pour trouver nos sections
+        # (Ou plus simplement, on réapplique le style aux frames stockées)
+        for widget in self.findChildren(QFrame):
+            if widget.objectName() == "sectionFrame":
+                widget.setStyleSheet(section_style)
+
+        # 2. Mise à jour des labels de texte (Headers, Sliders, etc.)
+        # On force la couleur du texte et on enlève les bordures
+        label_style = f"color: {colors['text']}; border: none; background: transparent;"
+        for lbl in self.findChildren(QLabel):
+            # On évite de toucher au titre principal s'il a un style spécifique
+            if lbl.objectName() != "headerTitle":
+                lbl.setStyleSheet(label_style)
+        
+        # 3. Mise à jour du fond de la vue elle-même (si besoin)
+        self.setStyleSheet(f"background-color: transparent;")

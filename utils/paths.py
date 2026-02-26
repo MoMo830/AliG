@@ -1,7 +1,6 @@
 import os
 import sys
 import ctypes
-from PIL import Image
 
 # ==========================================================
 #  Gestion universelle des chemins (Python + PyInstaller)
@@ -10,23 +9,17 @@ from PIL import Image
 def get_base_path() -> str:
     """ Retourne la racine du projet (ALIG_Project) """
     if getattr(sys, 'frozen', False):
-        # Chemin temporaire lors de l'exécution du .exe
         return sys._MEIPASS
-    
-    # paths.py est dans ALIG_Project/utils/
-    # dirname(__file__) -> ALIG_Project/utils/
-    # dirname(dirname(...)) -> ALIG_Project/ (Racine)
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Racine du projet
 BASE_DIR = get_base_path()
-
-# Dossier source des icônes
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 
-# Dossier des miniatures (Gestion de l'écriture hors du .exe si besoin)
+# ==========================================================
+#  GESTION DU DOSSIER THUMBNAILS (Ecriture)
+# ==========================================================
 if getattr(sys, 'frozen', False):
-    # En mode .exe, on crée Thumbnails à côté de l'exécutable pour qu'il persiste
+    # En mode .exe, on crée Thumbnails à côté de l'exécutable (et pas dans le dossier temporaire)
     EXE_DIR = os.path.dirname(sys.executable)
     THUMBNAILS_DIR = os.path.join(EXE_DIR, "assets", "Thumbnails")
 else:
@@ -41,74 +34,55 @@ if not os.path.exists(THUMBNAILS_DIR):
         print(f"Impossible de créer le dossier Thumbnails : {e}")
 
 # ==========================================================
-#  Chargement images sécurisé
-# ==========================================================
-
-def load_image(name: str):
-    """ Charge une image depuis le dossier assets """
-    image_path = os.path.join(ASSETS_DIR, name)
-
-    if not os.path.exists(image_path):
-        # Debug : affiche où il cherche exactement en cas d'erreur
-        error_msg = f"Fichier introuvable : {image_path}"
-        print(error_msg)
-        raise FileNotFoundError(error_msg)
-
-    return Image.open(image_path)
-
-# ==========================================================
-#  Variables globales (initialisées par load_all_images)
+#  CHEMINS DES RESSOURCES (Strings uniquement)
 # ==========================================================
 
 LOGO_ALIG = os.path.join(ASSETS_DIR, "logo_alig.ico")
-ARROW_DOWN = os.path.join(ASSETS_DIR, "arrow_down.svg")
 
-HOME_DARK = None
-HOME_LIGHT = None
-RASTER_DARK = None
-RASTER_LIGHT = None
-LATENCY_DARK = None
-LATENCY_LIGHT = None
-LATENCY_EXPLAIN_DARK = None
-LATENCY_EXPLAIN_LIGHT = None
-LINESTEP_DARK = None
-LINESTEP_LIGHT = None
-POWER_COM = None
-POWER_EXPLAIN_DARK = None
-POWER_EXPLAIN_LIGHT = None
-LINESTEP_EXPLAIN_DARK = None
-LINESTEP_EXPLAIN_LIGHT = None
+# --- SVG (Icônes UI) ---
+# On utilise un dictionnaire pour centraliser, c'est plus propre
+SVG_ICONS = {
+    "HOME": os.path.join(ASSETS_DIR, "home.svg"),
+    "RASTER": os.path.join(ASSETS_DIR, "raster.svg"),
+    "LATENCY": os.path.join(ASSETS_DIR, "latency_calibration.svg"),
+    "LINESTEP": os.path.join(ASSETS_DIR, "linestep_calibration.svg"),
+    "POWER": os.path.join(ASSETS_DIR, "power_calibration.svg"),
+    "ARROW_DOWN": os.path.join(ASSETS_DIR, "arrow_down.svg"), # Ajouté ici
+    "CIRCLE": os.path.join(ASSETS_DIR, "circle.svg"),
+}
 
-def load_all_images():
-    global HOME_DARK, HOME_LIGHT, RASTER_DARK, RASTER_LIGHT
-    global LATENCY_DARK, LATENCY_LIGHT, LATENCY_EXPLAIN_DARK, LATENCY_EXPLAIN_LIGHT
-    global LINESTEP_DARK, LINESTEP_LIGHT, POWER_COM, LINESTEP_EXPLAIN_DARK, LINESTEP_EXPLAIN_LIGHT
-    global POWER_EXPLAIN_DARK, POWER_EXPLAIN_LIGHT
+# --- PNG (Images d'explications / Previews) ---
+EXPLAIN_PNG = {
+    "LATENCY_DARK": os.path.join(ASSETS_DIR, "latency_calibration_explain_white.png"),
+    "LINESTEP_DARK": os.path.join(ASSETS_DIR, "linestep_explain_white.png"),
+    "POWER_DARK": os.path.join(ASSETS_DIR, "power_explain_white.png"),
+    "LATENCY_LIGHT": os.path.join(ASSETS_DIR, "latency_calibration_explain_black.png"),
+    "LINESTEP_LIGHT": os.path.join(ASSETS_DIR, "linestep_explain_black.png"),
+    "POWER_LIGHT": os.path.join(ASSETS_DIR, "power_explain_black.png"),
+}
 
-    try:
-        HOME_DARK = load_image("home_white.png")
-        HOME_LIGHT = load_image("home_black.png")
-        RASTER_DARK = load_image("raster_white.png")
-        RASTER_LIGHT = load_image("raster_black.png")
-        LATENCY_DARK = load_image("latency_calibration_white.png")
-        LATENCY_LIGHT = load_image("latency_calibration_black.png")
-        LATENCY_EXPLAIN_DARK = load_image("latency_calibration_explain_white.png")
-        LATENCY_EXPLAIN_LIGHT = load_image("latency_calibration_explain_black.png")
-        LINESTEP_DARK = load_image("linestep_calibration_white.png")
-        LINESTEP_LIGHT = load_image("linestep_calibration_black.png")
-        LINESTEP_EXPLAIN_DARK = load_image("linestep_explain_white.png")
-        LINESTEP_EXPLAIN_LIGHT = load_image("linestep_explain_black.png")
-        POWER_COM = load_image("power_calibration.png")
-        POWER_EXPLAIN_DARK = load_image("power_explain_white.png")
-        POWER_EXPLAIN_LIGHT = load_image("power_explain_black.png")
+# ==========================================================
+#  VÉRIFICATION DES ASSETS
+# ==========================================================
+def check_assets():
+    """ Vérifie la présence des fichiers critiques au démarrage """
+    missing = []
+    
+    # 1. Vérifier tous les SVG
+    for name, path in SVG_ICONS.items():
+        if not os.path.exists(path):
+            missing.append(f"Icône SVG: {name} ({os.path.basename(path)})")
+            
+    # 2. Vérifier tous les PNG d'explication
+    for name, path in EXPLAIN_PNG.items():
+        if not os.path.exists(path):
+            missing.append(f"Image PNG: {name} ({os.path.basename(path)})")
+            
+    # 3. Vérifier les ressources isolées (Logo, etc.)
+    if not os.path.exists(LOGO_ALIG):
+        missing.append("Icône de l'application (logo_alig.ico)")
 
-
-
-    except Exception as e:
-        ctypes.windll.user32.MessageBoxW(
-            0,
-            f"Erreur critique lors du chargement des ressources :\n\n{str(e)}",
-            "Erreur Fatale ALIG",
-            0x10
-        )
-        sys.exit(1)
+    if missing:
+        msg = "Certains fichiers ressources sont introuvables :\n\n" + "\n".join(missing)
+        # MessageBoxW pour une alerte Windows native avant même que l'interface ne charge
+        ctypes.windll.user32.MessageBoxW(0, msg, "Erreur de Ressources", 0x10)

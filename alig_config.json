@@ -16,10 +16,11 @@
     "stats": {
         "total_lines": 0,
         "total_gcodes": 0,
-        "total_time_seconds": 0.0
+        "total_time_seconds": 0.0,
+        "last_project_time": 0.0
     },
     "window_settings": {
-        "is_maximized": false,
-        "geometry": "1300x900+630+215"
+        "is_maximized": true,
+        "geometry": "1440x890+0+-6"
     }
 }

@@ -12,6 +12,10 @@ from core.translations import TRANSLATIONS
 from utils import paths
 from gui.views.dashboard_view_qt import DashboardViewQt
 from gui.views.settings_view_qt import SettingsViewQt
+from gui.views.calibration_view_qt import CalibrationView
+from utils.paths import SVG_ICONS
+from gui.utils_qt import get_svg_pixmap
+
 
 class MainWindowQt(QMainWindow):
     def __init__(self, controller):
@@ -27,8 +31,9 @@ class MainWindowQt(QMainWindow):
         from core.translations import TRANSLATIONS
         self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
 
-        # 2. Chargement des ressources
-        paths.load_all_images()
+        # 2. Vérification des ressources
+        from utils import paths
+        paths.check_assets()
 
         # 3. Configuration de la fenêtre
         self.setWindowTitle(f"ALIG - Advanced Laser Imaging Generator v{self.version}")
@@ -81,18 +86,23 @@ class MainWindowQt(QMainWindow):
         
         layout = QHBoxLayout(self.top_bar)
         layout.setContentsMargins(10, 0, 10, 0)
-        layout.setSpacing(10) # Un peu d'espace entre les éléments
+        layout.setSpacing(10)
 
         # 1. GAUCHE : Bouton HOME & Titre
         self.btn_home = QPushButton()
-        home_icon_path = os.path.join(paths.ASSETS_DIR, "home_white.png")
-        if os.path.exists(home_icon_path):
-            self.btn_home.setIcon(QIcon(home_icon_path))
+        
+        # --- NOUVEAU SYSTÈME SVG POUR HOME ---
+        home_pixmap = get_svg_pixmap(SVG_ICONS["HOME"], size=QSize(22, 22), color_hex="#FFFFFF")
+        if not home_pixmap.isNull():
+            self.btn_home.setIcon(QIcon(home_pixmap))
             self.btn_home.setIconSize(QSize(22, 22))
         
         self.btn_home.setFixedSize(40, 40)
         self.btn_home.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_home.setStyleSheet("QPushButton { background: transparent; border: none; border-radius: 5px; } QPushButton:hover { background-color: #3d3d3d; }")
+        self.btn_home.setStyleSheet("""
+            QPushButton { background: transparent; border: none; border-radius: 5px; } 
+            QPushButton:hover { background-color: #3d3d3d; }
+        """)
         self.btn_home.clicked.connect(self.show_dashboard)
         layout.addWidget(self.btn_home)
 
@@ -104,7 +114,6 @@ class MainWindowQt(QMainWindow):
         layout.addStretch()
 
         # 2. DROITE : Support, GitHub et Settings
-
 
         # Bouton Support (Jaune)
         self.btn_support = QPushButton(self.texts.get("support", "Support"))
@@ -121,6 +130,7 @@ class MainWindowQt(QMainWindow):
             }
             QPushButton:hover { background-color: #f7d000; }
         """)
+        import webbrowser
         self.btn_support.clicked.connect(lambda: webbrowser.open("https://buymeacoffee.com/momo830"))
         layout.addWidget(self.btn_support)
 
@@ -145,11 +155,25 @@ class MainWindowQt(QMainWindow):
         self.separator.setStyleSheet("color: #444444; font-weight: bold;")
         layout.addWidget(self.separator)
 
-        # Bouton Settings
-        self.btn_settings = QPushButton("⚙️")
+        # 3. Bouton Settings (Remplacé par une icône SVG Gear)
+        self.btn_settings = QPushButton()
+        
+        # --- NOUVEAU SYSTÈME SVG POUR SETTINGS ---
+        # Si tu n'as pas encore de GEAR.SVG, tu peux utiliser une autre clé existante de SVG_ICONS
+        settings_pixmap = get_svg_pixmap(SVG_ICONS.get("SETTINGS", SVG_ICONS["HOME"]), size=QSize(20, 20), color_hex="#FFFFFF")
+        
+        # if not settings_pixmap.isNull(): # a modifier pour utilisation futur svg
+        #     self.btn_settings.setIcon(QIcon(settings_pixmap))
+        #     self.btn_settings.setIconSize(QSize(20, 20))
+        # else:
+        self.btn_settings.setText("⚙️") # Fallback emoji
+            
         self.btn_settings.setFixedSize(40, 40)
         self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_settings.setStyleSheet("QPushButton { background: transparent; color: white; border: none; font-size: 18px; } QPushButton:hover { background-color: #3d3d3d; border-radius: 5px; }")
+        self.btn_settings.setStyleSheet("""
+            QPushButton { background: transparent; color: white; border: none; } 
+            QPushButton:hover { background-color: #3d3d3d; border-radius: 5px; }
+        """)
         self.btn_settings.clicked.connect(self.show_settings_mode)
         layout.addWidget(self.btn_settings)
 
@@ -157,17 +181,50 @@ class MainWindowQt(QMainWindow):
         self.main_layout.addWidget(self.top_bar)
 
     def update_ui_language(self):
+        """Met à jour les textes de la barre de titre et de la vue active"""
         lang = self.config_manager.get_item("machine_settings", "language", "English")
         self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
         
-        # Mettre à jour les boutons de navigation ici
-        # self.btn_dashboard.setText(self.texts.get("dashboard"))
-        # self.btn_settings.setText(self.texts.get("settings"))
+        # Mettre à jour le titre de la vue (Dashboard / Calibration / etc.)
+        # On peut imaginer une logique qui récupère le titre traduit selon la vue actuelle
         
         # Mettre à jour la vue active dans le StackedWidget
         current_view = self.content_area.currentWidget()
-        if current_view and hasattr(current_view, 'update_texts'):
-            current_view.update_texts()
+        
+        # On vérifie les deux noms possibles de méthodes par sécurité
+        if current_view:
+            if hasattr(current_view, 'update_ui_language'):
+                current_view.update_ui_language()
+            elif hasattr(current_view, 'update_texts'):
+                current_view.update_texts()
+
+    def update_ui_theme(self):
+        """Met à jour les couleurs et les icônes de l'interface globale"""
+     
+
+        colors = self.get_theme_colors()
+        
+        # 1. Mise à jour visuelle de la TopBar (Fond et bordure)
+        self.top_bar.setStyleSheet(f"""
+            QFrame {{ 
+                background-color: {colors['bg_card']}; 
+                border-bottom: 1px solid {colors['border']}; 
+            }}
+        """)
+        
+        # 2. Re-génération des icônes SVG de la TopBar (Home et Settings)
+        # On utilise la couleur 'text' du thème (Blanc pour Dark, Noir pour Light)
+        home_pix = get_svg_pixmap(SVG_ICONS["HOME"], QSize(22, 22), colors['text'])
+        self.btn_home.setIcon(QIcon(home_pix))
+        
+        # Si tu as une icône GEAR/SETTINGS dans la topbar
+        settings_pix = get_svg_pixmap(SVG_ICONS.get("SETTINGS", SVG_ICONS["HOME"]), QSize(20, 20), colors['text'])
+        self.btn_settings.setIcon(QIcon(settings_pix))
+        
+        # 3. Propager le changement à la vue ACTUELLEMENT visible
+        current_view = self.content_area.currentWidget()
+        if current_view and hasattr(current_view, 'apply_theme'):
+            current_view.apply_theme(colors)
 
     # --- Routage ---
     def show_dashboard(self):
@@ -216,16 +273,44 @@ class MainWindowQt(QMainWindow):
         self.content_area.setCurrentWidget(temp_page)
 
     def show_calibration_mode(self):
-        """Placeholder pour le futur mode Calibration"""
-        self.view_title.setText("CALIBRATION")
-        temp_page = QLabel("Module Calibration - En cours de migration...")
-        temp_page.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        temp_page.setStyleSheet("color: white; font-size: 18px;")
-        
-        self.content_area.addWidget(temp_page)
-        self.content_area.setCurrentWidget(temp_page)
+        """Affiche la vue de Calibration réelle"""
+        # 1. Mise à jour du titre
+        # On essaie de récupérer la traduction, sinon fallback sur "CALIBRATION"
+        title = self.texts.get("calibration", "CALIBRATION")
+        self.view_title.setText(title.upper())
 
- 
+        # 2. Gestion de l'instance de la vue (Lazy Loading)
+        if not hasattr(self, 'calibration_view'):
+            # On crée l'instance une seule fois
+            # On passe self.controller (ton config_manager) à la vue
+            self.calibration_view = CalibrationView(parent=self, controller=self.controller)
+            self.content_area.addWidget(self.calibration_view)
+        else:
+            # Optionnel : Rafraîchir les textes si la langue a changé
+            if hasattr(self.calibration_view, 'update_ui_language'):
+                self.calibration_view.update_ui_language()
+
+        # 3. Basculement sur la vue
+        self.content_area.setCurrentWidget(self.calibration_view)
+
+    def get_theme_colors(self):
+        theme = self.config_manager.get_item("machine_settings", "theme", "Dark")
+        if theme == "Light":
+            return {
+                "text": "#000000",
+                "text_secondary": "#444444",
+                "bg_card": "#F0F0F0",
+                "border": "#CCCCCC",
+                "suffix": "_LIGHT"
+            }
+        else: # Dark par défaut
+            return {
+                "text": "#FFFFFF",
+                "text_secondary": "gray",
+                "bg_card": "#2b2b2b",
+                "border": "#3d3d3d",
+                "suffix": "_DARK"
+            }
 
     def closeEvent(self, event):
         """Gère la fermeture (remplace on_closing)"""
