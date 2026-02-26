@@ -1,15 +1,25 @@
 {
-    "window_settings": {
-        "is_maximized": true,
-        "geometry": "2560x1369+0+-8"
-    },
     "machine_settings": {
         "theme": "Dark",
-        "language": "French",
+        "language": "Fran\u00e7ais",
         "enable_thumbnails": true,
-        "laser_latency": 1.0,
-        "premove": 11.0,
+        "cmd_mode": "M67 (Analog)",
+        "firing_mode": "M3/M5",
+        "m67_e_num": "0",
+        "ctrl_max": "1000",
+        "gcode_extension": ".nc",
+        "laser_latency": 0.0,
+        "premove": 10.0,
         "custom_header": "",
-        "custom_footer": "M334"
+        "custom_footer": ""
+    },
+    "stats": {
+        "total_lines": 0,
+        "total_gcodes": 0,
+        "total_time_seconds": 0.0
+    },
+    "window_settings": {
+        "is_maximized": false,
+        "geometry": "1300x900+630+215"
     }
 }

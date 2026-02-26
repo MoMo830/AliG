@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QScrollArea, QFrame, QLineEdit, 
-                             QSlider, QComboBox, QTextEdit, QCheckBox)
+                             QSlider, QComboBox, QTextEdit, QCheckBox,
+                             QSizePolicy)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QMessageBox
@@ -116,13 +117,15 @@ class SettingsViewQt(QWidget):
         self.create_script_box(sec_scripts, self.texts["label_header"], "custom_header")
         self.create_script_box(sec_scripts, self.texts["label_footer"], "custom_footer")
 
+        self.left_col.addStretch()
+
     def setup_right_column(self):
         # --- SECTION APPARENCE ---
         sec_app = self.create_section(self.right_col, self.texts["sec_appearance"])
         
         # Thème et Langue (Remplacent les segmented_pair)
         self.create_dropdown(sec_app, self.texts["label_theme"], ["Dark", "Light", "System"], "theme")
-        self.create_dropdown(sec_app, self.texts["label_lang"], ["French", "English"], "language")
+        self.create_dropdown(sec_app, self.texts["label_lang"], ["Français", "English"], "language")
         
         # Switch Vignettes
         self.create_switch(sec_app, self.texts["enable_thumbnails"], "enable_thumbnails")
@@ -157,8 +160,8 @@ class SettingsViewQt(QWidget):
 
     # --- HELPERS DE CONSTRUCTION ---
 
-    def create_section(self, layout, title):
-        """Crée un bloc section avec un titre bleu"""
+    def create_section(self, layout, title_key):
+        """Crée un bloc section et stocke le label pour la traduction future"""
         section_frame = QFrame()
         section_frame.setStyleSheet("""
             QFrame {
@@ -169,16 +172,23 @@ class SettingsViewQt(QWidget):
         """)
         sec_layout = QVBoxLayout(section_frame)
         sec_layout.setContentsMargins(15, 15, 15, 15)
+        sec_layout.setAlignment(Qt.AlignmentFlag.AlignTop) # Pour éviter l'étirement interne
         
-        title_lbl = QLabel(title.upper())
+        # Récupération du texte via la clé
+        title_text = self.texts.get(title_key, title_key).upper()
+        title_lbl = QLabel(title_text)
         title_lbl.setStyleSheet("color: #3a9ad9; font-weight: bold; font-size: 12px; border: none;")
         sec_layout.addWidget(title_lbl)
+        
+        # --- STOCKAGE DE LA RÉFÉRENCE ---
+        if not hasattr(self, 'section_labels'):
+            self.section_labels = {}
+        self.section_labels[title_key] = title_lbl
         
         layout.addWidget(section_frame)
         return sec_layout
 
-    def create_input_row(self, layout, label_text, widget):
-        """Helper pour aligner Label + Widget sur une ligne"""
+    def create_input_row(self, layout, label_text, widget, key=None): # Ajout de key
         row = QWidget()
         row.setStyleSheet("border: none; background: transparent;")
         row_layout = QHBoxLayout(row)
@@ -187,10 +197,14 @@ class SettingsViewQt(QWidget):
         lbl = QLabel(label_text)
         lbl.setStyleSheet("color: #ddd; font-size: 13px;")
         
+        # --- AJOUT : Stocker le label pour traduction ---
+        if key:
+            if not hasattr(self, 'option_labels'): self.option_labels = {}
+            self.option_labels[key] = lbl
+
         row_layout.addWidget(lbl)
         row_layout.addStretch()
         row_layout.addWidget(widget)
-        
         layout.addWidget(row)
 
     def create_simple_input(self, layout, label_text, key):
@@ -224,12 +238,73 @@ class SettingsViewQt(QWidget):
 
     # --- LOGIQUE DE SAUVEGARDE (Exemple simplifié) ---
     def save_all_settings(self):
-        # Simulation de sauvegarde
-        self.set_button_style("saved")
-        self.btn_save.setText(f"✓ {self.texts['btn_save']}")
+        """Récupère toutes les valeurs de l'interface et les sauvegarde"""
+        try:
+            def get_float(key):
+                try:
+                    return float(self.controls[key]["entry"].text().replace(',', '.'))
+                except:
+                    return 0.0
+
+            new_settings = {
+                "theme": self.controls["theme"]["combo"].currentText(),
+                "language": self.controls["language"]["combo"].currentText(),
+                "enable_thumbnails": self.controls["enable_thumbnails"]["check"].isChecked(),
+                "cmd_mode": self.controls["cmd_mode"]["combo"].currentText(),
+                "firing_mode": self.controls["firing_mode"]["combo"].currentText(),
+                "m67_e_num": self.controls["m67_e_num"]["entry"].text(),
+                "ctrl_max": self.controls["ctrl_max"]["entry"].text(),
+                "gcode_extension": self.controls["gcode_extension"]["entry"].text(),
+                "laser_latency": get_float("laser_latency"),
+                "premove": get_float("premove"),
+                "custom_header": self.controls["custom_header"]["text"].toPlainText(),
+                "custom_footer": self.controls["custom_footer"]["text"].toPlainText()
+            }
+
+            self.controller.set_section("machine_settings", new_settings)
+            
+            if self.controller.save():
+                self.set_button_style("saved")
+                self.btn_save.setText(f"✓ {self.texts['btn_save']}")
+                
+                # --- L'AJOUT CRUCIAL ICI ---
+                main_window = self.window()
+                if hasattr(main_window, 'update_ui_language'):
+                    main_window.update_ui_language() 
+                
+                QTimer.singleShot(2000, self.reset_save_btn)
+            else:
+                raise Exception("Erreur d'écriture disque")
+
+        except Exception as e:
+            print(f"Erreur de sauvegarde : {e}")
+            self.btn_save.setStyleSheet("background-color: #942121; color: white; border-radius: 8px;")
+
+    def update_texts(self):
+        """Met à jour dynamiquement tous les labels de la vue settings"""
+        lang = self.controller.get_item("machine_settings", "language", "English")
+        from core.translations import TRANSLATIONS
+        self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"])["settings"]
         
-        # Retour à l'état normal après 2 secondes
-        QTimer.singleShot(2000, lambda: self.reset_save_btn())
+        # 1. Éléments fixes
+        self.title_label.setText(self.texts["title"])
+        self.btn_save.setText(self.texts["btn_save"])
+        self.btn_clear_data.setText(self.texts["erase_thumbnails"])
+        self.btn_reset_all.setText(self.texts["reset_all_parameters"])
+        
+        # 2. Titres de sections (G-CODE, HARDWARE, etc.)
+        if hasattr(self, 'section_labels'):
+            for key, label in self.section_labels.items():
+                if key in self.texts:
+                    label.setText(self.texts[key].upper())
+
+        # 3. Labels des options (Thème, Langue, Mode de commande, etc.)
+        if hasattr(self, 'option_labels'):
+            for key, label in self.option_labels.items():
+                # On cherche la clé correspondante (ex: label_theme)
+                translation_key = f"label_{key}" if not key.startswith("label_") else key
+                if translation_key in self.texts:
+                    label.setText(self.texts[translation_key])
 
     def reset_save_btn(self):
         self.set_button_style("idle")
@@ -286,9 +361,11 @@ class SettingsViewQt(QWidget):
         container = QWidget()
         v_box = QVBoxLayout(container)
         v_box.setContentsMargins(0, 10, 0, 5)
+        v_box.setSpacing(5)
         
         lbl = QLabel(label_text)
         lbl.setStyleSheet("color: #bbb; font-size: 11px; font-weight: bold;")
+        lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         
         text_edit = QTextEdit()
         text_edit.setFixedHeight(80)
@@ -307,7 +384,7 @@ class SettingsViewQt(QWidget):
         v_box.addWidget(lbl)
         v_box.addWidget(text_edit)
         
-        layout.addWidget(container)
+        layout.addWidget(container, alignment=Qt.AlignmentFlag.AlignTop)
         self.controls[key] = {"text": text_edit}
 
     def create_dropdown(self, layout, label_text, options, key):
@@ -347,7 +424,7 @@ class SettingsViewQt(QWidget):
         """)
 
         combo.currentIndexChanged.connect(self.mark_as_changed)
-        self.create_input_row(layout, label_text, combo)
+        self.create_input_row(layout, label_text, combo, key=key) # On passe la clé ici
         self.controls[key] = {"combo": combo}
 
     def create_switch(self, layout, label_text, key):
@@ -395,78 +472,46 @@ class SettingsViewQt(QWidget):
         return msg_box.clickedButton() == yes_button
 
     def load_settings(self):
-        self.loading = True  # Bloque mark_as_changed pendant le remplissage
-        
+        self.loading = True
         data = self.controller.get_section("machine_settings")
-        if not data: data = {}
 
-        # 1. Remplissage des champs simples (ComboBox, LineEdit, CheckBox)
-        # On utilise les clés définies lors de la création (ex: "theme", "cmd_mode")
+        # --- LOGIQUE SÉCURISÉE ---
         
-        # Exemple pour le thème
-        if "theme" in self.controls:
-            index = self.controls["theme"]["combo"].findText(data.get("theme", "Dark"))
-            self.controls["theme"]["combo"].setCurrentIndex(index)
+        # 1. ComboBox
+        for key in ["theme", "language", "cmd_mode", "firing_mode"]:
+            if key in self.controls:
+                val = data.get(key, "") # Si None, on prend une chaîne vide
+                index = self.controls[key]["combo"].findText(str(val))
+                if index >= 0:
+                    self.controls[key]["combo"].setCurrentIndex(index)
 
-        # 2. Remplissage des Sliders (laser_latency, premove, etc.)
+        # 2. LineEdits
+        for key in ["m67_e_num", "ctrl_max", "gcode_extension"]:
+            if key in self.controls:
+                self.controls[key]["entry"].setText(str(data.get(key, "")))
+
+        # 3. Sliders (LÀ OÙ ÇA PLANTAIT)
         for key in ["laser_latency", "premove"]:
             if key in self.controls:
-                val = float(data.get(key, 0.0))
+                # On force une valeur de secours (0.0) si le manager renvoie None
+                raw_val = data.get(key)
+                val = float(raw_val) if raw_val is not None else 0.0
+                
                 self.controls[key]["slider"].setValue(int(val * 100))
                 self.controls[key]["entry"].setText(f"{val:.2f}")
 
-        # 3. Remplissage des TextBoxes (Header/Footer)
+        # 4. Scripts & Switches
         if "custom_header" in self.controls:
             self.controls["custom_header"]["text"].setPlainText(data.get("custom_header", ""))
-        
         if "custom_footer" in self.controls:
             self.controls["custom_footer"]["text"].setPlainText(data.get("custom_footer", ""))
-
-        # 4. Remplissage des Switches
         if "enable_thumbnails" in self.controls:
-            is_enabled = data.get("enable_thumbnails", True)
-            self.controls["enable_thumbnails"]["check"].setChecked(is_enabled)
+            self.controls["enable_thumbnails"]["check"].setChecked(bool(data.get("enable_thumbnails", True)))
 
         self.loading = False
-        self.set_button_style("idle") # On remet le bouton save en bleu
+        self.set_button_style("idle")
 
-    def save_all_settings(self):
-        try:
-            # 1. Extraction sécurisée des données
-            # On utilise float() uniquement si on est sûr que le texte est un nombre
-            def get_val(key):
-                try:
-                    return float(self.controls[key]["entry"].text())
-                except:
-                    return 0.0
-
-            new_settings = {
-                "theme": self.controls["theme"]["combo"].currentText(),
-                "language": self.controls["language"]["combo"].currentText(),
-                "enable_thumbnails": self.controls["enable_thumbnails"]["check"].isChecked(),
-                "laser_latency": get_val("laser_latency"),
-                "premove": get_val("premove"),
-                "custom_header": self.controls["custom_header"]["text"].toPlainText(),
-                "custom_footer": self.controls["custom_footer"]["text"].toPlainText(),
-            }
-
-            # 2. Utilisation de l'instance directe du config_manager
-            # Vérifiez bien que vous n'avez pas de doublon ".config_manager" ici
-            mgr = self.controller
-            mgr.set_section("machine_settings", new_settings)
-            
-            if mgr.save():
-                self.set_button_style("saved")
-                self.btn_save.setText(f"✓ {self.texts['btn_save']}")
-                QTimer.singleShot(2000, self.reset_save_btn)
-            else:
-                raise Exception("Save failed")
-
-        except Exception as e:
-            # C'est ici que l'erreur s'affiche dans votre console
-            print(f"Erreur de sauvegarde : {e}")
-            self.btn_save.setStyleSheet("background-color: #942121; color: white;")
-
+ 
 
 
     def clear_thumbnails_and_stats(self):
@@ -553,5 +598,5 @@ class SettingsViewQt(QWidget):
 
     def reset_settings(self):
         if self.ask_confirmation(self.texts["reset_all_parameters"], self.texts["reset_all_parameters_confirm"]):
-            if self.controller.reset_all():
-                self.load_settings() # Recharge les valeurs par défaut
+            if self.controller.reset_all(): 
+                self.load_settings()

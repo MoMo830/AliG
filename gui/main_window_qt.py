@@ -19,33 +19,39 @@ class MainWindowQt(QMainWindow):
         self.controller = controller 
         self.config_manager = controller
         self.version = "0.99b (Qt)"
-        
-        # 1. Chargement des ressources & Langue
+
+        # --- ÉTAPE 1 : INITIALISATION DES TEXTES PAR DÉFAUT ---
+        # On crée l'attribut 'texts' immédiatement pour éviter l'AttributeError
         lang = self.config_manager.get_item("machine_settings", "language", "English")
+        print(f"DEBUG: {lang}")
+        from core.translations import TRANSLATIONS
         self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
 
+        # 2. Chargement des ressources
         paths.load_all_images()
 
-        # 2. Configuration de la fenêtre
+        # 3. Configuration de la fenêtre
         self.setWindowTitle(f"ALIG - Advanced Laser Imaging Generator v{self.version}")
         self._setup_window_init()
         self._setup_icon()
 
-        # 3. Layout Principal
+        # 4. Layout Principal
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
 
-        # 4. Création des composants
+        # 5. Création des composants (Maintenant self.texts existe !)
         self.setup_top_bar()
         
-        # Zone de contenu (équivalent de ton self.container)
         self.content_area = QStackedWidget()
         self.main_layout.addWidget(self.content_area)
 
-        # 5. Chargement de la vue initiale (Dashboard)
+        # 6. MISE À JOUR FINALE (Optionnel si déjà fait en étape 1)
+        self.update_ui_language()
+
+        # 7. Affichage
         self.show_dashboard()
 
     def _setup_window_init(self):
@@ -149,6 +155,19 @@ class MainWindowQt(QMainWindow):
 
         # Enfin, on ajoute la TopBar au layout principal de la fenêtre
         self.main_layout.addWidget(self.top_bar)
+
+    def update_ui_language(self):
+        lang = self.config_manager.get_item("machine_settings", "language", "English")
+        self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
+        
+        # Mettre à jour les boutons de navigation ici
+        # self.btn_dashboard.setText(self.texts.get("dashboard"))
+        # self.btn_settings.setText(self.texts.get("settings"))
+        
+        # Mettre à jour la vue active dans le StackedWidget
+        current_view = self.content_area.currentWidget()
+        if current_view and hasattr(current_view, 'update_texts'):
+            current_view.update_texts()
 
     # --- Routage ---
     def show_dashboard(self):
