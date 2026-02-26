@@ -5,15 +5,11 @@
     },
     "machine_settings": {
         "theme": "Dark",
-        "language": "Fran\u00e7ais",
-        "cmd_mode": "M67 (Analog)",
-        "firing_mode": "M3/M5",
-        "gcode_extension": ".nc",
-        "m67_e_num": 0,
-        "ctrl_max": 0,
-        "m67_delay": -11.5,
-        "premove": 10.0,
+        "language": "French",
+        "enable_thumbnails": true,
+        "laser_latency": 1.0,
+        "premove": 11.0,
         "custom_header": "",
-        "custom_footer": ""
+        "custom_footer": "M334"
     }
 }

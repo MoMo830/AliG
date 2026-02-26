@@ -2,8 +2,11 @@
 import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, 
                              QLabel, QScrollArea, QGridLayout, QPushButton)
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QPixmap, QIcon, QFont
+from PyQt6.QtWidgets import QGraphicsDropShadowEffect
+from PyQt6.QtGui import QColor
+
 
 from core.translations import TRANSLATIONS
 from utils.paths import THUMBNAILS_DIR, ASSETS_DIR
@@ -16,6 +19,7 @@ class DashboardViewQt(QWidget):
         # Récupération des textes
         lang = self.controller.config_manager.get_item("machine_settings", "language", "English")
         self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"])["dashboard"]
+        self.text = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
 
         # Layout Principal (Horizontal : Gauche = Modes, Droite = Histoire/Stats)
         self.main_layout = QHBoxLayout(self)
@@ -28,12 +32,18 @@ class DashboardViewQt(QWidget):
         # --- COLONNE DROITE : TITRE + HISTORY + STATS ---
         self.setup_right_column()
 
+        # --- THUMBNAILS ---
+        self.load_thumbnails()
+        QTimer.singleShot(100, self.render_grid)
+
     def setup_left_column(self):
         left_container = QFrame()
         left_container.setFixedWidth(420)
+        # On donne un peu de marge en bas pour le texte de crédits
         layout = QVBoxLayout(left_container)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 10) 
 
+        # 1. Zone de défilement pour les cartes
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -44,9 +54,12 @@ class DashboardViewQt(QWidget):
         self.modes_layout.setSpacing(15)
         self.modes_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Liste des modes (On réutilise ta logique)
+        # Liste des modes
         modes = [
             (self.texts["raster_title"], self.texts["raster_desc"], self.controller.show_raster_mode, "raster_white.png", "normal"),
+            (self.texts["dithering_title"], self.texts["dithering_desc"], None, "🏁", "disabled"),
+            (self.texts["infill_title"], self.texts["infill_desc"], None, "📐", "disabled"),
+            (self.texts["parser_title"], self.texts["parser_desc"], None, "📐", "disabled"),
             (self.texts["calibration_title"], self.texts["calibration_desc"], self.controller.show_calibration_mode, "🔧", "normal"),
             (self.texts["settings_title"], self.texts["settings_desc"], self.controller.show_settings_mode, "⚙️", "normal"),
         ]
@@ -56,31 +69,72 @@ class DashboardViewQt(QWidget):
             self.modes_layout.addWidget(card)
 
         scroll.setWidget(content)
+        
+        # 2. Ajout du scroll au layout
         layout.addWidget(scroll)
+
+        # --- NOUVEAUTÉ : SECTION CRÉDITS ---
+        # On ajoute un petit espace (stretch) si jamais la fenêtre est très grande
+        # mais ici le scroll prend déjà toute la place, donc on ajoute juste le texte après.
+        
+        credits_label = QLabel(self.text.get("credits", "By MoMo"))
+        credits_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        credits_label.setStyleSheet("""
+            color: #444444; 
+            font-size: 12px; 
+            font-weight: 300; 
+            margin-top: 10px;
+            border: none;
+            background: transparent;
+        """)
+        
+        layout.addWidget(credits_label)
+        # -----------------------------------
+
         self.main_layout.addWidget(left_container)
 
+        
+
     def create_mode_card(self, title, desc, callback, icon_data, state):
+        """Crée une carte de mode avec hauteur fixe et gestion d'état"""
         card = QFrame()
         card.setObjectName("modeCard")
-        card.setCursor(Qt.CursorShape.PointingHandCursor if state == "normal" else Qt.CursorShape.ArrowCursor)
         
-        # Style QSS pour simuler le hover de CustomTkinter
-        card.setStyleSheet("""
-            QFrame#modeCard {
-                background-color: #2b2b2b;
-                border: 2px solid #3d3d3d;
+        # 1. FIXER LA HAUTEUR (Uniformité visuelle)
+        card.setFixedHeight(80)
+        
+        # Définition des états
+        is_disabled = (state == "disabled" or callback is None)
+        bg_color = "#1e1e1e" if is_disabled else "#2b2b2b"
+        border_color = "#252525" if is_disabled else "#3d3d3d"
+        title_color = "#777777" if is_disabled else "white"
+        desc_color = "#555555" if is_disabled else "gray"
+
+        # 2. STYLE QSS (Design Moderne)
+        style = f"""
+            QFrame#modeCard {{
+                background-color: {bg_color};
+                border: 2px solid {border_color};
                 border-radius: 15px;
-            }
-            QFrame#modeCard:hover {
-                border-color: #1F6AA5;
-                background-color: #333333;
-            }
-        """)
+            }}
+        """
+        if not is_disabled:
+            style += """
+                QFrame#modeCard:hover {
+                    border-color: #1F6AA5;
+                    background-color: #333333;
+                }
+            """
+            card.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        card.setStyleSheet(style)
 
+        # 3. LAYOUT HORIZONTAL PRINCIPAL
         layout = QHBoxLayout(card)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(15, 10, 15, 10)
+        layout.setSpacing(15)
 
-        # Icône (Image ou Emoji)
+        # 4. ICONE (Image ou Emoji)
         icon_label = QLabel()
         if icon_data.endswith(".png"):
             path = os.path.join(ASSETS_DIR, icon_data)
@@ -88,26 +142,40 @@ class DashboardViewQt(QWidget):
             icon_label.setPixmap(pix)
         else:
             icon_label.setText(icon_data)
-            icon_label.setFont(QFont("Arial", 25))
+            icon_label.setFont(QFont("Arial", 28))
+            icon_label.setStyleSheet(f"color: {title_color};")
         
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_label)
 
-        # Textes
+        # 5. ZONE DE TEXTE (Verticale)
         text_layout = QVBoxLayout()
+        text_layout.setSpacing(2)
+
+        # Titre
         t_lbl = QLabel(title)
-        t_lbl.setStyleSheet("color: white; font-weight: bold; font-size: 16px; border: none; background: transparent;")
+        t_lbl.setStyleSheet(f"color: {title_color}; font-weight: bold; font-size: 15px; border: none; background: transparent;")
+        
+        # Description (avec retour à la ligne automatique et alignement en haut)
         d_lbl = QLabel(desc)
         d_lbl.setWordWrap(True)
-        d_lbl.setStyleSheet("color: gray; font-size: 12px; border: none; background: transparent;")
+        d_lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        d_lbl.setStyleSheet(f"color: {desc_color}; font-size: 11px; border: none; background: transparent;")
         
         text_layout.addWidget(t_lbl)
         text_layout.addWidget(d_lbl)
+        
+        # Bonus : Le Stretch pousse le texte vers le haut pour un alignement parfait du titre
+        text_layout.addStretch()
+        
         layout.addLayout(text_layout)
-        layout.setStretch(1, 1)
+        layout.setStretch(1, 1) # Donne toute la place au texte
 
-        # Evenement clic (Qt n'a pas de "command" sur les Frame, on utilise mousePressEvent)
-        if state == "normal" and callback:
+        # 6. GESTION DU CLIC
+        if not is_disabled:
             card.mousePressEvent = lambda e: callback()
+        else:
+            card.mousePressEvent = lambda e: None
 
         return card
 
@@ -117,20 +185,56 @@ class DashboardViewQt(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Titre A.L.I.G.
-        title = QLabel("A.L.I.G.")
+        title = QLabel("ALIG")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size: 45px; font-weight: bold; color: #1F6AA5; margin-bottom: 10px;")
+        glow = QGraphicsDropShadowEffect()
+        glow.setBlurRadius(100)
+        glow.setColor(QColor(31, 106, 165, 200)) # Bleu ALIG
+        glow.setOffset(0)
+        title.setGraphicsEffect(glow)
+
+        title.setStyleSheet("font-size: 60px; font-weight: 900; color: #ADE1FF; letter-spacing: 10px;")
+        
         layout.addWidget(title)
 
         # Zone Historique (Simplifiée pour l'instant)
-        layout.addWidget(QLabel(self.texts.get("history", "History")))
-        self.history_area = QScrollArea()
+        history_label = QLabel(self.texts.get("history", "History"))
+        history_label.setStyleSheet("font-weight: bold; color: white; margin-top: 10px;")
+        layout.addWidget(history_label)
+
+        self.history_area = QScrollArea() 
+        self.history_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.history_area.setWidgetResizable(True)
         self.history_area.setStyleSheet("background-color: #202020; border-radius: 10px; border: 1px solid #333;")
+        self.history_area.verticalScrollBar().setStyleSheet("""
+            QScrollBar:vertical {
+                border: none;
+                background: #202020;
+                width: 10px;
+                margin: 0px 0px 0px 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #3e3e3e;
+                min-height: 20px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #1F6AA5; /* Ton bleu ALIG au survol */
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
+        """)
+        self.history_area.verticalScrollBar().setSingleStep(15)
         
-        # On créera la grille de thumbnails ici
         thumb_widget = QWidget()
+        thumb_widget.setStyleSheet("background: transparent;") # Important pour le look
         self.thumb_grid = QGridLayout(thumb_widget)
+        self.thumb_grid.setSpacing(15) # Un peu d'espace entre les vignettes
+        
         self.history_area.setWidget(thumb_widget)
         layout.addWidget(self.history_area)
 
@@ -139,28 +243,192 @@ class DashboardViewQt(QWidget):
 
         self.main_layout.addWidget(right_container)
 
+    def load_thumbnails(self):
+        thumb_dir = THUMBNAILS_DIR
+        self.all_pixmaps = [] # On stocke des QPixmap au lieu de CTkImage
+        
+        if not os.path.exists(thumb_dir):
+            os.makedirs(thumb_dir, exist_ok=True)
+            self.render_grid()
+            return
+
+        try:
+            # Récupération et tri des fichiers (identique à ton ancienne logique)
+            files = [f for f in os.listdir(thumb_dir) if f.lower().endswith(".png")]
+            files = [f for f in files if os.path.isfile(os.path.join(thumb_dir, f))]
+            files.sort(key=lambda x: os.path.getmtime(os.path.join(thumb_dir, x)), reverse=True)
+
+            for file in files:
+                try:
+                    path = os.path.join(thumb_dir, file)
+                    if os.path.getsize(path) == 0: continue
+
+                    # En Qt, on charge directement le chemin avec QPixmap
+                    pixmap = QPixmap(path)
+                    if not pixmap.isNull():
+                        # On redimensionne tout de suite pour garder de bonnes perfs
+                        pixmap = pixmap.scaled(200, 200, Qt.AspectRatioMode.KeepAspectRatio, 
+                                             Qt.TransformationMode.SmoothTransformation)
+                        self.all_pixmaps.append(pixmap)
+                        
+                except Exception as e:
+                    print(f"Erreur chargement vignette {file}: {e}")
+                    
+        except Exception as e:
+            print(f"Erreur accès dossier thumbnails: {e}")
+
+        self.render_grid()
+
+    def render_grid(self):
+        """Affiche les vignettes en s'assurant de ne JAMAIS déclencher le scroll horizontal"""
+        # 1. Nettoyage
+        while self.thumb_grid.count():
+            item = self.thumb_grid.takeAt(0)
+            if item.widget(): item.widget().deleteLater()
+
+        if not hasattr(self, 'all_pixmaps') or not self.all_pixmaps:
+            return
+
+        # 2. CALCUL DU NOMBRE DE COLONNES
+        # On définit une largeur MINIMALE pour une vignette
+        min_item_width = 200 
+        
+        # IMPORTANT : On retire une marge de sécurité (30px) pour la scrollbar verticale
+        # et les éventuels paddings/borders de la grille.
+        available_width = self.history_area.viewport().width() - 30
+        
+        # Sécurité si le widget n'est pas encore totalement rendu
+        if available_width < 100: available_width = 400
+
+        max_columns = max(1, available_width // min_item_width)
+
+        # 3. CONFIGURATION DU STRETCH
+        # On reset les colonnes précédentes (Qt garde les stretchs en mémoire sinon)
+        for i in range(self.thumb_grid.columnCount() + 1):
+            self.thumb_grid.setColumnStretch(i, 0)
+            
+        for i in range(max_columns):
+            self.thumb_grid.setColumnStretch(i, 1)
+
+        # 4. PLACEMENT DES VIGNETTES
+        # Largeur précise d'une colonne pour le calcul des images
+        col_w = available_width // max_columns
+
+        for i, pixmap in enumerate(self.all_pixmaps):
+            row = i // max_columns
+            col = i % max_columns
+            
+            container = QFrame()
+            container.setFixedHeight(220) 
+            container.setStyleSheet("""
+                QFrame { 
+                    background-color: #2b2b2b; 
+                    border-radius: 8px; 
+                    border: 1px solid #3d3d3d;
+                }
+                QFrame:hover { border-color: #1F6AA5; background-color: #333333; }
+            """)
+            
+            v_layout = QVBoxLayout(container)
+            v_layout.setContentsMargins(5, 5, 5, 5) # Espace interne au cadre
+            
+            img_label = QLabel()
+            # On scale l'image pour qu'elle soit un peu plus petite que le cadre
+            # afin de ne pas "forcer" sur les bords du layout
+            scaled_pix = pixmap.scaled(
+                col_w - 20, 190, 
+                Qt.AspectRatioMode.KeepAspectRatio, 
+                Qt.TransformationMode.SmoothTransformation
+            )
+            
+            img_label.setPixmap(scaled_pix)
+            img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            img_label.setStyleSheet("border: none; background: transparent;")
+            
+            v_layout.addWidget(img_label)
+            self.thumb_grid.addWidget(container, row, col)
+
+        # 5. ALIGNEMENT ET SPACING
+        self.thumb_grid.setSpacing(10) # Espace entre les vignettes
+        self.thumb_grid.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+
     def setup_stats(self, parent_layout):
+        # 1. Création du conteneur principal
         stats_frame = QFrame()
-        stats_frame.setFixedHeight(100)
-        stats_frame.setStyleSheet("background-color: #2b2b2b; border-radius: 15px; border: 1px solid #3d3d3d;")
+        stats_frame.setFixedHeight(120) # Un peu plus haut pour laisser respirer les textes
+        stats_frame.setStyleSheet("""
+            QFrame {
+                background-color: #1e1e1e; 
+                border-radius: 15px; 
+                border: 1px solid #3d3d3d;
+            }
+        """)
         
-        layout = QHBoxLayout(stats_frame)
-        
-        # Récupération des stats
+        # Layout horizontal pour répartir les 3 colonnes de stats
+        main_layout = QHBoxLayout(stats_frame)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+
+        # 2. Récupération et calcul des données (Logique conservée)
         cfg = self.controller.config_manager
         total_l = cfg.get_item("stats", "total_lines", 0)
+        total_g = cfg.get_item("stats", "total_gcodes", 0)
+        total_s = float(cfg.get_item("stats", "total_time_seconds", 0))
+
+        # Conversion du temps
+        hours = int(total_s // 3600)
+        minutes = int((total_s % 3600) // 60)
         
-        # Item simple pour l'exemple
-        for label, value in [(self.texts["lines_generated"], f"{int(total_l):,}")]:
+        if hours > 0:
+            time_str = f"{hours}h {minutes:02d}m"
+        elif minutes > 0:
+            time_str = f"{minutes}m"
+        elif total_s > 0:
+            time_str = "< 1m"
+        else:
+            time_str = "0m"
+
+        # 3. Définition des items à afficher
+        stat_items = [
+            (f"{int(total_l):,}", self.texts.get("lines_generated", "Lines")),
+            (str(total_g), self.texts.get("gcode_saved", "G-Codes")),
+            (time_str, self.texts.get("total_engraving_time", "Time"))
+        ]
+
+        # 4. Création dynamique des colonnes
+        for value, label in stat_items:
             v_layout = QVBoxLayout()
+            v_layout.setSpacing(2) # Espace réduit entre valeur et texte
+            
+            # Valeur (Bleu et gras)
             val_lbl = QLabel(value)
-            val_lbl.setStyleSheet("color: #1F6AA5; font-size: 18px; font-weight: bold; border: none;")
-            txt_lbl = QLabel(label)
-            txt_lbl.setStyleSheet("color: gray; font-size: 11px; border: none;")
             val_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            val_lbl.setStyleSheet("color: #1F6AA5; font-size: 18px; font-weight: bold; border: none; background: transparent;")
+            
+            # Label (Petit et gris)
+            txt_lbl = QLabel(label)
             txt_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            txt_lbl.setWordWrap(True) # Au cas où le texte est long
+            txt_lbl.setStyleSheet("color: gray; font-size: 10px; border: none; background: transparent;")
+            
             v_layout.addWidget(val_lbl)
             v_layout.addWidget(txt_lbl)
-            layout.addLayout(v_layout)
+            
+            # On ajoute chaque colonne au layout horizontal
+            main_layout.addLayout(v_layout)
+            
+            # Ajouter un séparateur vertical entre les colonnes (sauf après la dernière)
+            if label != stat_items[-1][1]:
+                line = QFrame()
+                line.setFrameShape(QFrame.Shape.VLine)
+                line.setStyleSheet("color: #3d3d3d; background-color: #3d3d3d; width: 1px; margin: 15px 0;")
+                main_layout.addWidget(line)
 
+        # Ajout du bloc complet au layout de la colonne de droite
         parent_layout.addWidget(stats_frame)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # On ne rafraîchit la grille que si la vue est prête
+        if hasattr(self, 'history_area'):
+            self.render_grid()

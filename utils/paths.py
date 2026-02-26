@@ -61,6 +61,7 @@ def load_image(name: str):
 # ==========================================================
 
 LOGO_ALIG = os.path.join(ASSETS_DIR, "logo_alig.ico")
+ARROW_DOWN = os.path.join(ASSETS_DIR, "arrow_down.svg")
 
 HOME_DARK = None
 HOME_LIGHT = None

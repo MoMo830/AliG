@@ -11,11 +11,13 @@ from PyQt6.QtGui import QIcon, QPixmap
 from core.translations import TRANSLATIONS
 from utils import paths
 from gui.views.dashboard_view_qt import DashboardViewQt
+from gui.views.settings_view_qt import SettingsViewQt
 
 class MainWindowQt(QMainWindow):
-    def __init__(self, config_manager):
+    def __init__(self, controller):
         super().__init__()
-        self.config_manager = config_manager
+        self.controller = controller 
+        self.config_manager = controller
         self.version = "0.99b (Qt)"
         
         # 1. Chargement des ressources & Langue
@@ -25,7 +27,7 @@ class MainWindowQt(QMainWindow):
         paths.load_all_images()
 
         # 2. Configuration de la fenêtre
-        self.setWindowTitle(f"A.L.I.G. - Advanced Laser Imaging Generator v{self.version}")
+        self.setWindowTitle(f"ALIG - Advanced Laser Imaging Generator v{self.version}")
         self._setup_window_init()
         self._setup_icon()
 
@@ -95,12 +97,8 @@ class MainWindowQt(QMainWindow):
         # --- RESSORT (Pousse tout le reste à droite) ---
         layout.addStretch()
 
-        # 2. DROITE : Crédits, Support, GitHub et Settings
+        # 2. DROITE : Support, GitHub et Settings
 
-        # Texte de l'auteur (By MoMo)
-        self.dev_label = QLabel(self.texts.get("credits", "By MoMo"))
-        self.dev_label.setStyleSheet("color: #666666; font-size: 11px; margin-right: 10px;")
-        layout.addWidget(self.dev_label)
 
         # Bouton Support (Jaune)
         self.btn_support = QPushButton(self.texts.get("support", "Support"))
@@ -146,7 +144,7 @@ class MainWindowQt(QMainWindow):
         self.btn_settings.setFixedSize(40, 40)
         self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_settings.setStyleSheet("QPushButton { background: transparent; color: white; border: none; font-size: 18px; } QPushButton:hover { background-color: #3d3d3d; border-radius: 5px; }")
-        self.btn_settings.clicked.connect(self.show_settings)
+        self.btn_settings.clicked.connect(self.show_settings_mode)
         layout.addWidget(self.btn_settings)
 
         # Enfin, on ajoute la TopBar au layout principal de la fenêtre
@@ -161,14 +159,31 @@ class MainWindowQt(QMainWindow):
         self.content_area.addWidget(self.current_view)
         self.content_area.setCurrentWidget(self.current_view)
 
-    def show_settings(self):
-        self.view_title.setText("SETTINGS")
-        temp_page = QLabel("Settings (Soon)")
-        temp_page.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.content_area.addWidget(temp_page)
-        self.content_area.setCurrentWidget(temp_page)
+    def show_settings_mode(self):
+        """Affiche et rafraîchit la vue des réglages"""
+        
+        # 1. On s'assure que les traductions sont à jour dans le controller
+        # (Au cas où l'utilisateur vient de changer de langue)
+        lang_code = self.controller.get_item("machine_settings", "language", "English")
+        from core.translations import TRANSLATIONS
+        self.controller.translations = TRANSLATIONS.get(lang_code, TRANSLATIONS["English"])
 
-    # --- Gestion du Routage (Vues) ---
+        # 2. Gestion de l'instance de la vue
+        if not hasattr(self, 'settings_view'):
+
+            self.settings_view = SettingsViewQt(self.controller)
+            self.content_area.addWidget(self.settings_view)
+        else:
+            # OPTIONNEL : Si la vue existe déjà, on peut forcer un rafraîchissement 
+            # des textes internes si nécessaire
+            self.settings_view.texts = self.controller.translations["settings"]
+
+        # 3. Mise à jour du titre de la zone de contenu
+        self.view_title.setText(self.controller.translations["settings"]["title"].upper())
+        
+        # 4. Affichage
+        self.content_area.setCurrentWidget(self.settings_view)
+
 
     def show_raster_mode(self, image_to_load=None):
         """Placeholder pour le futur mode Raster"""
@@ -191,9 +206,7 @@ class MainWindowQt(QMainWindow):
         self.content_area.addWidget(temp_page)
         self.content_area.setCurrentWidget(temp_page)
 
-    def show_settings_mode(self):
-        """Appelle simplement ta fonction show_settings déjà existante"""
-        self.show_settings()
+ 
 
     def closeEvent(self, event):
         """Gère la fermeture (remplace on_closing)"""
