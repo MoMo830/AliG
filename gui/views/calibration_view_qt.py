@@ -210,7 +210,7 @@ class CalibrationView(QWidget):
 
 
         # 0. Récupération du thème actuel
-        theme = self.controller.config_manager.get_item("machine_settings", "theme", "Dark")
+        theme = self.controller.get_item("machine_settings", "theme", "Dark")
         is_light = (theme == "Light")
         
         # Définition des couleurs selon le thème

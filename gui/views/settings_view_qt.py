@@ -166,6 +166,7 @@ class SettingsViewQt(QWidget):
     def create_section(self, layout, title_key):
         """Crée un bloc section et stocke le label pour la traduction future"""
         section_frame = QFrame()
+        section_frame.setObjectName("sectionFrame")
         section_frame.setStyleSheet("""
             QFrame {
                 background-color: #2b2b2b;

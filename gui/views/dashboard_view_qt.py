@@ -93,6 +93,9 @@ class DashboardViewQt(QWidget):
         
         card = QFrame()
         card.setObjectName("modeCard")
+
+        card.icon_data = icon_data
+        card.state = state
         
         # 1. FIXER LA HAUTEUR (Uniformité visuelle)
         card.setFixedHeight(80)
@@ -174,6 +177,10 @@ class DashboardViewQt(QWidget):
         
         layout.addLayout(text_layout)
         layout.setStretch(1, 1)
+
+        card.icon_label = icon_label
+        card.title_label = t_lbl
+        card.desc_label = d_lbl
 
         # 6. GESTION DU CLIC
         if not is_disabled:
@@ -436,3 +443,50 @@ class DashboardViewQt(QWidget):
         # On ne rafraîchit la grille que si la vue est prête
         if hasattr(self, 'history_area'):
             self.render_grid()
+
+    def apply_theme(self, colors):
+        """Met à jour toutes les cartes du dashboard lors d'un changement de thème"""
+        from gui.utils_qt import get_svg_pixmap
+        from PyQt6.QtCore import QSize
+
+        # 1. Mettre à jour le fond de la vue elle-même
+        # On utilise une version légèrement plus sombre ou claire pour le contraste
+        self.setStyleSheet(f"background-color: transparent;")
+
+        # 2. Parcourir toutes les cartes de mode
+        # Supposons que vos cartes sont dans self.modes_layout
+        for i in range(self.modes_layout.count()):
+            item = self.modes_layout.itemAt(i)
+            if not item: continue
+            card = item.widget()
+            if not card or card.objectName() != "modeCard": continue
+
+            is_disabled = (card.state == "disabled")
+            
+            # Définition des couleurs selon le thème reçu
+            if is_disabled:
+                bg = "#1e1e1e" if colors["suffix"] == "_DARK" else "#E0E0E0"
+                txt = "#777777"
+                icon_c = "#555555"
+            else:
+                bg = colors["bg_card"]
+                txt = colors["text"]
+                icon_c = colors["text"]
+
+            # Mise à jour du style de la carte
+            card.setStyleSheet(f"""
+                QFrame#modeCard {{
+                    background-color: {bg};
+                    border: 2px solid {colors['border']};
+                    border-radius: 15px;
+                }}
+            """)
+
+            # Mise à jour des labels
+            card.title_label.setStyleSheet(f"color: {txt}; font-weight: bold; font-size: 15px; border: none; background: transparent;")
+            card.desc_label.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 11px; border: none; background: transparent;")
+
+            # Mise à jour de l'icône SVG si nécessaire
+            if isinstance(card.icon_data, str) and card.icon_data.endswith(".svg"):
+                pix = get_svg_pixmap(card.icon_data, size=QSize(35, 35), color_hex=icon_c)
+                card.icon_label.setPixmap(pix)

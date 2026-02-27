@@ -55,6 +55,7 @@ class MainWindowQt(QMainWindow):
 
         # 6. MISE À JOUR FINALE (Optionnel si déjà fait en étape 1)
         self.update_ui_language()
+        self.update_ui_theme()
 
         # 7. Affichage
         self.show_dashboard()
@@ -113,7 +114,7 @@ class MainWindowQt(QMainWindow):
         # --- RESSORT (Pousse tout le reste à droite) ---
         layout.addStretch()
 
-        # 2. DROITE : Support, GitHub et Settings
+        # 2. DROITE : GitHub et Settings
 
         # Bouton Support (Jaune)
         self.btn_support = QPushButton(self.texts.get("support", "Support"))
@@ -200,11 +201,16 @@ class MainWindowQt(QMainWindow):
 
     def update_ui_theme(self):
         """Met à jour les couleurs et les icônes de l'interface globale"""
-     
-
         colors = self.get_theme_colors()
         
-        # 1. Mise à jour visuelle de la TopBar (Fond et bordure)
+        # 1. Mise à jour du fond de la fenêtre entière (Le conteneur principal)
+        # C'est ce qui règle le problème du fond qui reste sombre
+        self.central_widget.setStyleSheet(f"background-color: {colors['bg_card']};")
+        
+        # 2. Mise à jour de la zone de contenu pour qu'elle soit transparente
+        self.content_area.setStyleSheet("background: transparent; border: none;")
+
+        # 3. Mise à jour visuelle de la TopBar
         self.top_bar.setStyleSheet(f"""
             QFrame {{ 
                 background-color: {colors['bg_card']}; 
@@ -212,16 +218,18 @@ class MainWindowQt(QMainWindow):
             }}
         """)
         
-        # 2. Re-génération des icônes SVG de la TopBar (Home et Settings)
-        # On utilise la couleur 'text' du thème (Blanc pour Dark, Noir pour Light)
+        # 4. Mise à jour du titre et des séparateurs
+        self.view_title.setStyleSheet(f"color: {colors['text']}; font-weight: bold; font-size: 14px; margin-left: 5px; border: none;")
+        self.separator.setStyleSheet(f"color: {colors['border']}; font-weight: bold;")
+        
+        # 5. Re-génération des icônes SVG de la TopBar      
         home_pix = get_svg_pixmap(SVG_ICONS["HOME"], QSize(22, 22), colors['text'])
         self.btn_home.setIcon(QIcon(home_pix))
         
-        # Si tu as une icône GEAR/SETTINGS dans la topbar
-        settings_pix = get_svg_pixmap(SVG_ICONS.get("SETTINGS", SVG_ICONS["HOME"]), QSize(20, 20), colors['text'])
-        self.btn_settings.setIcon(QIcon(settings_pix))
+        #settings_pix = get_svg_pixmap(SVG_ICONS.get("SETTINGS", SVG_ICONS["HOME"]), QSize(20, 20), colors['text'])
+        #self.btn_settings.setIcon(QIcon(settings_pix))
         
-        # 3. Propager le changement à la vue ACTUELLEMENT visible
+        # 6. Propager le changement à la vue ACTUELLEMENT visible
         current_view = self.content_area.currentWidget()
         if current_view and hasattr(current_view, 'apply_theme'):
             current_view.apply_theme(colors)
