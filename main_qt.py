@@ -16,14 +16,10 @@ import ctypes
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 
-# Importez votre Controller (si vous en avez un)
-# Sinon, on adapte l'appel de MainWindowQt
 from utils.config_manager import ConfigManager
 from utils.gui_utils import setup_app_id
 from gui.main_window_qt import MainWindowQt
 
-# Imaginons que vous ayez une classe Controller qui centralise tout
-# Si vous n'en avez pas, MainWindowQt fera office de réceptacle
 def main():
     try:
         setup_app_id()

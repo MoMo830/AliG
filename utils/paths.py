@@ -47,8 +47,9 @@ SVG_ICONS = {
     "LATENCY": os.path.join(ASSETS_DIR, "latency_calibration.svg"),
     "LINESTEP": os.path.join(ASSETS_DIR, "linestep_calibration.svg"),
     "POWER": os.path.join(ASSETS_DIR, "power_calibration.svg"),
-    "ARROW_DOWN": os.path.join(ASSETS_DIR, "arrow_down.svg"), # Ajouté ici
+    "ARROW_DOWN": os.path.join(ASSETS_DIR, "arrow_down.svg"),
     "CIRCLE": os.path.join(ASSETS_DIR, "circle.svg"),
+    "GEAR": os.path.join(ASSETS_DIR, "gear.svg"),
 }
 
 # --- PNG (Images d'explications / Previews) ---

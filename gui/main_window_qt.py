@@ -158,16 +158,13 @@ class MainWindowQt(QMainWindow):
 
         # 3. Bouton Settings (Remplacé par une icône SVG Gear)
         self.btn_settings = QPushButton()
+        settings_pixmap = get_svg_pixmap(SVG_ICONS.get("SETTINGS", SVG_ICONS["GEAR"]), size=QSize(20, 20), color_hex="#FFFFFF")
         
-        # --- NOUVEAU SYSTÈME SVG POUR SETTINGS ---
-        # Si tu n'as pas encore de GEAR.SVG, tu peux utiliser une autre clé existante de SVG_ICONS
-        settings_pixmap = get_svg_pixmap(SVG_ICONS.get("SETTINGS", SVG_ICONS["HOME"]), size=QSize(20, 20), color_hex="#FFFFFF")
-        
-        # if not settings_pixmap.isNull(): # a modifier pour utilisation futur svg
-        #     self.btn_settings.setIcon(QIcon(settings_pixmap))
-        #     self.btn_settings.setIconSize(QSize(20, 20))
-        # else:
-        self.btn_settings.setText("⚙️") # Fallback emoji
+        if not settings_pixmap.isNull(): # a modifier pour utilisation futur svg
+            self.btn_settings.setIcon(QIcon(settings_pixmap))
+            self.btn_settings.setIconSize(QSize(20, 20))
+        else:
+            self.btn_settings.setText("⚙️") # Fallback emoji
             
         self.btn_settings.setFixedSize(40, 40)
         self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)

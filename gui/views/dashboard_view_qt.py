@@ -66,7 +66,7 @@ class DashboardViewQt(QWidget):
             (self.texts["parser_title"], self.texts["parser_desc"], None, "📐", "disabled"),
             (self.texts["calibration_title"], self.texts["calibration_desc"], self.controller.show_calibration_mode, SVG_ICONS["LATENCY"], "normal"),
             # Utilisation de l'icône Home ou Settings (ici Home pour l'exemple)
-            (self.texts["settings_title"], self.texts["settings_desc"], self.controller.show_settings_mode, "⚙️", "normal"),
+            (self.texts["settings_title"], self.texts["settings_desc"], self.controller.show_settings_mode,SVG_ICONS["GEAR"] , "normal"), #"⚙️"
         ]
 
         for title, desc, callback, icon_source, state in modes:

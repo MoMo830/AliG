@@ -1,14 +1,14 @@
 {
     "machine_settings": {
         "theme": "Dark",
-        "language": "Fran\u00e7ais",
+        "language": "English",
         "enable_thumbnails": true,
         "cmd_mode": "M67 (Analog)",
-        "firing_mode": "M3/M5",
+        "firing_mode": "M4/M5",
         "m67_e_num": "0",
         "ctrl_max": "1000",
         "gcode_extension": ".nc",
-        "laser_latency": 0.0,
+        "laser_latency": -1.92,
         "premove": 10.0,
         "custom_header": "",
         "custom_footer": ""
