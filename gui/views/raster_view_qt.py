@@ -573,44 +573,53 @@ class ImagePreviewWidget(QWidget):
             px_h = int(br.y() - tl.y())
             rect_px = QRect(px_x, px_y, px_w, px_h)
 
-            # 1. Dessin du fond et de la bordure (inchangé)
-            painter.fillRect(rect_px, QColor(52, 152, 219, 40))
+            # 1. Détermination du style de hachures selon la direction
+            # Si le label contient '90', on simule le balayage horizontal
+            if "90" in label:
+                hatch_style = Qt.BrushStyle.HorPattern  # Lignes -
+            else:
+                hatch_style = Qt.BrushStyle.VerPattern  # Lignes |
+
+            # 2. Dessin du fond hachuré
+            painter.setBrush(QBrush(QColor(52, 152, 219, 60), hatch_style))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRect(rect_px)
+
+            # 3. Dessin de la bordure pointillée
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             pen_dashed = QPen(QColor("#3498db"), 1, Qt.PenStyle.DashLine)
             painter.setPen(pen_dashed)
             painter.drawRect(rect_px)
 
-            # 2. Dessin du Label avec Rotation
-            painter.save() # Indispensable pour ne pas faire pivoter toute l'interface
+            # 4. Dessin du Label avec Rotation
+            painter.save() 
             
             painter.setPen(QColor("#3498db"))
-            font = QFont("Arial", 7, QFont.Weight.Bold)
+            # Augmenté à 8 pour la 4K, Arial Bold
+            font = QFont("Arial", 8, QFont.Weight.Bold)
             painter.setFont(font)
             metrics = QFontMetrics(font)
             
-            # On se place au centre du rectangle
+            # Positionnement au centre du rectangle d'overscan
             cx = px_x + px_w / 2
             cy = px_y + px_h / 2
             painter.translate(cx, cy)
 
-            # Logique de rotation selon le label
-            # (On suppose que tu as utilisé "OVERSCAN_90" et "OVERSCAN_-90" dans l'étape précédente)
-            if label == "OVERSCAN_90":
+            # Application de la rotation
+            if "OVERSCAN_90" in label:
                 painter.rotate(90)
-            elif label == "OVERSCAN_-90":
+            elif "OVERSCAN_-90" in label:
                 painter.rotate(-90)
-            # Si c'est juste "OVERSCAN" (mode vertical), on ne pivote pas ou peu
+            # Pour le mode vertical standard, on reste à 0° ou on peut mettre 90° aussi
             
-            # Dessin du texte "OVERSCAN" (ou la valeur de label) centré sur (0,0)
-            # On nettoie le nom pour l'affichage si besoin
             display_text = "OVERSCAN" 
-            
             tw = metrics.horizontalAdvance(display_text)
             th = metrics.ascent()
             
-            # On centre le texte : -largeur/2 et hauteur/2
+            # Centrage parfait du texte sur le point pivot
             painter.drawText(-tw // 2, th // 2 - 2, display_text)
             
-            painter.restore() # On revient à l'état normal
+            painter.restore()
 
         # ── Rectangle overscan global pointillé ──
         all_x_min = min((r[0] for r in self._overscan_rects), default=self._off_x)
