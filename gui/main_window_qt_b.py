@@ -344,31 +344,15 @@ class MainWindowQt(QMainWindow):
 
 
     def show_raster_mode(self, image_to_load=None):
-        """Affiche la vue Raster Qt migrée."""
+        """Placeholder pour le futur mode Raster"""
         self.view_title.setText("RASTER MODE")
-
-        if not hasattr(self, "raster_view"):
-            from gui.views.raster_view_qt import RasterViewQt
-            self.raster_view = RasterViewQt(parent=self, controller=self)
-            self.content_area.addWidget(self.raster_view)
-
-        self.current_view = self.raster_view
-        self.content_area.setCurrentWidget(self.raster_view)
-
-    def show_simulation(self, engine, payload, return_view="dashboard"):
-        """Lance la vue de simulation Qt migrée."""
-        self.view_title.setText("SIMULATION")
-        from gui.views.simulation_view_qt import SimulationViewQt
-        sim_view = SimulationViewQt(
-            parent=self,
-            controller=self,
-            engine=engine,
-            payload=payload,
-            return_view=return_view
-        )
-        self.content_area.addWidget(sim_view)
-        self.content_area.setCurrentWidget(sim_view)
-        self.current_view = sim_view
+        temp_page = QLabel("Module Raster - En cours de migration...")
+        temp_page.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        temp_page.setStyleSheet("color: white; font-size: 18px;")
+        
+        # On ajoute et on affiche
+        self.content_area.addWidget(temp_page)
+        self.content_area.setCurrentWidget(temp_page)
 
     def show_calibration_mode(self):
         """Affiche la vue de Calibration réelle"""

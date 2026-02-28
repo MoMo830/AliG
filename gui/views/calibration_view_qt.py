@@ -17,59 +17,59 @@ class CalibrationView(QWidget):
     def __init__(self, parent=None, controller=None):
         super().__init__(parent)
         self.controller = controller
+        self.translation_map = {}
+        self.test_cards = []  # Liste pour stocker les boutons de la sidebar
+        self.current_test_id = None  # Pour savoir quel test est actif
         
-        if hasattr(self.controller, 'translations'):
-            current_repo = self.controller.translations
-        else:
-            # Fallback de sécurité
-            lang = self.controller.get_item("machine_settings", "language", "English")
-            current_repo = TRANSLATIONS.get(lang, TRANSLATIONS["English"])
-
-        # 2. Extraction des sections nécessaires
-        self.texts = current_repo.get("calibration", {})
-        self.common_texts = current_repo.get("common", {})
+        # 1. Chargement initial des textes
+        self.load_texts()
         
-        # --- Layout Principal (Horizontal : Sidebar | Détails) ---
+        # 2. Layout principal
         self.main_layout = QHBoxLayout(self)
         self.main_layout.setContentsMargins(30, 20, 30, 20)
         self.main_layout.setSpacing(20)
 
-        # --- 1. SIDEBAR (Gauche) ---
+        # --- Sidebar & Colonne de droite ---
         self.setup_sidebar()
         
-        # --- 2. ZONE DE DÉTAILS (Droite) ---
         self.right_column = QFrame()
         self.right_column.setObjectName("RightColumn")
-        self.right_column.setStyleSheet("""
-            QFrame#RightColumn {
-                background-color: #202020;
-                border-radius: 15px;
-            }
-        """)
+        self.right_column.setStyleSheet("QFrame#RightColumn { background-color: #202020; border-radius: 15px; }")
         self.right_layout = QVBoxLayout(self.right_column)
         self.main_layout.addWidget(self.right_column, stretch=1)
 
-        # Composants de la zone de droite
         self.setup_detail_header()
         
-        # Zone dynamique (équivalent de dynamic_params_frame)
         self.dynamic_params_widget = QWidget()
         self.dynamic_layout = QVBoxLayout(self.dynamic_params_widget)
         self.right_layout.addWidget(self.dynamic_params_widget)
         
-        # Bouton d'action fixe en bas
-        self.action_btn = QPushButton(self.texts["btn_prepare"])
+        # Bouton d'action (on lui donne un objectName pour le retrouver)
+        self.action_btn = QPushButton(self.texts.get("btn_prepare", "Prepare"))
         self.action_btn.setFixedHeight(52)
         self.action_btn.setStyleSheet("background-color: #e67e22; font-weight: bold; border-radius: 10px;")
         self.right_layout.addWidget(self.action_btn)
+
+    def load_texts(self):
+        """Met à jour les dictionnaires de textes depuis le controller"""
+        if hasattr(self.controller, 'translations'):
+            current_repo = self.controller.translations
+        else:
+            lang = self.controller.get_item("machine_settings", "language", "English")
+            from core.translations import TRANSLATIONS
+            current_repo = TRANSLATIONS.get(lang, TRANSLATIONS["English"])
+            
+        self.texts = current_repo.get("calibration", {})
+        self.common_texts = current_repo.get("common", {})
 
     def setup_sidebar(self):
         """Crée la liste des tests à gauche."""
         sidebar_container = QVBoxLayout()
         
-        title = QLabel(self.texts["sidebar_title"])
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #e67e22;")
-        sidebar_container.addWidget(title)
+        # MODIFICATION ICI : on utilise self.sidebar_title_label au lieu de title
+        self.sidebar_title_label = QLabel(self.texts.get("sidebar_title", "Tests"))
+        self.sidebar_title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #e67e22;")
+        sidebar_container.addWidget(self.sidebar_title_label)
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -92,93 +92,87 @@ class CalibrationView(QWidget):
 
     def add_test_cards(self):
         """Définit et ajoute les cartes de test à la sidebar"""
-        # On définit les données des tests (en utilisant nos dictionnaires de textes)
+        # 1. On vide la liste pour éviter les doublons en cas de rappel de la fonction
+        self.test_cards = [] 
+        
+        # 2. Configuration des données de base
         self.tests_data = [
-            {
-                "id": "latency",
-                "title": self.texts.get("latency_title"),
-                "desc": self.texts.get("latency_short"),
-                "icon_path": SVG_ICONS["LATENCY"], 
-                "fixed_color": False,
-            },
-            {
-                "id": "linestep",
-                "title": self.texts.get("linestep_title"),
-                "desc": self.texts.get("linestep_short"),
-                "icon_path": SVG_ICONS["LINESTEP"],
-                "fixed_color": False,
-            },
-            {
-                "id": "power",
-                "title": self.texts.get("power_title"),
-                "desc": self.texts.get("power_short"),
-                "icon_path": SVG_ICONS["POWER"],
-                "fixed_color": True,
-            }
+            {"id": "latency", "icon": SVG_ICONS["LATENCY"], "fixed": False},
+            {"id": "linestep", "icon": SVG_ICONS["LINESTEP"], "fixed": False},
+            {"id": "power", "icon": SVG_ICONS["POWER"], "fixed": True}
         ]
 
-        # On crée les widgets pour chaque test
-        for test in self.tests_data:
-            card = self.create_test_card(test)
+        for data in self.tests_data:
+            # 3. On prépare le dictionnaire complet pour create_test_card
+            test_info = {
+                "id": data["id"],
+                "title": self.texts.get(f"{data['id']}_title", "Sans titre"),
+                "desc": self.texts.get(f"{data['id']}_short", ""),
+                "icon_path": data["icon"],
+                "fixed_color": data["fixed"]
+            }
+            
+            # 4. Création et stockage
+            card = self.create_test_card(test_info)
+            self.test_cards.append(card) 
             self.scroll_layout.addWidget(card)
 
 
 
     def create_test_card(self, test_info):
-        """Crée un bouton stylisé pour la sidebar avec rendu SVG intelligent"""
+        """Crée un bouton stylisé pour la sidebar avec identification pour traduction et reset"""
         card = QPushButton()
         card.setCheckable(True)
         card.setCursor(Qt.CursorShape.PointingHandCursor)
         card.setFixedHeight(80)
         
-        # Ajout au groupe pour l'exclusivité (Highlight unique)
+        # --- STOCKAGE DE L'ID ---
+        # On stocke l'ID du test directement dans l'objet pour le retrouver facilement
+        test_id = test_info.get("id")
+        card.setProperty("test_id", test_id)
+        
+        # Ajout au groupe pour l'exclusivité
         if hasattr(self, 'button_group'):
             self.button_group.addButton(card)
         
         layout = QHBoxLayout(card)
         
-        # --- LOGIQUE D'ICÔNE SVG DYNAMIQUE ---
-        icon_label = QLabel()
-        icon_path = test_info.get("icon_path")
+        # --- LOGIQUE D'ICÔNE SVG ---
+        # On attache icon_label à la card pour pouvoir changer sa couleur dynamiquement
+        card.icon_label = QLabel() 
+        card.icon_label.setObjectName("card_icon")
         
-        # On vérifie si on doit garder les couleurs d'origine ou colorer en blanc
+        icon_path = test_info.get("icon_path")
         keep_original = test_info.get("fixed_color", False)
         target_color = None if keep_original else "#EEEEEE"
 
-        if icon_path and isinstance(icon_path, str) and os.path.exists(icon_path):
-            # Utilisation de la fonction de rendu SVG (on suppose qu'elle est dans self)
-            pixmap = get_svg_pixmap(
-                icon_path, 
-                size=QSize(35, 35), 
-                color_hex=target_color
-            )
-            
+        if icon_path and os.path.exists(icon_path):
+            pixmap = get_svg_pixmap(icon_path, size=QSize(35, 35), color_hex=target_color)
             if not pixmap.isNull():
-                icon_label.setPixmap(pixmap)
-            else:
-                print(f"DEBUG CARD: Erreur de rendu SVG pour {icon_path}")
-        else:
-            print(f"DEBUG CARD: Chemin SVG invalide -> {icon_path}")
-            
-        icon_label.setFixedWidth(50)
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                card.icon_label.setPixmap(pixmap)
         
-        # --- TEXTES ---
+        card.icon_label.setFixedWidth(50)
+        card.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # --- TEXTES (Avec ObjectName pour retranslate_ui) ---
         text_container = QVBoxLayout()
+        
         title = QLabel(test_info.get("title", "Sans titre"))
+        title.setObjectName("card_title") # Identifiant pour findChild()
         title.setStyleSheet("font-weight: bold; font-size: 13px; color: white; border: none; background: transparent;")
         
         desc = QLabel(test_info.get("desc", ""))
+        desc.setObjectName("card_desc")  # Identifiant pour findChild()
         desc.setStyleSheet("font-size: 11px; color: #aaaaaa; border: none; background: transparent;")
         desc.setWordWrap(True)
         
         text_container.addWidget(title)
         text_container.addWidget(desc)
         
-        layout.addWidget(icon_label)
+        layout.addWidget(card.icon_label)
         layout.addLayout(text_container)
         
-        # Style du bouton (Hover et Sélection orange)
+        # Style du bouton
         card.setStyleSheet("""
             QPushButton {
                 background-color: #2b2b2b;
@@ -197,7 +191,7 @@ class CalibrationView(QWidget):
             }
         """)
 
-        # Connecter le clic
+        # On utilise une fonction intermédiaire pour capturer l'ID actuel
         card.clicked.connect(lambda: self.on_test_selected(test_info))
         
         return card
@@ -207,50 +201,49 @@ class CalibrationView(QWidget):
         Gère la mise à jour de la vue détaillée lorsqu'un test est sélectionné.
         Adapte les couleurs et les images selon le thème (Dark/Light).
         """
+        # --- 0. MISE À JOUR DE L'ÉTAT ---
+        # Crucial pour que retranslate_ui sache quel test traduire
+        self.current_test_id = test_info.get("id")
 
-
-        # 0. Récupération du thème actuel
+        # Récupération du thème actuel pour adapter les icônes
         theme = self.controller.get_item("machine_settings", "theme", "Dark")
         is_light = (theme == "Light")
         
-        # Définition des couleurs selon le thème
         color_main = "#000000" if is_light else "#EEEEEE"
-        color_active = "#e67e22"  # Orange reste identique pour le highlight
+        color_active = "#e67e22"  # Orange pour le highlight
         theme_suffix = "_LIGHT" if is_light else "_DARK"
 
-        # 1. Mise à jour des textes (Titre et Description longue)
+        # --- 1. TEXTES (Détails à droite) ---
+        # Titre et description longue chargée depuis le dictionnaire de langue
         self.detail_title.setText(test_info.get("title", ""))
-        
-        long_desc_key = f"{test_info['id']}_long"
-        self.detail_desc.setText(self.texts.get(long_desc_key, ""))
+        self.detail_desc.setText(self.texts.get(f"{self.current_test_id}_long", ""))
 
-        # 2. MISE À JOUR VISUELLE DE LA SIDEBAR
-        if hasattr(self, 'scroll_layout'):
-            for i in range(self.scroll_layout.count()):
-                item = self.scroll_layout.itemAt(i)
-                if item and item.widget():
-                    card = item.widget()
-                    # Vérification si la carte est celle sélectionnée
-                    is_selected = (getattr(card, 'test_id', None) == test_info['id'])
-                    
-                    # On ne recolore que si l'icône n'est pas "fixed_color"
-                    if not test_info.get("fixed_color", False):
-                        current_icon_color = color_active if is_selected else color_main
-                        
-                        if hasattr(card, 'icon_label'):
-                            pix = get_svg_pixmap(
-                                test_info.get("icon_path"), 
-                                size=QSize(35, 35), 
-                                color_hex=current_icon_color
-                            )
-                            card.icon_label.setPixmap(pix)
-
-        # 3. Gestion de l'image d'illustration (Preview PNG)
-        if hasattr(self, 'preview_image_label'):
-            from utils.paths import EXPLAIN_PNG
+        # --- 2. SIDEBAR (Icônes dynamiques) ---
+        # On boucle sur notre liste de cartes stockées
+        for card in self.test_cards:
+            # On utilise property() car nous avons fait setProperty dans create_test_card
+            t_id = card.property("test_id")
+            is_selected = (t_id == self.current_test_id)
             
-            # Construction de la clé selon le test et le thème (ex: "LATENCY_DARK" ou "LATENCY_LIGHT")
-            img_key = f"{test_info['id'].upper()}{theme_suffix}"
+            # Récupération des métadonnées du test pour cette carte
+            test_meta = next((t for t in self.tests_data if t["id"] == t_id), {})
+            
+            # On ne recolore pas les icônes à couleurs fixes (ex: Power/Logo)
+            if not test_meta.get("fixed_color", False):
+                current_icon_color = color_active if is_selected else color_main
+                
+                # Mise à jour de l'icône via la référence directe stockée dans la carte
+                if hasattr(card, 'icon_label'):
+                    pix = get_svg_pixmap(
+                        test_meta.get("icon_path"), 
+                        size=QSize(35, 35), 
+                        color_hex=current_icon_color
+                    )
+                    card.icon_label.setPixmap(pix)
+
+        # --- 3. ILLUSTRATION (Preview PNG) ---
+        if hasattr(self, 'preview_image_label'):
+            img_key = f"{self.current_test_id.upper()}{theme_suffix}"
             explain_img_path = EXPLAIN_PNG.get(img_key)
 
             if explain_img_path and os.path.exists(explain_img_path):
@@ -265,20 +258,17 @@ class CalibrationView(QWidget):
                 else:
                     self.preview_image_label.clear()
             else:
-                # Fallback : si l'image spécifique au thème n'existe pas, on tente sans le suffixe
-                print(f"DEBUG: Preview non trouvée pour {img_key}")
                 self.preview_image_label.clear()
 
-        # 4. Nettoyage et chargement des paramètres spécifiques
-        self.clear_dynamic_layout()
+        # --- 4. PARAMÈTRES DYNAMIQUES ---
+        self.clear_dynamic_layout() # Nettoyage de la zone
         
-        test_id = test_info.get("id")
-        if test_id == "latency":
+        if self.current_test_id == "latency":
             self.setup_latency_params()
-        elif test_id == "linestep":
+        elif self.current_test_id == "linestep":
             # self.setup_linestep_params()
             pass
-        elif test_id == "power":
+        elif self.current_test_id == "power":
             # self.setup_power_params()
             pass
 
@@ -377,7 +367,7 @@ class CalibrationView(QWidget):
         self.dynamic_layout.addStretch()
 
     def create_switch(self, layout, label_text, key, row):
-        """Ajoute une ligne avec un label et ton Switch animé"""
+        """Ajoute une ligne avec un label et Switch animé"""
         container = QWidget()
         h_layout = QHBoxLayout(container)
         h_layout.setContentsMargins(0, 5, 0, 5)
@@ -385,7 +375,7 @@ class CalibrationView(QWidget):
         label = QLabel(label_text)
         label.setStyleSheet("font-size: 14px; color: #DCE4EE;")
         
-        # Utilisation de ton composant personnalisé
+
         switch_btn = Switch()
         
         # Si tu as besoin de régler l'état initial depuis la config
@@ -406,7 +396,78 @@ class CalibrationView(QWidget):
         self.controls[key] = {"switch": switch_btn}
 
 
+    def retranslate_ui(self):
+        """Appelée lors d'un changement de langue"""
+        # 1. Recharger les dictionnaires de texte depuis le contrôleur
+        self.load_texts()
+        
+        # 2. Mise à jour des éléments statiques de l'interface
+        if hasattr(self, 'sidebar_title_label'):
+            self.sidebar_title_label.setText(self.texts.get("sidebar_title", "Tests"))
+        
+        if hasattr(self, 'action_btn'):
+            self.action_btn.setText(self.texts.get("btn_prepare", "Prepare"))
+        
+        # 3. Mise à jour des cartes de test dans la sidebar
+        for card in self.test_cards:
+            # Récupération de l'ID stocké via setProperty
+            t_id = card.property("test_id")
+            
+            # Recherche des labels enfants par leur ObjectName
+            title_label = card.findChild(QLabel, "card_title")
+            desc_label = card.findChild(QLabel, "card_desc")
+            
+            if title_label: 
+                title_label.setText(self.texts.get(f"{t_id}_title", "Sans titre"))
+            if desc_label: 
+                desc_label.setText(self.texts.get(f"{t_id}_short", ""))
 
+        # 4. Rafraîchissement de la zone de détails (partie droite)
+        if self.current_test_id:
+            # Traduction du titre et de la description longue
+            self.detail_title.setText(self.texts.get(f"{self.current_test_id}_title", ""))
+            self.detail_desc.setText(self.texts.get(f"{self.current_test_id}_long", ""))
+            
+            # --- IMPORTANT : Mise à jour des labels dynamiques (Feedrate, Power, etc.) ---
+            # On relance la construction des paramètres pour rafraîchir les labels traduits
+            if self.current_test_id == "latency":
+                self.setup_latency_params()
+            elif self.current_test_id == "linestep":
+                # self.setup_linestep_params()
+                pass
+            elif self.current_test_id == "power":
+                # self.setup_power_params()
+                pass
+        else:
+            # Retour à l'état par défaut si aucun test n'est sélectionné
+            self.detail_title.setText(self.texts.get("default_title", "Select a test"))
+            self.detail_desc.setText(self.texts.get("default_desc", ""))
+
+    def reset_view(self):
+        """Remet la vue à zéro"""
+        self.current_test_id = None
+        
+        # Décocher les boutons
+        self.button_group.setExclusive(False)
+        for card in self.test_cards:
+            card.setChecked(False)
+        self.button_group.setExclusive(True)
+        
+        # Remettre l'en-tête par défaut
+        self.detail_title.setText(self.texts.get("default_title", "Select a test"))
+        self.detail_desc.setText(self.texts.get("default_desc", ""))
+        self.preview_image_label.clear()
+        
+        # Vider les paramètres
+        self.clear_dynamic_layout()
+
+    def showEvent(self, event):
+        """
+        Déclenché automatiquement par Qt chaque fois que 
+        la vue de calibration devient visible.
+        """
+        super().showEvent(event) 
+        self.reset_view()
 
     def get_txt(self, key, default=""):
         """Cherche d'abord dans calibration, puis dans common"""

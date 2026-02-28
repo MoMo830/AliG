@@ -32,7 +32,7 @@ TRANSLATIONS = {
             "reset_all_parameters_confirm": "Sure ?",
             "reset_all_parameters_done": "Reset done !",
             "reset_all_parameters_error": "Reset error",
-            "export_extension": "Export Extension:"
+            "label_extension": "Export Extension:"
         },
         "dashboard": {
             "raster_title": "IMAGE RASTERING",
@@ -142,6 +142,7 @@ TRANSLATIONS = {
             "laser_power_level": "Laser Power Level (%)",
             "power_distribution": "POWER DISTRIBUTION",
             "power_value": "Power Value (%)",
+            "power_pct": "Power Value (%)",
             "global_machine_params": "⚠️ GLOBAL MACHINE PARAMETERS",
             "no_global_header": "(No Global Header)",
             "no_global_footer": "(No Global Footer)",
@@ -209,7 +210,7 @@ TRANSLATIONS = {
             "reset_all_parameters_confirm": "Réinitialiser tout ?",
             "reset_all_parameters_done": "Configuration réinitialisée !",
             "reset_all_parameters_error": "Erreur durant la réinitialisation",
-            "export_extension": "Extension de sortie :"
+            "label_extension": "Extension de sortie :"
         },
         "dashboard": {
             "raster_title": "GRAVURE RASTER",

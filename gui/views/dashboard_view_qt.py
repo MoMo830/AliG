@@ -10,13 +10,15 @@ from PyQt6.QtGui import QColor
 
 from core.translations import TRANSLATIONS
 from utils.paths import THUMBNAILS_DIR, ASSETS_DIR, SVG_ICONS
-from utils.paths import SVG_ICONS
 from gui.utils_qt import get_svg_pixmap
 
 class DashboardViewQt(QWidget):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
+        self.setStyleSheet("background-color: #2b2b2b; color: white;")
+
+        self.translation_map = {}
         
         # Récupération des textes
         lang = self.controller.config_manager.get_item("machine_settings", "language", "English")
@@ -28,15 +30,12 @@ class DashboardViewQt(QWidget):
         self.main_layout.setContentsMargins(30, 20, 30, 20)
         self.main_layout.setSpacing(30)
 
-        # --- COLONNE GAUCHE : MODES (Scrollable) ---
         self.setup_left_column()
-
-        # --- COLONNE DROITE : TITRE + HISTORY + STATS ---
         self.setup_right_column()
 
         # --- THUMBNAILS ---
         self.load_thumbnails()
-        QTimer.singleShot(100, self.render_grid)
+        QTimer.singleShot(0, self.render_grid)
 
 
     def setup_left_column(self):
@@ -87,29 +86,24 @@ class DashboardViewQt(QWidget):
 
         
 
-    def create_mode_card(self, title, desc, callback, icon_data, state):
-        """Crée une carte de mode avec hauteur fixe et gestion d'état (SVG/PNG/Emoji)"""
-        from gui.utils_qt import get_svg_pixmap  # Import local ou en haut de fichier
+    def create_mode_card(self, title_key, desc_key, callback, icon_data, state):
+        """Crée une carte de mode et enregistre ses labels pour la traduction"""
+        from gui.utils_qt import get_svg_pixmap
         
         card = QFrame()
+        card.setAttribute(Qt.WidgetAttribute.WA_Hover)
         card.setObjectName("modeCard")
-
         card.icon_data = icon_data
         card.state = state
-        
-        # 1. FIXER LA HAUTEUR (Uniformité visuelle)
         card.setFixedHeight(80)
         
-        # Définition des états
         is_disabled = (state == "disabled" or callback is None)
         bg_color = "#1e1e1e" if is_disabled else "#2b2b2b"
         border_color = "#252525" if is_disabled else "#3d3d3d"
         title_color = "#777777" if is_disabled else "white"
         desc_color = "#555555" if is_disabled else "gray"
-        # Couleur pour l'icône SVG : Gris si désactivé, Blanc si actif
         icon_color = "#555555" if is_disabled else "#FFFFFF"
 
-        # 2. STYLE QSS (Design Moderne)
         style = f"""
             QFrame#modeCard {{
                 background-color: {bg_color};
@@ -118,38 +112,25 @@ class DashboardViewQt(QWidget):
             }}
         """
         if not is_disabled:
-            style += """
-                QFrame#modeCard:hover {
-                    border-color: #1F6AA5;
-                    background-color: #333333;
-                }
-            """
+            style += "QFrame#modeCard:hover { border-color: #1F6AA5; background-color: #333333; }"
             card.setCursor(Qt.CursorShape.PointingHandCursor)
-        
         card.setStyleSheet(style)
 
-        # 3. LAYOUT HORIZONTAL PRINCIPAL
         layout = QHBoxLayout(card)
         layout.setContentsMargins(15, 10, 15, 10)
         layout.setSpacing(15)
 
-        # 4. LOGIQUE D'ICÔNE MULTI-FORMAT
+        # Icône
         icon_label = QLabel()
-        icon_label.setFixedWidth(45) # Largeur fixe pour aligner les textes
-        
+        icon_label.setFixedWidth(45)
         if isinstance(icon_data, str) and icon_data.endswith(".svg"):
-            # CAS 1 : SVG dynamique
             pix = get_svg_pixmap(icon_data, size=QSize(35, 35), color_hex=icon_color)
             icon_label.setPixmap(pix)
-            
         elif isinstance(icon_data, str) and icon_data.endswith(".png"):
-            # CAS 2 : PNG classique
             path = os.path.join(ASSETS_DIR, icon_data)
             pix = QPixmap(path).scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             icon_label.setPixmap(pix)
-            
         else:
-            # CAS 3 : Emoji ou Texte
             icon_label.setText(icon_data)
             icon_label.setFont(QFont("Arial", 24))
             icon_label.setStyleSheet(f"color: {title_color}; border: none; background: transparent;")
@@ -157,19 +138,21 @@ class DashboardViewQt(QWidget):
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_label)
 
-        # 5. ZONE DE TEXTE (Verticale)
+        # Zone de texte
         text_layout = QVBoxLayout()
         text_layout.setSpacing(2)
 
-        # Titre
-        t_lbl = QLabel(title)
+        # --- TITRE (Enregistré dans la map) ---
+        t_lbl = QLabel(self.texts.get(title_key, title_key))
         t_lbl.setStyleSheet(f"color: {title_color}; font-weight: bold; font-size: 15px; border: none; background: transparent;")
+        self.translation_map[t_lbl] = title_key # Stockage de la clé
         
-        # Description
-        d_lbl = QLabel(desc)
+        # --- DESCRIPTION (Enregistrée dans la map) ---
+        d_lbl = QLabel(self.texts.get(desc_key, desc_key))
         d_lbl.setWordWrap(True)
         d_lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         d_lbl.setStyleSheet(f"color: {desc_color}; font-size: 11px; border: none; background: transparent;")
+        self.translation_map[d_lbl] = desc_key # Stockage de la clé
         
         text_layout.addWidget(t_lbl)
         text_layout.addWidget(d_lbl)
@@ -182,11 +165,13 @@ class DashboardViewQt(QWidget):
         card.title_label = t_lbl
         card.desc_label = d_lbl
 
-        # 6. GESTION DU CLIC
         if not is_disabled:
             card.mousePressEvent = lambda e: callback()
         else:
             card.mousePressEvent = lambda e: None
+
+        for child in card.findChildren(QLabel):
+            child.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         return card
 
@@ -210,7 +195,7 @@ class DashboardViewQt(QWidget):
 
         # Zone Historique (Simplifiée pour l'instant)
         history_label = QLabel(self.texts.get("history", "History"))
-        history_label.setStyleSheet("font-weight: bold; color: white; margin-top: 10px;")
+        history_label.setStyleSheet("font-weight: bold; color: white; margin-top: 10px; background: transparent; border: none;")
         layout.addWidget(history_label)
 
         self.history_area = QScrollArea() 
@@ -474,13 +459,26 @@ class DashboardViewQt(QWidget):
                 icon_c = colors["text"]
 
             # Mise à jour du style de la carte
-            card.setStyleSheet(f"""
-                QFrame#modeCard {{
-                    background-color: {bg};
-                    border: 2px solid {colors['border']};
-                    border-radius: 15px;
-                }}
-            """)
+            if is_disabled:
+                card.setStyleSheet(f"""
+                    QFrame#modeCard {{
+                        background-color: {bg};
+                        border: 2px solid {colors['border']};
+                        border-radius: 15px;
+                    }}
+                """)
+            else:
+                card.setStyleSheet(f"""
+                    QFrame#modeCard {{
+                        background-color: {bg};
+                        border: 2px solid {colors['border']};
+                        border-radius: 15px;
+                    }}
+                    QFrame#modeCard:hover {{
+                        border-color: #1F6AA5;
+                        background-color: #333333;
+                    }}
+                """)
 
             # Mise à jour des labels
             card.title_label.setStyleSheet(f"color: {txt}; font-weight: bold; font-size: 15px; border: none; background: transparent;")
@@ -490,3 +488,14 @@ class DashboardViewQt(QWidget):
             if isinstance(card.icon_data, str) and card.icon_data.endswith(".svg"):
                 pix = get_svg_pixmap(card.icon_data, size=QSize(35, 35), color_hex=icon_c)
                 card.icon_label.setPixmap(pix)
+
+    def update_texts(self):
+        """Met à jour dynamiquement tous les labels du Dashboard"""
+        # 1. Rechargement des dictionnaires de texte
+        lang = self.controller.config_manager.get_item("machine_settings", "language", "English")
+        from core.translations import TRANSLATIONS
+        self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"])["dashboard"]
+        
+        # 2. Utilisation de l'utilitaire de traduction centralisé
+        from gui.utils_qt import translate_ui_widgets
+        translate_ui_widgets(self.translation_map, self.texts)
