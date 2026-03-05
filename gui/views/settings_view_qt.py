@@ -114,8 +114,8 @@ class SettingsViewQt(QWidget):
                             ["M67 (Analog)", "S (Spindle)"], "cmd_mode")
         
         # Entrées simples
-        self.create_simple_input(sec_gcode, "label_output_e", "m67_e_num")
-        self.create_simple_input(sec_gcode, "label_ctrl_max", "ctrl_max")
+        self.create_simple_input(sec_gcode, "label_output_e", "m67_e_num", precision=0)
+        self.create_simple_input(sec_gcode, "label_ctrl_max", "ctrl_max", precision=0)
         
         # Mode d'allumage (M3/M4)
         self.create_dropdown(sec_gcode, "label_firing", ["M3/M5", "M4/M5"], "firing_mode")
@@ -249,8 +249,8 @@ class SettingsViewQt(QWidget):
         row_layout.addWidget(widget)
         layout.addWidget(row)
 
-    def create_simple_input(self, layout, label_text, key):
-        """Crée une ligne avec un Label et un QLineEdit"""
+    def create_simple_input(self, layout, label_text, key, precision=2):
+        """Crée une ligne avec un Label et un QLineEdit sans valeur par défaut externe"""
         edit = QLineEdit()
         edit.setFixedWidth(100)
         edit.setStyleSheet("""
@@ -262,12 +262,23 @@ class SettingsViewQt(QWidget):
                 padding: 3px; 
             }
         """)
+
+        # On initialise à 0 par défaut, formaté selon la précision
+        initial_value = 0
+        fmt = "{:d}" if precision == 0 else f"{{:.{precision}f}}"
+        edit.setText(fmt.format(initial_value))
+        
         edit.textChanged.connect(self.mark_as_changed)
         
-        # MODIFICATION ICI : On ajoute 'key=key'
+        # On ajoute la ligne au layout via votre méthode parente
         self.create_input_row(layout, label_text, edit, key=key)
         
-        self.controls[key] = {"entry": edit}
+        # On stocke les infos dans le dictionnaire de contrôle
+        self.controls[key] = {
+            "entry": edit,
+            "precision": precision,
+            "is_int": (precision == 0)
+        }
 
     # --- LOGIQUE DE STYLE DU BOUTON ---
 

@@ -43,14 +43,15 @@ class _GenWorker(QThread):
     done  = pyqtSignal(dict)
     error = pyqtSignal(str)
 
-    def __init__(self, engine, payload, parser):
+    def __init__(self, engine, payload):
         super().__init__()
         self.engine  = engine
         self.payload = payload
-        self.parser  = parser
+        #self.parser  = parser
 
     def run(self):
         try:
+            parser = GCodeParser(self.payload)
             p            = self.payload['params']
             raster_mode  = p.get('raster_mode', 'horizontal')
             est_size_str = self.payload.get('estimated_size', 'N/A')
@@ -85,9 +86,9 @@ class _GenWorker(QThread):
             latence_mm = float(latence_mm)
 
             # D — Parsing
-            f_pts, f_dur, f_lim = self.parser.parse(framing_gcode)
+            f_pts, f_dur, f_lim = parser.parse(framing_gcode)
             framing_end = len(f_pts) if f_pts is not None else 0
-            pts, _, lim  = self.parser.parse(final_gcode)
+            pts, _, lim  = parser.parse(final_gcode)
 
             valid = [l for l in [f_lim, lim]
                      if l is not None and not all(abs(v) < 1e-9 for v in l)]
@@ -123,7 +124,7 @@ class _GenWorker(QThread):
                 lstep    = float(p.get('line_step', p.get('l_step', 0.1)))
                 theo     = (nb * (dist + 2*overscan) + (nb-1)*lstep) / (feedrate/60)
                 dur      = max(pts[-1, 4], theo)
-
+            print("DEBUG: Thread Generation Complete")
             self.done.emit({
                 'pts':           pts,
                 'framing_end':   framing_end,
@@ -166,7 +167,7 @@ class _Renderer:
         self.ctrl_max       = ctrl_max
         self.display_data   = np.full((rect_h, rect_w), 255, dtype=np.uint8)
         self._qi_ref        = None   # référence QImage pour éviter le GC
-        
+
     def reset(self):
         self.display_data.fill(255)
 
@@ -174,96 +175,74 @@ class _Renderer:
 
     def _compute_polys(self, pts_arr, start, end,
                        use_lat, lat_mm, scan_axis):
-        if pts_arr is None or len(pts_arr) < 2:
-            return None
-        
-        # Sécurité sur les index pour éviter les tableaux vides
-        # start+1 doit être < len(pts_arr)
-        if start >= end or start >= len(pts_arr) - 1:
-            return None
-
-        # Ajustement de l'index de fin pour ne pas déborder
-        safe_end = min(end, len(pts_arr) - 1)
-
-        # Slices source (départ) / dest (arrivée)
-        # On s'assure que p1 et p2 ont EXACTEMENT la même longueur
-        p1 = pts_arr[start : safe_end]
-        p2 = pts_arr[start + 1 : safe_end + 1]
-
-        if len(p1) == 0:
+        """
+        Retourne dict[int → list[QPolygonF]] ou None.
+        Tout le calcul géométrique est vectorisé NumPy.
+        """
+        if end <= start or pts_arr is None:
             return None
 
-        # --- FILTRE PUISSANCE ---
-        # On utilise p2 pour la puissance (état à l'arrivée du segment)
+        # Slices source / dest
+        p1 = pts_arr[start : end    ]   # (N,5)
+        p2 = pts_arr[start+1 : end+1]
+
+        # Filtre puissance > 0
         mask = p2[:, 2] > 0
-        
         if not mask.any():
             return None
-            
-        # On applique le masque aux deux simultanément pour garder la cohérence
-        p1 = p1[mask]
-        p2 = p2[mask]
-        
-        # Extraction des coordonnées après filtrage
-        x1 = p1[:, 0];  y1 = p1[:, 1]
-        x2 = p2[:, 0];  y2 = p2[:, 1]
+        p1 = p1[mask].copy()
+        p2 = p2[mask].copy()
 
-        # --- CORRECTION LATENCE ---
+        x1 = p1[:, 0].copy();  y1 = p1[:, 1].copy()
+        x2 = p2[:, 0].copy();  y2 = p2[:, 1].copy()
+
+        # Correction latence vectorisée
         if use_lat and lat_mm != 0:
-            # On travaille sur des copies pour ne pas modifier pts_arr original
-            x1 = x1.copy(); x2 = x2.copy()
-            y1 = y1.copy(); y2 = y2.copy()
-            
             if scan_axis == 'X':
-                dx_raw = x2 - x1
-                pos_m = dx_raw > 1e-6
-                neg_m = dx_raw < -1e-6
-                x1[pos_m] += lat_mm; x2[pos_m] += lat_mm
-                x1[neg_m] -= lat_mm; x2[neg_m] -= lat_mm
+                dx = x2 - x1
+                pos_mask = dx >  1e-6
+                neg_mask = dx < -1e-6
+                x1[pos_mask] += lat_mm;  x2[pos_mask] += lat_mm
+                x1[neg_mask] -= lat_mm;  x2[neg_mask] -= lat_mm
             else:
-                dy_raw = y2 - y1
-                pos_m = dy_raw > 1e-6
-                neg_m = dy_raw < -1e-6
-                y1[pos_m] += lat_mm; y2[pos_m] += lat_mm
-                y1[neg_m] -= lat_mm; y2[neg_m] -= lat_mm
+                dy = y2 - y1
+                pos_mask = dy >  1e-6
+                neg_mask = dy < -1e-6
+                y1[pos_mask] += lat_mm;  y2[pos_mask] += lat_mm
+                y1[neg_mask] -= lat_mm;  y2[neg_mask] -= lat_mm
 
-        # --- CONVERSION MM -> PIXELS ---
-        sc = self.scale; mnx = self.min_x; mny = self.min_y; th = self.total_px_h
-        ix1 = (x1 - mnx) * sc; iy1 = th - (y1 - mny) * sc
-        ix2 = (x2 - mnx) * sc; iy2 = th - (y2 - mny) * sc
+        # mm → pixels matrice
+        sc = self.scale;  mnx = self.min_x;  mny = self.min_y;  th = self.total_px_h
+        ix1 = (x1 - mnx) * sc;  iy1 = th - (y1 - mny) * sc
+        ix2 = (x2 - mnx) * sc;  iy2 = th - (y2 - mny) * sc
 
-        dx = ix2 - ix1; dy = iy2 - iy1
+        dx = ix2 - ix1;  dy = iy2 - iy1
         dist_sq = dx*dx + dy*dy
 
-        # --- FILTRE LONGUEUR MINIMALE ---
+        # Filtre longueur > 0.5 px
         vis = dist_sq >= 0.25
         if not vis.any():
             return None
-            
-        ix1, iy1 = ix1[vis], iy1[vis]
-        ix2, iy2 = ix2[vis], iy2[vis]
-        dx, dy, dist_sq = dx[vis], dy[vis], dist_sq[vis]
-        
-        # IMPORTANT : On filtre aussi la puissance pour les couleurs
-        # On prend la puissance de p2 (point d'arrivée)
+        ix1=ix1[vis]; iy1=iy1[vis]; ix2=ix2[vis]; iy2=iy2[vis]
+        dx=dx[vis];   dy=dy[vis];   dist_sq=dist_sq[vis]
         pwr = p2[:, 2][vis]
 
-        # --- CALCUL GÉOMÉTRIQUE DES QUADS ---
         length = np.sqrt(dist_sq)
-        half = self.laser_width_px * 0.5
-        # Normales (perpendiculaires au segment)
-        nx = (-dy / length) * half
-        ny = ( dx / length) * half
+        half   = self.laser_width_px * 0.5
+        nx     = (-dy / length) * half
+        ny     = ( dx / length) * half
 
+        # Couleurs quantisées (0–255)
         colors = np.clip(255.0 * (1.0 - pwr / self.ctrl_max), 0, 255).astype(np.uint8)
 
+        # Précalcul coins (vectorisé, zéro boucle)
         p_tl = np.stack([ix1 + nx, iy1 + ny], axis=1)
         p_bl = np.stack([ix1 - nx, iy1 - ny], axis=1)
         p_br = np.stack([ix2 - nx, iy2 - ny], axis=1)
         p_tr = np.stack([ix2 + nx, iy2 + ny], axis=1)
 
-        # --- REGROUPEMENT PAR COULEUR ---
-        result = {}
+        # Regroupement par couleur → moins de setBrush() dans QPainter
+        result: dict[int, list] = {}
         for i in range(len(colors)):
             c = int(colors[i])
             poly = QPolygonF([
@@ -275,7 +254,6 @@ class _Renderer:
             if c not in result:
                 result[c] = []
             result[c].append(poly)
-            
         return result
 
     # ─── Une passe QPainter ──────────────────────────────────────────────────
@@ -302,25 +280,19 @@ class _Renderer:
                 qp.drawPolygon(poly)
         qp.end()
 
-        # 1. Récupérer les dimensions et le saut de ligne (stride)
-        h, w = qi.height(), qi.width()
-        bpl = qi.bytesPerLine() # Nombre d'octets réels par ligne (avec padding)
-
-        # 2. Récupérer le pointeur et fixer la taille sur le buffer RÉEL (total)
+        # 1. Récupérer le pointeur brut
         ptr = qi.bits()
-        ptr.setsize(bpl * h)
 
-        # 3. Créer le tableau NumPy avec la largeur RÉELLE (incluant le padding)
-        # On utilise bpl au lieu de w pour le reshape initial
-        full_arr = np.frombuffer(ptr, dtype=np.uint8).reshape(h, bpl)
+        # 2. Définir la taille du buffer (Hauteur * Largeur pour du Grayscale8)
+        # IMPORTANT : setsize est crucial ici
+        ptr.setsize(h * w)
 
-        # 4. Découper (slicing) pour enlever le padding inutile et ne garder que l'image
-        arr = full_arr[:, :w]
+        # 3. Créer le tableau numpy à partir du buffer
+        arr = np.frombuffer(ptr, dtype=np.uint8).reshape(h, w)
 
-        # 5. Copie vers display_data
+        # 4. Copie vers display_data
         np.copyto(self.display_data, arr)
-        self._qi_ref = qi
-
+        self._qi_ref = qi   # Maintenir la référence pour éviter le garbage collection
 
     # ─── API publique ────────────────────────────────────────────────────────
 
@@ -939,12 +911,16 @@ class SimulationViewQt(QWidget):
     # ══════════════════════════════════════════════════════════════
 
     def _start_gen(self):
-        self._parser = GCodeParser(self.payload)
-        self._worker = _GenWorker(self.engine, self.payload, self._parser)
-        print(self.payload)
+        print("DEBUG: Generation start")
+        self._worker = _GenWorker(self.engine, self.payload) # Passer payload au worker
+        print("DEBUG: Generation end")
         self._worker.done.connect(self._on_done)
+        print("DEBUG: 1")
+
         self._worker.error.connect(self._on_error)
+        print("DEBUG: 2")
         self._worker.start()
+        print("DEBUG: 3")
 
     def _on_error(self, msg):
         self._hide_loading()
@@ -988,92 +964,41 @@ class SimulationViewQt(QWidget):
 
     def _init_canvas(self):
         cw, ch = self.canvas.width(), self.canvas.height()
-
-        # Attendre que le widget soit réellement dimensionné
-        if cw <= 1 or ch <= 1:
-            QTimer.singleShot(60, self._init_canvas)
+        if cw <= 1:
+            QTimer.singleShot(60, self._init_canvas); return
+        if self.points_list is None or self.points_list.size == 0:
             return
 
-        if self.points_list is None or len(self.points_list) == 0:
-            return
-
-        # ─────────────────────────────
-        # Dimensions réelles pièce (mm)
-        # ─────────────────────────────
         tw = max(0.1, self._mxx - self._mnx)
         th = max(0.1, self._mxy - self._mny)
-
-        # Scale écran
         sc = min((cw * 0.80) / tw, (ch * 0.75) / th)
+        pw = tw * sc;  ph = th * sc
+        rw = max(1, int(pw));  rh = max(1, int(ph))
+        x0 = (cw - pw) / 2;   y0 = (ch - ph) / 2
 
-        # Dimensions projetées écran
-        pw = tw * sc
-        ph = th * sc
+        l_step = self.payload.get('dims', [0, 0, 0.1])[2]
+        lw_px  = max(1, int(l_step * sc))
 
-        # Dimensions buffer image (entiers)
-        rw = max(1, int(round(pw)))
-        rh = max(1, int(round(ph)))
-
-        # Position centrée
-        x0 = (cw - pw) / 2.0
-        y0 = (ch - ph) / 2.0
-
-        # ─────────────────────────────
-        # Line step exact depuis payload
-        # ─────────────────────────────
-        dims = self.payload.get('dims', (0, 0, 0.1, 0.1))
-        raster_mode = self.payload.get('params', {}).get('raster_mode', 'horizontal')
-
-        if len(dims) >= 4:
-            l_step = float(dims[2]) if raster_mode == 'horizontal' else float(dims[3])
-        else:
-            l_step = 0.1
-
-        # Largeur laser en pixels (float conservé)
-        lw_px = max(1.0, l_step * sc)
-
-        # ─────────────────────────────
-        # Initialisation renderer
-        # IMPORTANT : total_px_h = rh (hauteur buffer réelle)
-        # ─────────────────────────────
         self._renderer = _Renderer(
-            rw,
-            rh,
-            sc,
-            rh,              # ← hauteur réelle buffer
-            self._mnx,
-            self._mny,
-            lw_px,
-            self.ctrl_max
+            rw, rh, sc, ph,
+            self._mnx, self._mny, lw_px, self.ctrl_max
         )
-
-        # Stockage géométrie
         self._px_w, self._px_h = pw, ph
-        self._x0, self._y0 = x0, y0
-        self._scale = sc
+        self._x0, self._y0     = x0, y0
+        self._scale            = sc
+        self._last_drawn_idx   = self.framing_end - 1
 
-        # Index sécurisé
-        self._last_drawn_idx = max(0, self.framing_end - 1)
-
-        # ─────────────────────────────
-        # Position initiale laser
-        # ─────────────────────────────
+        # Laser position initiale
         p0 = self.points_list[0]
         lx = x0 + (p0[0] - self._mnx) * sc
         ly = y0 + ph - (p0[1] - self._mny) * sc
 
-        # ─────────────────────────────
-        # Setup canvas
-        # ─────────────────────────────
         self.canvas.setup(
             self._renderer.display_data,
             x0, y0, pw, ph, sc,
-            self._mnx, self._mxx,
-            self._mny, self._mxy
+            self._mnx, self._mxx, self._mny, self._mxy
         )
-
         self.canvas.set_laser(lx, ly)
-
 
     # ══════════════════════════════════════════════════════════════
     #  ANIMATION — hot path
@@ -1081,101 +1006,54 @@ class SimulationViewQt(QWidget):
 
     def _tick(self):
         """
-        Boucle animation (16 ms).
-        Rasterisation incrémentale sécurisée.
+        Appelé toutes les 16 ms.
+        Incrémental : seuls les NOUVEAUX segments sont rasterisés
+        → une passe QPainter par frame, minimale.
         """
-
-        if not self.sim_running:
+        if not self.sim_running or self.points_list is None:
             return
 
-        if self.points_list is None or len(self.points_list) < 2:
-            return
-
-        pts = self.points_list
-        total_pts = len(pts)
-        last_idx = total_pts - 1
-
-        # ───────────────────────────────
-        # Temps simulation
-        # ───────────────────────────────
         now = time.perf_counter()
-
         if self.last_frame_time == 0:
             self.last_frame_time = now
-
         dt = (now - self.last_frame_time) * self.sim_speed
         self.last_frame_time = now
         self.current_sim_time += dt
 
-        # Clamp temps
-        if self.current_sim_time >= self.total_sec:
-            self.current_sim_time = self.total_sec
+        pts      = self.points_list
+        last_idx = len(pts) - 1
 
-        # ───────────────────────────────
-        # Avancement index via searchsorted (beaucoup plus sûr)
-        # ───────────────────────────────
-        idx = np.searchsorted(
-            pts[:, 4],
-            self.current_sim_time,
-            side='right'
-        ) - 1
+        # Avancer current_idx
+        while self.current_idx < last_idx:
+            if pts[self.current_idx + 1][4] > self.current_sim_time:
+                break
+            self.current_idx += 1
 
-        idx = max(0, min(int(idx), last_idx))
-        self.current_idx = idx
+        # Dessiner SEULEMENT les nouveaux segments
+        new_end = self.current_idx
+        if new_end > self._last_drawn_idx:
+            seg_start = max(self._last_drawn_idx, self.framing_end - 1)
+            self._renderer.draw_incremental(
+                pts, seg_start, new_end,
+                self.latence_enabled, self.latence_mm,
+                self.full_metadata.get('scan_axis', 'X')
+            )
+            self._last_drawn_idx = new_end
+            self.canvas.notify_dirty()
 
-        # ───────────────────────────────
-        # Rasterisation incrémentale
-        # ───────────────────────────────
-        if self._renderer is not None:
-
-            start_idx = max(0, self.framing_end - 1)
-
-            if self.current_idx > self._last_drawn_idx:
-
-                seg_start = max(self._last_drawn_idx, start_idx)
-
-                if seg_start < self.current_idx:
-                    self._renderer.draw_incremental(
-                        pts,
-                        seg_start,
-                        self.current_idx,
-                        self.latence_enabled,
-                        self.latence_mm,
-                        self.full_metadata.get('scan_axis', 'X')
-                    )
-
-                    self._last_drawn_idx = self.current_idx
-                    self.canvas.notify_dirty()
-
-        # ───────────────────────────────
-        # Fin animation
-        # ───────────────────────────────
+        # Fin
         if self.current_idx >= last_idx:
-            self._finish_anim()
-            return
+            self._finish_anim(); return
 
-        # ───────────────────────────────
-        # Interpolation laser fluide
-        # ───────────────────────────────
-        pc = pts[self.current_idx]
-        pn = pts[self.current_idx + 1]
-
+        # Interpolation laser
+        pc = pts[self.current_idx];  pn = pts[self.current_idx + 1]
         td = pn[4] - pc[4]
-
-        if td > 0:
-            r = (self.current_sim_time - pc[4]) / td
-            r = max(0.0, min(1.0, r))
-        else:
-            r = 0.0
-
-        lx_mm = pc[0] + (pn[0] - pc[0]) * r
-        ly_mm = pc[1] + (pn[1] - pc[1]) * r
-
-        self.canvas.set_laser(*self._mm_to_screen(lx_mm, ly_mm))
-
-        # ───────────────────────────────
-        # UI sync
-        # ───────────────────────────────
+        r  = max(0.0, min(1.0, (self.current_sim_time - pc[4])/td)) if td>0 else 0.0
+        lx, ly = self._mm_to_screen(
+            pc[0] + (pn[0]-pc[0])*r,
+            pc[1] + (pn[1]-pc[1])*r
+        )
+        self.canvas.set_laser(lx, ly)
         self._update_ui(self.current_idx)
 
     # ══════════════════════════════════════════════════════════════
@@ -1183,49 +1061,19 @@ class SimulationViewQt(QWidget):
     # ══════════════════════════════════════════════════════════════
 
     def _redraw_to(self, target_idx):
-        """
-        Redessine complètement la simulation jusqu'à target_idx.
-        Utilisé pour :
-            - scrub barre de progression
-            - skip_to_end
-            - toggle latence
-        """
-
-        if self._renderer is None:
+        if self._renderer is None or self.points_list is None:
             return
-
-        if self.points_list is None or len(self.points_list) == 0:
-            return
-
-        total_pts = len(self.points_list)
-
-        # Clamp sécurisé de l’index cible
-        target_idx = max(0, min(int(target_idx), total_pts - 1))
-
-        # Index de départ sécurisé (évite -1 si framing_end == 0)
-        start_idx = max(0, self.framing_end - 1)
-
-        # Si target est avant le début utile → reset propre
-        if target_idx <= start_idx:
-            self._renderer.reset()
-            self._last_drawn_idx = start_idx
-        else:
-            self._renderer.redraw_range(
-                self.points_list,
-                start_idx,
-                target_idx,
-                self.latence_enabled,
-                self.latence_mm,
-                self.full_metadata.get('scan_axis', 'X')
-            )
-            self._last_drawn_idx = target_idx
-
-        # Marquer l’image comme dirty pour rebuild pixmap
+        target_idx = min(target_idx, len(self.points_list) - 1)
+        self._renderer.redraw_range(
+            self.points_list,
+            self.framing_end - 1,
+            target_idx,
+            self.latence_enabled, self.latence_mm,
+            self.full_metadata.get('scan_axis', 'X')
+        )
+        self._last_drawn_idx = target_idx
         self.canvas.notify_dirty()
-
-        # Positionner le laser proprement
-        mx = float(self.points_list[target_idx][0])
-        my = float(self.points_list[target_idx][1])
+        mx, my = self.points_list[target_idx][0], self.points_list[target_idx][1]
         self.canvas.set_laser(*self._mm_to_screen(mx, my))
 
     # ══════════════════════════════════════════════════════════════
@@ -1307,49 +1155,16 @@ class SimulationViewQt(QWidget):
         self._redraw_to(self.current_idx)
 
     def _on_prog_click(self, e):
-
-        if self.points_list is None:
-            return
-
-        if self.total_sec <= 0:
-            return
-
-        total_pts = len(self.points_list)
-        if total_pts == 0:
-            return
-
-        # Ratio sécurisé
-        width = max(1, self.prog_bar.width())
-        pos_x = e.position().x()
-        ratio = max(0.0, min(1.0, pos_x / width))
-
-        was_running = self.sim_running
+        if self.points_list is None or self.total_sec <= 0: return
+        ratio = max(0.0, min(1.0, e.x() / max(1, self.prog_bar.width())))
+        was   = self.sim_running
         self._stop_play()
-
-        # Nouveau temps
         self.current_sim_time = ratio * self.total_sec
-
-        # Recherche index stable
-        idx = np.searchsorted(
-            self.points_list[:, 4],
-            self.current_sim_time,
-            side='right'
-        ) - 1
-
-        idx = max(0, min(int(idx), total_pts - 1))
-
-        self.current_idx = idx
-
-        # Redraw complet sécurisé
+        idx = int(np.searchsorted(self.points_list[:, 4], self.current_sim_time))
+        self.current_idx = max(0, min(idx, len(self.points_list)-1))
         self._redraw_to(self.current_idx)
-
-        # UI update
         self._update_ui(self.current_idx)
-
-        # Reprendre si nécessaire
-        if was_running:
-            self.last_frame_time = time.perf_counter()
-            self._start_play()
+        if was: self._start_play()
 
     # ══════════════════════════════════════════════════════════════
     #  UI SYNC
@@ -1412,38 +1227,21 @@ class SimulationViewQt(QWidget):
         if path: self._save(path.replace('\\','/'))
 
     def _save(self, path):
-        """Sauvegarde le G-Code physiquement et met à jour les statistiques du dashboard."""
         try:
-            # 1. Vérification de l'existence du G-Code
-            if not hasattr(self, 'final_gcode') or not self.final_gcode:
-                QMessageBox.critical(self, 'Error', 'No G-Code to save.')
-                return
-
-            # 2. Sauvegarde physique du fichier
-            with open(path, 'w') as f:
-                f.write(self.final_gcode)
-
-            # 3. Logique de mise à jour du Dashboard
+            if not self.final_gcode:
+                QMessageBox.critical(self,'Error','No G-Code to save.'); return
+            with open(path,'w') as f: f.write(self.final_gcode)
             matrix = self.payload.get('matrix')
             if matrix is not None:
-                from core.utils import save_dashboard_data
-                
-                # On récupère le temps (total_sim_seconds ou total_sec selon votre modèle)
-                estimated_time = getattr(self, 'total_sec', 0)
-
                 save_dashboard_data(
                     config_manager=self.controller.config_manager,
                     matrix=matrix,
                     gcode_content=self.final_gcode,
-                    estimated_time=estimated_time
-                )
-                print(estimated_time)
-            # 4. Feedback utilisateur et navigation
-            QMessageBox.information(self, 'Success', f'G-Code saved successfully:\n{path}')
+                    estimated_time=self.total_sec)
+            QMessageBox.information(self,'Success',f'G-Code saved:\n{path}')
             self._navigate_back()
-
         except Exception as e:
-            QMessageBox.critical(self, 'Error', f'Save failed:\n{str(e)}')
+            QMessageBox.critical(self,'Error',f'Save failed:\n{e}')
 
     # ══════════════════════════════════════════════════════════════
     #  NAVIGATION / FERMETURE

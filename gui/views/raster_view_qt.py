@@ -1,1739 +1,1321 @@
 # -*- coding: utf-8 -*-
 """
-A.L.I.G. - RasterView Qt Migration
-Migré de CustomTkinter vers PyQt6
+A.L.I.G. - RasterViewQt
+
+Corrections v2 :
+  • Colorbar fixe (QWidget Qt natif) — non affectée par pan/zoom
+  • Textes OVERSCAN trackés + supprimés à chaque redraw
+  • Switch force_dim correctement connecté (lecture directe dans process_logic)
+  • Bouton Reset View : plus de ligne noire (layout propre)
+  • Auto-fit image à l'ouverture (reset_pan_zoom centré sur le contenu)
+  • Histogramme : contours barres, abscisses par pas ronds, ylabel "Pixel count"
 """
 
 import os
 import sys
-import json
+import time
+import math
 import numpy as np
-from PIL import Image
 
 from PyQt6.QtWidgets import (
-    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QLabel, QPushButton, QSlider, QLineEdit, QComboBox,
-    QCheckBox, QTabWidget, QScrollArea, QSplitter,
-    QFileDialog, QMessageBox, QSizePolicy, QApplication,
-    QPlainTextEdit, QButtonGroup
+    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QComboBox, QLineEdit, QSlider, QScrollArea, QSplitter,
+    QTextEdit, QSizePolicy, QFileDialog, QMessageBox, QTabWidget,
 )
-from PyQt6.QtCore import (
-    Qt, QTimer, QSize, QRect, QPoint, QPointF, pyqtSignal
-)
+from PyQt6.QtCore import Qt, QTimer, QSize, QPointF, QRectF
 from PyQt6.QtGui import (
-    QPainter, QColor, QPen, QBrush, QFont, QImage, QPixmap,
-    QLinearGradient, QPainterPath, QFontMetrics
+    QPainter, QColor, QPen, QBrush, QFont, QLinearGradient,
+    QTransform, QPixmap, QImage,
 )
 
-from core.translations import TRANSLATIONS
-from core.utils import get_app_paths
-from core.config_manager import save_json_file, load_json_file
-from engine.gcode_engine import GCodeEngine
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+from matplotlib.patches import Rectangle
 
 from gui.switch import Switch
+from gui.utils_qt import (
+    get_combo_stylesheet,
+    show_loading_overlay,
+    hide_loading_overlay,
+    PanZoomMixin,
+    translate_ui_widgets,
+)
+from core.translations import TRANSLATIONS
+from engine.gcode_engine import GCodeEngine
+from core.config_manager import save_json_file, load_json_file
+from core.utils import get_app_paths
+
+try:
+    from utils.paths import SVG_ICONS
+    _ARROW_PATH = SVG_ICONS.get("ARROW_DOWN", "")
+except Exception:
+    _ARROW_PATH = ""
 
 
-# ─────────────────────────────────────────────
-#  WIDGETS UTILITAIRES 
-# ─────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════
+#  HISTOGRAMME WIDGET
+# ═══════════════════════════════════════════════════════════════════
 
-class ToolTip(QLabel):
-    """Tooltip simple affiché au survol d'un widget."""
-    def __init__(self, parent_widget, text):
-        super().__init__(text)
-        parent_widget.setToolTip(text)
+class _HistogramWidget(QWidget):
+    """
+    Histogramme de distribution de puissance — rendu QPainter natif.
+    """
 
-
-class LoadingOverlay(QWidget):
-    """Overlay de chargement semi-transparent."""
-    def __init__(self, parent, text="Loading..."):
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
-        self.setStyleSheet("background-color: rgba(30,30,30,200);")
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl = QLabel(text)
-        lbl.setStyleSheet("color: white; font-size: 16px; font-weight: bold; background: transparent;")
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(lbl)
-        self.resize(parent.size())
-        self.show()
-        self.raise_()
-
-    def resizeEvent(self, event):
-        if self.parent():
-            self.resize(self.parent().size())
-
-
-class PowerRangeVisualizer(QWidget):
-    """Visualiseur graphique de plage de puissance (remplace CTk version)."""
-    def __init__(self, parent, entry_min, entry_max, update_callback):
-        super().__init__(parent)
-        self.entry_min = entry_min
-        self.entry_max = entry_max
-        self.update_callback = update_callback
-        self.setFixedSize(80, 60)
-        self.setToolTip("Power range visualizer")
-
-    def refresh_visuals(self):
-        self.update()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        try:
-            v_min = float(self.entry_min.text() or 0)
-            v_max = float(self.entry_max.text() or 100)
-        except ValueError:
-            v_min, v_max = 0, 100
-
-        v_min = max(0, min(100, v_min))
-        v_max = max(0, min(100, v_max))
-
-        w, h = self.width(), self.height()
-        bar_w = 20
-        bar_h = h - 20
-        y_base = h - 10
-
-        # Fond
-        painter.fillRect(0, 0, w, h, QColor("#1e1e1e"))
-
-        # Barre min
-        min_h = int((v_min / 100) * bar_h)
-        min_x = w // 2 - bar_w - 5
-        painter.fillRect(min_x, y_base - min_h, bar_w, min_h, QColor("#ffcc00"))
-
-        # Barre max
-        max_h = int((v_max / 100) * bar_h)
-        max_x = w // 2 + 5
-        painter.fillRect(max_x, y_base - max_h, bar_w, max_h, QColor("#ff4444"))
-
-        # Labels
-        painter.setPen(QColor("#888888"))
-        font = QFont("Arial", 7)
-        painter.setFont(font)
-        painter.drawText(min_x, y_base + 12, "MIN")
-        painter.drawText(max_x, y_base + 12, "MAX")
-
-
-# class ToggleSwitch(QCheckBox):
-#     """Switch on/off stylisé qui remplace CTkSwitch."""
-#     def __init__(self, parent=None):
-#         super().__init__(parent)
-#         self.setStyleSheet("""
-#             QCheckBox::indicator {
-#                 width: 40px;
-#                 height: 20px;
-#                 border-radius: 10px;
-#             }
-#             QCheckBox::indicator:unchecked {
-#                 background-color: #444444;
-#                 border: 1px solid #555555;
-#             }
-#             QCheckBox::indicator:checked {
-#                 background-color: #1f538d;
-#                 border: 1px solid #2a6dbd;
-#             }
-#         """)
-
-
-class SegmentedButton(QWidget):
-    """Bouton segmenté (remplace CTkSegmentedButton)."""
-    valueChanged = pyqtSignal(str)
-
-    def __init__(self, values, parent=None):
-        super().__init__(parent)
-        self._values = values
-        self._current = values[0] if values else ""
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
-        self._buttons = {}
-        self._group = QButtonGroup(self)
-        self._group.setExclusive(True)
-
-        for val in values:
-            btn = QPushButton(val)
-            btn.setCheckable(True)
-            btn.setFixedHeight(28)
-            btn.clicked.connect(lambda checked, v=val: self._on_clicked(v))
-            self._group.addButton(btn)
-            self._buttons[val] = btn
-            layout.addWidget(btn)
-
-        self._apply_styles()
-        if values:
-            self._buttons[values[0]].setChecked(True)
-
-    def _apply_styles(self):
-        base = """
-            QPushButton {
-                background-color: #3a3a3a;
-                color: #aaaaaa;
-                border: 1px solid #555555;
-                border-radius: 4px;
-                padding: 2px 10px;
-                font-size: 11px;
-            }
-            QPushButton:checked {
-                background-color: #1f538d;
-                color: white;
-                border-color: #2a6dbd;
-            }
-            QPushButton:hover:!checked {
-                background-color: #444444;
-                color: white;
-            }
-        """
-        for btn in self._buttons.values():
-            btn.setStyleSheet(base)
-
-    def _on_clicked(self, val):
-        self._current = val
-        self.valueChanged.emit(val)
-
-    def set(self, val):
-        if val in self._buttons:
-            self._buttons[val].setChecked(True)
-            self._current = val
-
-    def get(self):
-        return self._current
-
-
-class HistogramWidget(QWidget):
-    """Histogramme de distribution de puissance — remplace CTkCanvas."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(120)
-        self._data = None
-        self._v_min = 0
-        self._v_max = 255
-        self._title = "Power Distribution"
+        self._matrix      = None
+        self._v_min       = 0
+        self._v_max       = 255
         self._label_power = "Power"
-        self._label_dist = "%"
+        self._label_count = "Pixel count"
+        self._label_title = "Power Distribution"
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-    def set_labels(self, title, power_label, dist_label):
-        self._title = title
-        self._label_power = power_label
-        self._label_dist = dist_label
-
-    def update_histogram(self, matrix, v_min, v_max):
-        self._data = matrix
-        self._v_min = v_min
-        self._v_max = v_max
+    def update_data(self, matrix, v_min, v_max,
+                    label_title="Power Distribution",
+                    label_power="Power",
+                    label_count="Pixel count"):
+        self._matrix      = matrix
+        self._v_min       = float(v_min)
+        self._v_max       = float(v_max)
+        self._label_title = label_title
+        self._label_power = label_power
+        self._label_count = label_count
         self.update()
 
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    @staticmethod
+    def _nice_step(value_range, max_ticks=7):
+        """Retourne un pas « rond » pour ~max_ticks graduations."""
+        if value_range <= 0:
+            return 1
+        raw = value_range / max_ticks
+        mag = 10 ** math.floor(math.log10(raw)) if raw > 0 else 1
+        for m in (1, 2, 5, 10):
+            step = m * mag
+            if value_range / step <= max_ticks:
+                return step
+        return mag * 10
 
-        w = self.width()
-        h = self.height()
-        painter.fillRect(0, 0, w, h, QColor("#202020"))
+    def paintEvent(self, _):
+        qp = QPainter(self)
+        qp.setRenderHint(QPainter.RenderHint.Antialiasing)
+        W, H = self.width(), self.height()
+        qp.fillRect(0, 0, W, H, QColor("#202020"))
 
-        if self._data is None:
-            painter.setPen(QColor("#444444"))
-            painter.drawText(QRect(0, 0, w, h), Qt.AlignmentFlag.AlignCenter, "No data")
+        if self._matrix is None:
+            qp.setPen(QColor("#555"))
+            qp.setFont(QFont("Arial", 10))
+            qp.drawText(0, 0, W, H, Qt.AlignmentFlag.AlignCenter, "—")
+            qp.end()
             return
 
-        # Marges
-        left_m, right_m, top_m, bottom_m = 55, 30, 25, 45
-        plot_w = w - left_m - right_m
-        plot_h = h - top_m - bottom_m
+        flat  = self._matrix.ravel()[::8]
+        total = max(flat.size, 1) # Le dénominateur pour le pourcentage
+        v_min = self._v_min
+        v_max = self._v_max
 
-        if plot_w < 10 or plot_h < 10:
-            return
-
-        # Titre
-        painter.setPen(QColor("#ffffff"))
-        font_title = QFont("Arial", 9, QFont.Weight.Bold)
-        painter.setFont(font_title)
-        painter.drawText(QRect(0, 5, w, top_m - 5), Qt.AlignmentFlag.AlignCenter, self._title)
-
-        # Axes
-        axis_color = QColor("#555555")
-        painter.setPen(QPen(axis_color, 1))
-        painter.drawLine(left_m, top_m, left_m, top_m + plot_h)
-        painter.drawLine(left_m, top_m + plot_h, left_m + plot_w, top_m + plot_h)
-
-        # Calcul histogramme
-        flat = self._data.ravel()[::10]
-        total = flat.size
-        if total == 0:
-            return
-
-        data_zero = flat[flat == 0]
+        data_off    = flat[flat == 0]
         data_active = flat[flat > 0]
 
-        bins = 60
-        v_min, v_max = self._v_min, self._v_max
-        counts, bin_edges = np.histogram(data_active, bins=bins, range=(v_min, v_max))
-        counts_pct = (counts / total) * 100
-        count_zero_pct = (data_zero.size / total) * 100
+        BINS = 64
+        if len(data_active) > 0:
+            lo_range = max(v_min, 1e-9)
+            hi_range = max(v_max, lo_range + 1e-8)
+            counts, edges = np.histogram(
+                data_active,
+                bins=BINS,
+                range=(lo_range, hi_range),
+                density=False
+            )
+            # Conversion des comptes en pourcentages
+            counts_pct = (counts / total) * 100.0
+        else:
+            counts_pct = np.zeros(BINS, dtype=float)
+            edges      = np.linspace(v_min, v_max, BINS + 1)
 
-        real_max = np.max(counts_pct) if counts_pct.size > 0 else 0
-        y_limit = max(10.0, float(np.ceil(real_max)))
-        if y_limit % 2 != 0:
-            y_limit += 1
+        # Pourcentage de pixels "éteints" (Laser OFF)
+        count_off_pct = (data_off.size / total) * 100.0
+        
+        # Le y_max est maintenant le pourcentage le plus élevé trouvé (max 100)
+        y_max = max(counts_pct.max() if counts_pct.size else 0, count_off_pct, 1.0)
 
-        zero_zone_w = int(plot_w * 0.05)
-        active_w = plot_w - zero_zone_w
+        # ── Marges ─────────────────────────────────────────────────
+        lm = 56   # axe Y + ylabel vertical
+        rm = 10
+        tm = 26   # titre
+        bm = 28   # axe X + labels + xlabel
+        plot_w = W - lm - rm
+        zero_w = max(int(plot_w * 0.06), 8)
+        act_w  = plot_w - zero_w
+        plot_h = H - tm - bm
+        base_y = H - bm
 
-        def scale_x(val):
+        if plot_w <= 0 or plot_h <= 0:
+            qp.end()
+            return
+
+        # ── Titre ──────────────────────────────────────────────────
+        qp.setPen(QColor("white"))
+        qp.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        qp.drawText(0, 2, W, tm - 2, Qt.AlignmentFlag.AlignCenter, self._label_title)
+
+        # ── Axes ───────────────────────────────────────────────────
+        qp.setPen(QPen(QColor("#555"), 1))
+        qp.drawLine(lm, base_y, W - rm, base_y)
+        qp.drawLine(lm, tm,     lm,     base_y)
+
+        # ── Mappings ───────────────────────────────────────────────
+        def px_x(val):
             if v_max == v_min:
-                return left_m + zero_zone_w
-            return int(left_m + zero_zone_w + ((val - v_min) / (v_max - v_min)) * active_w)
+                return lm + zero_w
+            return lm + zero_w + ((val - v_min) / (v_max - v_min)) * act_w
 
-        def scale_y(pct):
-            ratio = min(pct / y_limit, 1.0)
-            return int(top_m + plot_h - ratio * plot_h)
+        def px_y(cnt):
+            return base_y - min(cnt / y_max, 1.0) * plot_h
 
-        # Barre OFF (orange)
-        if count_zero_pct > 0:
-            bar_h_off = scale_y(0) - scale_y(count_zero_pct)
-            painter.fillRect(left_m + 2, scale_y(count_zero_pct), zero_zone_w - 4, bar_h_off, QColor("#EB984E"))
-            painter.setPen(QColor("#EB984E"))
-            font_s = QFont("Arial", 7, QFont.Weight.Bold)
-            painter.setFont(font_s)
-            painter.drawText(left_m + 2, top_m + plot_h + 12, "OFF")
+        # ── Barre OFF ──────────────────────────────────────────────
+        if count_off_pct > 0:
+            bh  = int(max(base_y - px_y(count_off_pct), 1))
+            bx0 = lm + 2
+            bx1 = lm + zero_w - 2
+            bw  = max(bx1 - bx0, 1)
+            by  = base_y - bh
+            qp.fillRect(bx0, by, bw, bh, QColor("#c0724a"))
+            qp.setPen(QPen(QColor("#e8956b"), 1))
+            qp.drawRect(bx0, by, bw - 1, bh - 1)
+            qp.setPen(QColor("#e8956b"))
+            qp.setFont(QFont("Arial", 7, QFont.Weight.Bold))
+            qp.drawText(bx0, base_y + 4, bw, 14, Qt.AlignmentFlag.AlignCenter, "OFF")
 
-        # Barres actives (bleues)
-        painter.setPen(Qt.PenStyle.NoPen)
-        for i in range(len(counts_pct)):
-            if counts_pct[i] <= 0:
+        # ── Barres actives ─────────────────────────────────────────
+        fill_col    = QColor("#3a80b8")
+        outline_col = QColor("#6ab0e0")
+        for i, cnt in enumerate(counts_pct):
+            if cnt <= 0:
                 continue
-            x0 = scale_x(bin_edges[i])
-            x1 = scale_x(bin_edges[i + 1])
-            y0 = scale_y(counts_pct[i])
-            y_base = top_m + plot_h
-            bar_w_px = max(1, x1 - x0 - 1)
-            painter.fillRect(x0, y0, bar_w_px, y_base - y0, QColor("#5dade2"))
+            x0 = int(px_x(edges[i]))
+            x1 = int(px_x(edges[i + 1]))
+            bh = int(max(base_y - px_y(cnt), 1))
+            bw = max(x1 - x0, 1)
+            by = base_y - bh
+            qp.fillRect(x0, by, bw, bh, fill_col)
+            if bw >= 3:
+                qp.setPen(QPen(outline_col, 1))
+                qp.drawRect(x0, by, bw - 1, bh - 1)
 
-        # Lignes MIN / MAX
-        min_px = scale_x(v_min)
-        max_px = scale_x(v_max)
-        pen_min = QPen(QColor("#ffcc00"), 1, Qt.PenStyle.DashLine)
-        pen_max = QPen(QColor("#ff3333"), 1, Qt.PenStyle.DashLine)
-        painter.setPen(pen_min)
-        painter.drawLine(min_px, top_m, min_px, top_m + plot_h)
-        painter.setPen(pen_max)
-        painter.drawLine(max_px, top_m, max_px, top_m + plot_h)
+        # ── Repères MIN / MAX ──────────────────────────────────────
+        for val, col, txt in [(v_min, "#ffcc00", "MIN"), (v_max, "#ff4444", "MAX")]:
+            px = int(px_x(val))
+            qp.setPen(QPen(QColor(col), 1, Qt.PenStyle.DashLine))
+            qp.drawLine(px, tm, px, base_y)
+            qp.setPen(QColor(col))
+            qp.setFont(QFont("Arial", 7, QFont.Weight.Bold))
+            qp.drawText(px - 18, base_y + 18, 36, 13, Qt.AlignmentFlag.AlignCenter, txt)
 
-        font_xs = QFont("Arial", 7, QFont.Weight.Bold)
-        painter.setFont(font_xs)
-        painter.setPen(QColor("#ffcc00"))
-        painter.drawText(min_px - 8, top_m + plot_h + 22, "MIN")
-        painter.setPen(QColor("#ff3333"))
-        painter.drawText(max_px - 8, top_m + plot_h + 22, "MAX")
+        # ── Graduations Y ──────────────────────────────────────────
+        step_y = self._nice_step(y_max, max_ticks=5)
+        qp.setFont(QFont("Arial", 7))
+        tick = 0
+        while tick <= y_max:
+            py = int(px_y(tick))
+            qp.setPen(QPen(QColor("#2a2a2a"), 1, Qt.PenStyle.DotLine))
+            qp.drawLine(lm + 1, py, W - rm, py)
+            qp.setPen(QColor("#888"))
+            lbl_str = f"{int(tick // 1000)}k" if tick >= 1000 else str(int(tick))
+            qp.drawText(0, py - 7, lm - 4, 14,
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, lbl_str)
+            tick += step_y
 
-        # Graduations Y
-        painter.setFont(QFont("Arial", 7))
-        painter.setPen(QColor("#888888"))
-        for ratio in [0, 0.5, 1.0]:
-            py = int(top_m + plot_h - ratio * plot_h)
-            val_y = y_limit * ratio
-            label = f"{int(val_y)}%" if val_y == int(val_y) else f"{val_y:.1f}%"
-            painter.drawText(0, py + 4, left_m - 5, 12, Qt.AlignmentFlag.AlignRight, label)
+        # ── Graduations X par pas ronds ────────────────────────────
+        v_range  = v_max - v_min
+        step_x   = self._nice_step(v_range, max_ticks=6)
+        x_start  = math.ceil(v_min / step_x) * step_x if step_x else v_min
+        qp.setFont(QFont("Arial", 7))
+        cur = x_start
+        while cur <= v_max + 1e-9:
+            px = int(px_x(cur))
+            if lm <= px <= W - rm:
+                qp.setPen(QPen(QColor("#555"), 1))
+                qp.drawLine(px, base_y, px, base_y + 4)
+                qp.setPen(QColor("#888"))
+                lbl = f"{int(cur)}" if cur == int(cur) else f"{cur:.1f}"
+                qp.drawText(px - 15, base_y + 5, 30, 13,
+                            Qt.AlignmentFlag.AlignCenter, lbl)
+            cur += step_x
 
-        # Axe X label
-        painter.setPen(QColor("#888888"))
-        painter.setFont(QFont("Arial", 8))
-        painter.drawText(
-            QRect(left_m, h - 14, plot_w, 14),
-            Qt.AlignmentFlag.AlignCenter,
-            self._label_power
-        )
+        # ── Label X ────────────────────────────────────────────────
+        qp.setPen(QColor("#777"))
+        qp.setFont(QFont("Arial", 8))
+        qp.drawText(lm, H - 12, int(act_w), 12,
+                    Qt.AlignmentFlag.AlignCenter, self._label_power)
+
+        # ── Label Y vertical ───────────────────────────────────────
+        qp.save()
+        qp.translate(10, tm + plot_h // 2)
+        qp.rotate(-90)
+        qp.setPen(QColor("#777"))
+        qp.setFont(QFont("Arial", 8))
+        qp.drawText(-40, -7, 80, 14, Qt.AlignmentFlag.AlignCenter, self._label_count)
+        qp.restore()
+
+        qp.end()
 
 
-class ImagePreviewWidget(QWidget):
-    """Preview image avec QPainter — remplace Matplotlib imshow."""
+# ═══════════════════════════════════════════════════════════════════
+#  COLORBAR WIDGET Qt (fixe, hors pan/zoom)
+# ═══════════════════════════════════════════════════════════════════
+
+class _ColorbarWidget(QWidget):
+    """
+    Colorbar affichée en Qt pur, côte à côte avec le canvas.
+    Totalement indépendante du pan/zoom matplotlib.
+    Dégradé gray_r : noir (haut/fort) → blanc (bas/faible).
+    """
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(300, 300)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setStyleSheet("background-color: #1e1e1e;")
+        self._v_min  = 0.0
+        self._v_max  = 255.0
+        self._label  = "Laser Power"
+        self.setFixedWidth(52)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
 
-        self._pixmap = None
-        self._matrix = None
-        self._v_min = 0
-        self._v_max = 255
-        self._off_x = 0.0
-        self._off_y = 0.0
-        self._real_w = 0.0
-        self._real_h = 0.0
-        self._overscan_rects = []   # list of (x, y, w, h, label)
-        self._origin_dot = None     # (x, y) en coordonnées mm
-        self._placeholder = "Select an image to preview"
-        self._show_colorbar = True
+    def set_range(self, v_min, v_max, label="Laser Power"):
+        self._v_min = float(v_min)
+        self._v_max = float(v_max)
+        self._label = label
+        self.update()
 
-        # Transformation vue (zoom/pan)
-        self._view_scale = 1.0
-        self._view_offset = QPointF(0, 0)
-        self._panning = False
-        self._pan_start = QPoint()
+    def paintEvent(self, _):
+        qp = QPainter(self)
+        W, H = self.width(), self.height()
+        qp.fillRect(0, 0, W, H, QColor("#1e1e1e"))
+
+        tm, bm = 12, 12
+        bar_x  = 20
+        bar_w  = 14
+        bar_h  = H - tm - bm
+        if bar_h <= 0:
+            qp.end()
+            return
+
+        # Dégradé : haut = noir (valeur haute = laser fort) / bas = blanc
+        grad = QLinearGradient(bar_x, tm, bar_x, tm + bar_h)
+        grad.setColorAt(0.0, QColor("#000000"))
+        grad.setColorAt(1.0, QColor("#ffffff"))
+        qp.fillRect(bar_x, tm, bar_w, bar_h, QBrush(grad))
+
+        qp.setPen(QPen(QColor("#555"), 1))
+        qp.drawRect(bar_x, tm, bar_w - 1, bar_h - 1)
+
+        # Ticks
+        qp.setFont(QFont("Arial", 7))
+        ticks = [(0.0, self._v_max), (0.5, (self._v_max + self._v_min) / 2), (1.0, self._v_min)]
+        for ratio, val in ticks:
+            py = int(tm + ratio * bar_h)
+            qp.setPen(QPen(QColor("#888"), 1))
+            qp.drawLine(bar_x - 3, py, bar_x, py)
+            s = f"{int(val)}" if val == int(val) else f"{val:.1f}"
+            qp.drawText(0, py - 7, bar_x - 4, 14,
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, s)
+
+        # Label vertical
+        qp.save()
+        qp.translate(W - 4, tm + bar_h // 2)
+        qp.rotate(-90)
+        qp.setPen(QColor("#888"))
+        qp.setFont(QFont("Arial", 8))
+        qp.drawText(-50, -6, 100, 13, Qt.AlignmentFlag.AlignCenter, self._label)
+        qp.restore()
+        qp.end()
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  CANVAS IMAGE avec Pan / Zoom
+# ═══════════════════════════════════════════════════════════════════
+
+class _RasterCanvas(PanZoomMixin, QWidget):
+    """
+    Affiche le rendu matplotlib avec pan (clic-gauche) + zoom (molette).
+    v2 : auto-fit à l'ouverture d'une image.
+    """
+
+    def __init__(self, fig, parent=None):
+        super().__init__(parent)
+        self.init_pan_zoom(zoom_min=0.10, zoom_max=30.0, zoom_step=1.15)
         self.setMouseTracking(True)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setStyleSheet("background:#1e1e1e;")
 
-    def set_placeholder(self, text):
-        self._placeholder = text
-        self.update()
+        self._fig        = fig
+        self._pixmap     = None
+        self._auto_fit   = False
+        self._fit_next = False 
 
-    def update_image(self, matrix, off_x, off_y, real_w, real_h, v_min, v_max):
-        self._matrix = matrix
-        self._off_x = off_x
-        self._off_y = off_y
-        self._real_w = real_w
-        self._real_h = real_h
-        self._v_min = v_min
-        self._v_max = v_max
-        self._pixmap = self._matrix_to_pixmap(matrix, v_min, v_max)
-        self.update()
+        self._mpl_canvas = FigureCanvas(fig)
+        self._mpl_canvas.setParent(self)
+        self._mpl_canvas.setVisible(False)
 
-    def set_overscan_rects(self, rects):
-        """rects: list of (x_mm, y_mm, w_mm, h_mm, label)"""
-        self._overscan_rects = rects
-        self.update()
+    def request_auto_fit(self):
+        self._auto_fit = True
 
-    def set_origin_dot(self, x_mm, y_mm):
-        self._origin_dot = (x_mm, y_mm)
-        self.update()
+    def redraw(self, fit=False):
+        """Demande à matplotlib de redessiner et met à jour le pixmap.
+        Si fit=True, ajuste automatiquement le zoom pour remplir la vue.
+        """
+        from PyQt6.QtCore import QTimer
 
-    def clear(self):
-        self._pixmap = None
-        self._matrix = None
-        self._overscan_rects = []
-        self._origin_dot = None
-        self.update()
+        self._fig.tight_layout(pad=0.5)
 
-    def _matrix_to_pixmap(self, matrix, v_min, v_max):
-        """Convertit numpy matrix en QPixmap niveaux de gris inversés."""
-        if matrix is None:
-            return None
-        h, w = matrix.shape
-        # Normalisation et inversion (gravure laser : 0=laser off = blanc)
-        rng = v_max - v_min if v_max != v_min else 1
-        normalized = np.clip((matrix.astype(np.float32) - v_min) / rng, 0, 1)
-        gray = (normalized * 255).astype(np.uint8)
-        # Inversion pour affichage cohérent
-        gray_inv = 255 - gray
-        # Créer QImage RGB
-        rgb = np.stack([gray_inv, gray_inv, gray_inv], axis=2)
-        h_, w_, ch = rgb.shape
-        bytes_per_line = ch * w_
-        qimg = QImage(rgb.tobytes(), w_, h_, bytes_per_line, QImage.Format.Format_RGB888)
-        return QPixmap.fromImage(qimg)
+        self._mpl_canvas.draw()
 
-    def _mm_to_pixel(self, x_mm, y_mm, painter_rect):
-        """Convertit coordonnées mm en pixels écran."""
-        if self._real_w <= 0 or self._real_h <= 0:
-            return QPointF(0, 0)
+        # Capture du buffer matplotlib vers QPixmap
+        buf = self._mpl_canvas.buffer_rgba()
+        w, h = self._mpl_canvas.get_width_height()
+        qi = QImage(bytes(buf), w, h, QImage.Format.Format_RGBA8888)
+        self._pixmap = QPixmap.fromImage(qi)
 
-        # Zone de dessin (avec marges pour colorbar et axes)
-        margin_left = 50
-        margin_right = 60 if self._show_colorbar else 10
-        margin_top = 10
-        margin_bottom = 30
+        do_fit = fit or self._fit_next
+        self._fit_next = False
 
-        draw_w = painter_rect.width() - margin_left - margin_right
-        draw_h = painter_rect.height() - margin_top - margin_bottom
-
-        # Étendue mm totale visible (image + overscan)
-        x_min_mm = self._off_x + min(0, min((r[0] for r in self._overscan_rects), default=0))
-        y_min_mm = self._off_y
-        total_w_mm = self._real_w + abs(x_min_mm - self._off_x) + max(0, max(
-            (r[0] + r[2] - (self._off_x + self._real_w) for r in self._overscan_rects), default=0))
-        total_h_mm = self._real_h
-
-        if total_w_mm <= 0 or total_h_mm <= 0:
-            total_w_mm = self._real_w
-            total_h_mm = self._real_h
-
-        scale_x = draw_w / total_w_mm
-        scale_y = draw_h / total_h_mm
-
-        scale = min(scale_x, scale_y)
-
-        # Centrage
-        offset_x = margin_left + (draw_w - total_w_mm * scale) / 2
-        offset_y = margin_top + (draw_h - total_h_mm * scale) / 2
-
-        px = offset_x + (x_mm - x_min_mm) * scale
-        py = offset_y + (self._real_h - (y_mm - y_min_mm)) * scale  # Y inversé
-        return QPointF(px, py), scale
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-
-        w, h = self.width(), self.height()
-        painter.fillRect(0, 0, w, h, QColor("#1e1e1e"))
-
-        # Marges
-        margin_left = 50
-        margin_right = 60 if self._show_colorbar else 10
-        margin_top = 10
-        margin_bottom = 30
-        draw_w = w - margin_left - margin_right
-        draw_h = h - margin_top - margin_bottom
-
-        # Placeholder si pas d'image
-        if self._pixmap is None:
-            painter.setPen(QColor("#444444"))
-            painter.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-            painter.drawText(
-                QRect(0, 0, w, h),
-                Qt.AlignmentFlag.AlignCenter,
-                self._placeholder
-            )
-            return
-
-        # Calcul de l'échelle
-        if self._real_w <= 0 or self._real_h <= 0:
-            return
-
-        # Étendue totale incluant overscan
-        x_ranges = [self._off_x, self._off_x + self._real_w]
-        y_ranges = [self._off_y, self._off_y + self._real_h]
-        for rx, ry, rw, rh, _ in self._overscan_rects:
-            x_ranges.extend([rx, rx + rw])
-            y_ranges.extend([ry, ry + rh])
-
-        x_min_mm = min(x_ranges)
-        x_max_mm = max(x_ranges)
-        y_min_mm = min(y_ranges)
-        y_max_mm = max(y_ranges)
-
-        total_w_mm = x_max_mm - x_min_mm
-        total_h_mm = y_max_mm - y_min_mm
-
-        if total_w_mm <= 0:
-            total_w_mm = 1
-        if total_h_mm <= 0:
-            total_h_mm = 1
-
-        # Padding visuel
-        pad = 0.5
-        x_min_mm -= pad
-        x_max_mm += pad
-        y_min_mm -= pad
-        y_max_mm += pad
-        total_w_mm = x_max_mm - x_min_mm
-        total_h_mm = y_max_mm - y_min_mm
-
-        scale_x = draw_w / total_w_mm
-        scale_y = draw_h / total_h_mm
-        scale = min(scale_x, scale_y)
-
-        # Centrage dans la zone de dessin
-        off_draw_x = margin_left + (draw_w - total_w_mm * scale) / 2
-        off_draw_y = margin_top + (draw_h - total_h_mm * scale) / 2
-
-        def to_px(x_mm, y_mm):
-            px = off_draw_x + (x_mm - x_min_mm) * scale
-            py = off_draw_y + (y_max_mm - y_mm) * scale  # Y inversé
-            return QPointF(px, py)
-
-        # ── Dessin de l'image ──
-        img_tl = to_px(self._off_x, self._off_y + self._real_h)
-        img_br = to_px(self._off_x + self._real_w, self._off_y)
-        img_rect = QRect(
-            int(img_tl.x()), int(img_tl.y()),
-            int(img_br.x() - img_tl.x()), int(img_br.y() - img_tl.y())
-        )
-        painter.drawPixmap(img_rect, self._pixmap)
-
-        # ── Grille cyan ──
-        grid_pen = QPen(QColor(0, 255, 255, 80), 0.5)
-        painter.setPen(grid_pen)
-        n_lines = 8
-        for i in range(n_lines + 1):
-            frac = i / n_lines
-            # Lignes verticales
-            x_mm = x_min_mm + frac * total_w_mm
-            p1 = to_px(x_mm, y_min_mm)
-            p2 = to_px(x_mm, y_max_mm)
-            painter.drawLine(p1, p2)
-            # Lignes horizontales
-            y_mm = y_min_mm + frac * total_h_mm
-            p1 = to_px(x_min_mm, y_mm)
-            p2 = to_px(x_max_mm, y_mm)
-            painter.drawLine(p1, p2)
-
-        # ── Zones overscan ──
-        for rx, ry, rw, rh, label in self._overscan_rects:
-            tl = to_px(rx, ry + rh)
-            br = to_px(rx + rw, ry)
-            
-            # Calcul du rectangle en pixels
-            px_x = int(tl.x())
-            px_y = int(tl.y())
-            px_w = int(br.x() - tl.x())
-            px_h = int(br.y() - tl.y())
-            rect_px = QRect(px_x, px_y, px_w, px_h)
-
-            # 1. Détermination du style de hachures selon la direction
-            # Si le label contient '90', on simule le balayage horizontal
-            if "90" in label:
-                hatch_style = Qt.BrushStyle.HorPattern  # Lignes -
-            else:
-                hatch_style = Qt.BrushStyle.VerPattern  # Lignes |
-
-            # 2. Dessin du fond hachuré
-            painter.setBrush(QBrush(QColor(52, 152, 219, 60), hatch_style))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRect(rect_px)
-
-            # 3. Dessin de la bordure pointillée
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            pen_dashed = QPen(QColor("#3498db"), 1, Qt.PenStyle.DashLine)
-            painter.setPen(pen_dashed)
-            painter.drawRect(rect_px)
-
-            # 4. Dessin du Label avec Rotation
-            painter.save() 
-            
-            painter.setPen(QColor("#3498db"))
-            # Augmenté à 8 pour la 4K, Arial Bold
-            font = QFont("Arial", 8, QFont.Weight.Bold)
-            painter.setFont(font)
-            metrics = QFontMetrics(font)
-            
-            # Positionnement au centre du rectangle d'overscan
-            cx = px_x + px_w / 2
-            cy = px_y + px_h / 2
-            painter.translate(cx, cy)
-
-            # Application de la rotation
-            if "OVERSCAN_90" in label:
-                painter.rotate(90)
-            elif "OVERSCAN_-90" in label:
-                painter.rotate(-90)
-            # Pour le mode vertical standard, on reste à 0° ou on peut mettre 90° aussi
-            
-            display_text = "OVERSCAN" 
-            tw = metrics.horizontalAdvance(display_text)
-            th = metrics.ascent()
-            
-            # Centrage parfait du texte sur le point pivot
-            painter.drawText(-tw // 2, th // 2 - 2, display_text)
-            
-            painter.restore()
-
-        # ── Rectangle overscan global pointillé ──
-        all_x_min = min((r[0] for r in self._overscan_rects), default=self._off_x)
-        all_y_min = min((r[1] for r in self._overscan_rects), default=self._off_y)
-        all_x_max = max((r[0] + r[2] for r in self._overscan_rects), default=self._off_x + self._real_w)
-        all_y_max = max((r[1] + r[3] for r in self._overscan_rects), default=self._off_y + self._real_h)
-
-        if self._overscan_rects:
-            tl_g = to_px(all_x_min, all_y_max)
-            br_g = to_px(all_x_max, all_y_min)
-            global_rect = QRect(int(tl_g.x()), int(tl_g.y()), int(br_g.x() - tl_g.x()), int(br_g.y() - tl_g.y()))
-            pen_global = QPen(QColor("#3498db"), 1.5, Qt.PenStyle.DashLine)
-            painter.setPen(pen_global)
-            painter.drawRect(global_rect)
-
-        # ── Point d'origine (0,0) ──
-        origin_px = to_px(0, 0)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor("#ff0000")))
-        painter.drawEllipse(origin_px, 5, 5)
-
-        # ── Axes graduations ──
-        painter.setPen(QColor("#888888"))
-        painter.setFont(QFont("Arial", 8))
-        n_ticks = 5
-        for i in range(n_ticks + 1):
-            frac = i / n_ticks
-            # X
-            x_mm_val = x_min_mm + frac * total_w_mm
-            px_pos = to_px(x_mm_val, y_min_mm)
-            painter.drawText(
-                QRect(int(px_pos.x()) - 20, int(off_draw_y + draw_h + 2), 40, 14),
-                Qt.AlignmentFlag.AlignCenter,
-                f"{x_mm_val:.1f}"
-            )
-            # Y
-            y_mm_val = y_min_mm + frac * total_h_mm
-            py_pos = to_px(x_min_mm, y_mm_val)
-            painter.drawText(
-                QRect(0, int(py_pos.y()) - 6, margin_left - 4, 12),
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                f"{y_mm_val:.1f}"
-            )
-
-        # ── Colorbar Intégrée ──
-        if self._show_colorbar:
-            # Récupérer la largeur réelle du widget pour rester relatif au bord droit
-            w = self.width()
-            
-            # Paramètres ajustables
-            cbar_w = 40  # On élargit encore un peu pour la 4K
-            margin_right = 80 # Espace réservé depuis le bord droit de la fenêtre
-            
-            cbar_x = w - margin_right
-            cbar_y = margin_top
-            cbar_h = draw_h
-
-            # 1. Dégradé (Bas = Blanc, Haut = Noir)
-            grad = QLinearGradient(0, cbar_y + cbar_h, 0, cbar_y)
-            grad.setColorAt(0.0, QColor(255, 255, 255)) 
-            grad.setColorAt(1.0, QColor(0, 0, 0))
-
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            painter.setBrush(QBrush(grad))
-            painter.setPen(QPen(QColor("#444444"), 2)) # Bordure plus épaisse en 4K
-            painter.drawRoundedRect(cbar_x, cbar_y, cbar_w, cbar_h, 5, 5)
-
-            # 2. Textes Min/Max (Placés à GAUCHE de la barre)
-            # On augmente la taille de la police pour la 4K
-            font = QFont("Segoe UI", 10, QFont.Weight.Bold)
-            painter.setFont(font)
-            metrics = QFontMetrics(font)
-            
-            painter.setPen(QColor("#AAAAAA"))
-            txt_max = f"{int(self._v_max)}"
-            txt_min = f"{int(self._v_min)}"
-            
-            # Positionnement à gauche de la barre avec une marge de 10px
-            painter.drawText(cbar_x - metrics.horizontalAdvance(txt_max) - 10, 
-                             cbar_y + metrics.ascent(), txt_max)
-            painter.drawText(cbar_x - metrics.horizontalAdvance(txt_min) - 10, 
-                             cbar_y + cbar_h, txt_min)
-
-            # 3. TEXTE "POWER" AU CENTRE (Correction de visibilité)
-            common_dict = getattr(self.parent(), 'common', {})
-            label_text = common_dict.get("power_pct", "POWER (%)")
-            painter.save()
-            painter.setPen(QColor(255, 255, 255))
-            
-            # Centre exact de la barre
-            cx = cbar_x + (cbar_w / 2)
-            cy = cbar_y + (cbar_h / 2)
-            
-            painter.translate(cx, cy)
-            painter.rotate(-90)
-            
-            # Couleur contrastée pour être visible sur le dégradé
-            # On utilise un gris qui tranche (150, 150, 150)
-            painter.setPen(QColor(250, 150, 150))
-            
-            tw = metrics.horizontalAdvance(label_text)
-            th = metrics.ascent()
-            
-            # Dessin centré : -largeur/2 et hauteur/2
-            # th // 2 permet d'équilibrer le texte sur la ligne de base
-            painter.drawText(-tw // 2, th // 2, label_text)
-            
-            painter.restore()
-
-        painter.end()
-
-
-    def wheelEvent(self, event):
-        delta = event.angleDelta().y()
-        self._view_scale *= (1.1 if delta > 0 else 0.9)
-        self._view_scale = max(0.5, min(10.0, self._view_scale))
-        self.update()
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.MiddleButton:
-            self._panning = True
-            self._pan_start = event.pos()
-
-    def mouseMoveEvent(self, event):
-        if self._panning:
-            delta = event.pos() - self._pan_start
-            self._view_offset += QPointF(delta.x(), delta.y())
-            self._pan_start = event.pos()
+        if do_fit:
+            self._needs_fit = True
+            QTimer.singleShot(0, self.fit_to_view)
+        else:
             self.update()
 
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.MiddleButton:
-            self._panning = False
+    def fit_to_view(self):
+        """Calcule zoom + pan pour que le pixmap remplisse le widget (centré, sans déformation)."""
+        if self._pixmap is None:
+            self.reset_pan_zoom()
+            return
+        cw, ch = self.width(), self.height()
+        pw, ph = self._pixmap.width(), self._pixmap.height()
+        margin = 0.96
+        zoom = min(cw / pw, ch / ph) * margin
+        pan_x = (cw - pw * zoom) / 2.0
+        pan_y = (ch - ph * zoom) / 2.0
+        self._pz_zoom = zoom
+        self._pz_pan  = QPointF(pan_x, pan_y)
 
 
-# ─────────────────────────────────────────────
-#  RASTER VIEW PRINCIPALE
-# ─────────────────────────────────────────────
+        self.update()
+        self._on_pan_zoom_changed()
+
+    def reset_view(self):
+        self.fit_to_view()
+
+    def paintEvent(self, _):
+        qp = QPainter(self)
+        qp.fillRect(0, 0, self.width(), self.height(), QColor("#1e1e1e"))
+
+        if self._pixmap is None:
+            qp.setPen(QColor("#444"))
+            qp.setFont(QFont("Arial", 11))
+            qp.drawText(0, 0, self.width(), self.height(),
+                        Qt.AlignmentFlag.AlignCenter, "Select an image…")
+            qp.end()
+            return
+
+        self.apply_pan_zoom_transform(qp)
+        qp.drawPixmap(0, 0, self._pixmap)
+        qp.end()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if self._pixmap is not None:
+            if self._needs_fit :
+                self.fit_to_view()
+            else:
+                self.update()
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  VUE PRINCIPALE
+# ═══════════════════════════════════════════════════════════════════
 
 class RasterViewQt(QWidget):
+
     def __init__(self, parent, controller):
         super().__init__(parent)
-        self.controller = controller   # MainWindowQt
-        self.app = controller          # Alias de compatibilité
+        self.controller = controller
 
-        lang = self.controller.config_manager.get_item("machine_settings", "language")
+        lang = controller.config_manager.get_item("machine_settings", "language")
         if not lang or lang not in TRANSLATIONS:
             lang = "English"
 
-        self.common = TRANSLATIONS[lang]["common"]
-        self.stats_texts = TRANSLATIONS[lang]["stats"]
-        self.origin_translations = TRANSLATIONS[lang]["origin_options"]
+        self._lang   = lang
+        self.t       = TRANSLATIONS[lang]["common"]
+        self.t_stats = TRANSLATIONS[lang]["stats"]
+        self.t_orig  = TRANSLATIONS[lang]["origin_options"]
 
-        self.version = getattr(self.controller, "version", "Qt")
+        self.engine   = GCodeEngine()
+        self._loading = True
 
-        self._after_id = None   # QTimer handle
-        self.engine = GCodeEngine()
-
-        self.base_path, self.application_path = get_app_paths()
         self.input_image_path = ""
-        self.output_dir = self.application_path
+        self.output_dir       = ""
+        _, self.application_path = get_app_paths()
+        self.output_dir       = self.application_path
+        self.version          = getattr(controller, "version", "1.0")
 
-        self.controls = {}
-        self._last_matrix = None
-        self._last_geom = None
+        self.controls        = {}
+        self.translation_map = {}
+
+        self._debounce_timer = QTimer(self)
+        self._debounce_timer.setSingleShot(True)
+        self._debounce_timer.timeout.connect(self._do_update_preview)
+
+        self._fig      = Figure(figsize=(5, 5), facecolor="#1e1e1e")
+        self._ax       = None
+        self._img_plot = None
+        self._cbar     = None
+
+        self._origin_marker    = None
+        self._overscan_patches = []
+        self._overscan_texts   = []
+        self._rect_overscan    = None
+        self._placeholder_text = None
+
+        self._last_matrix        = None
+        self._last_geom          = None
         self.estimated_file_size = "N/A"
-        self._estimated_time = 0
+        self._source_img_cache   = None
+        self._source_img_path    = ""
 
-        self.is_locked = True
+        self._build_ui()
+        self._loading = False
+        self.load_settings()
 
-        # Variables état
-        self._raster_dir = "horizontal"
-        self._invert = False
-        self._force_width = False
-        self._origin_pointer = False
-        self._include_frame = False
+        QTimer.singleShot(500, self._initial_render)
 
-        self.setStyleSheet("background-color: #2b2b2b; color: white;")
-        self._setup_ui()
-        self._load_settings()
+    # ── Construction de l'UI ─────────────────────────────────────────
 
-        # Rendu initial
-        if self.input_image_path and os.path.exists(self.input_image_path):
-            self.loading_overlay = LoadingOverlay(self, text="Loading...")
-            QTimer.singleShot(250, self._initial_render)
-        else:
-            QTimer.singleShot(0, self.update_preview)
+    def _build_ui(self):
+        root = QHBoxLayout(self)
+        root.setContentsMargins(4, 4, 4, 4)
+        root.setSpacing(4)
 
-    def _initial_render(self):
-        try:
-            self.update_preview()
-        finally:
-            if hasattr(self, "loading_overlay"):
-                self.loading_overlay.hide()
-                self.loading_overlay.deleteLater()
+        sidebar = self._build_sidebar()
+        right   = self._build_right_panel()
 
-    # ─────────────────────────────────────────
-    #  SETUP UI PRINCIPAL
-    # ─────────────────────────────────────────
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(sidebar)
+        splitter.addWidget(right)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([390, 900])
+        root.addWidget(splitter)
 
-    def _setup_ui(self):
-        main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(5, 5, 5, 5)
-        main_layout.setSpacing(5)
+    def _build_sidebar(self):
+        sidebar = QFrame()
+        sidebar.setFixedWidth(390)
+        sidebar.setStyleSheet(
+            "QFrame{background:#1e1e1e;border-right:1px solid #333;}"
+            "QLabel{border:none;background:transparent;color:#ddd;}"
+        )
+        lo = QVBoxLayout(sidebar)
+        lo.setContentsMargins(8, 8, 8, 8)
+        lo.setSpacing(6)
 
-        # ── SIDEBAR GAUCHE ──
-        self.sidebar = QFrame()
-        self.sidebar.setFixedWidth(390)
-        self.sidebar.setStyleSheet("QFrame { background-color: #2b2b2b; }")
-        sidebar_layout = QVBoxLayout(self.sidebar)
-        sidebar_layout.setContentsMargins(5, 5, 5, 5)
-        sidebar_layout.setSpacing(5)
+        lo.addWidget(self._make_file_buttons())
+        lo.addWidget(self._make_profile_buttons())
 
-        # Fichiers
-        self._build_file_frame(sidebar_layout)
-        # Profils
-        self._build_profile_frame(sidebar_layout)
-        # Onglets
-        self._build_tabs(sidebar_layout)
-        # Bouton simuler
-        self.btn_gen = QPushButton(self.common.get("simulate_gcode", "Simulate G-Code"))
-        self.btn_gen.setFixedHeight(50)
-        self.btn_gen.setStyleSheet("""
-            QPushButton {
-                background-color: #1f538d;
-                color: white;
-                font-weight: bold;
-                font-size: 13px;
-                border-radius: 6px;
-                border: none;
-            }
-            QPushButton:hover { background-color: #2a6dbd; }
-            QPushButton:pressed { background-color: #17406e; }
-        """)
-        self.btn_gen.clicked.connect(self.generate_gcode)
-        sidebar_layout.addWidget(self.btn_gen)
-
-        main_layout.addWidget(self.sidebar)
-
-        # ── VIEWPORT DROIT ──
-        right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(5)
-
-        # Preview image
-        self.image_preview = ImagePreviewWidget()
-        self.image_preview.set_placeholder(self.common.get("choose_image", "Select an image to preview"))
-        right_layout.addWidget(self.image_preview, stretch=3)
-
-        # Stats + Histogramme
-        self._build_stats_panel(right_layout)
-
-        main_layout.addWidget(right_widget, stretch=1)
-
-    # ─────────────────────────────────────────
-    #  FICHIERS
-    # ─────────────────────────────────────────
-
-    def _build_file_frame(self, parent_layout):
-        frame = QFrame()
-        frame.setStyleSheet("QFrame { background-color: #333333; border-radius: 6px; }")
-        layout = QVBoxLayout(frame)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(4)
-
-        self.btn_input = QPushButton(self.common.get("select_image", "Select Image"))
-        self.btn_input.setFixedHeight(32)
-        self.btn_input.setStyleSheet(self._btn_style())
-        self.btn_input.clicked.connect(self.select_input)
-        layout.addWidget(self.btn_input)
-
-        self.btn_output = QPushButton(self.common.get("select_output", "Select Output"))
-        self.btn_output.setFixedHeight(32)
-        self.btn_output.setStyleSheet(self._btn_style())
-        self.btn_output.clicked.connect(self.select_output)
-        layout.addWidget(self.btn_output)
-
-        parent_layout.addWidget(frame)
-
-    def _build_profile_frame(self, parent_layout):
-        frame = QWidget()
-        layout = QHBoxLayout(frame)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-
-        btn_load = QPushButton(self.common.get("import_profile", "Import Profile"))
-        btn_load.setFixedHeight(28)
-        btn_load.setStyleSheet(self._btn_style(color="#444444"))
-        btn_load.clicked.connect(self.load_profile_from)
-        layout.addWidget(btn_load)
-
-        btn_save = QPushButton(self.common.get("export_profile", "Export Profile"))
-        btn_save.setFixedHeight(28)
-        btn_save.setStyleSheet(self._btn_style(color="#444444"))
-        btn_save.clicked.connect(self.export_profile)
-        layout.addWidget(btn_save)
-
-        parent_layout.addWidget(frame)
-
-    # ─────────────────────────────────────────
-    #  ONGLETS
-    # ─────────────────────────────────────────
-
-    def _build_tabs(self, parent_layout):
-        self.tabview = QTabWidget()
-        self.tabview.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #444444;
-                background-color: #2b2b2b;
-            }
+        self._tabs = QTabWidget()
+        self._tabs.setStyleSheet("""
+            QTabWidget::pane { border: 1px solid #333; background: #252525; }
             QTabBar::tab {
-                background-color: #3a3a3a;
-                color: #aaaaaa;
-                padding: 5px 12px;
-                border: none;
-                font-size: 11px;
+                background: #2b2b2b; color: #aaa; padding: 5px 12px;
+                border: 1px solid #333; border-bottom: none; border-radius: 4px 4px 0 0;
             }
-            QTabBar::tab:selected {
-                background-color: #1f538d;
-                color: white;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #444444;
-                color: white;
-            }
+            QTabBar::tab:selected { background: #1F6AA5; color: white; }
         """)
 
-        self.tab_geom_name = self.common.get("geometry", "Geometry")
-        self.tab_img_name = self.common.get("image", "Image")
-        self.tab_laser_name = self.common.get("laser", "Laser")
-        self.tab_gcode_name = self.common.get("gcode", "G-Code")
+        self._tab_geom  = self._make_scrollable_tab()
+        self._tab_img   = self._make_scrollable_tab()
+        self._tab_laser = self._make_scrollable_tab()
+        self._tab_gcode = self._make_scrollable_tab()
 
-        tab_geom = self._make_scroll_tab()
-        tab_img = self._make_scroll_tab()
-        tab_laser = self._make_scroll_tab()
-        tab_gcode = self._make_scroll_tab()
+        self._tabs.addTab(self._tab_geom,  self.t.get("geometry", "Geometry"))
+        self._tabs.addTab(self._tab_img,   self.t.get("image",    "Image"))
+        self._tabs.addTab(self._tab_laser, self.t.get("laser",    "Laser"))
+        self._tabs.addTab(self._tab_gcode, self.t.get("gcode",    "G-Code"))
 
-        self.tabview.addTab(tab_geom["widget"], self.tab_geom_name)
-        self.tabview.addTab(tab_img["widget"], self.tab_img_name)
-        self.tabview.addTab(tab_laser["widget"], self.tab_laser_name)
-        self.tabview.addTab(tab_gcode["widget"], self.tab_gcode_name)
+        self._setup_tab_geom()
+        self._setup_tab_img()
+        self._setup_tab_laser()
+        self._setup_tab_gcode()
 
-        self._setup_tab_geometry(tab_geom["layout"])
-        self._setup_tab_image(tab_img["layout"])
-        self._setup_tab_laser(tab_laser["layout"])
-        self._setup_tab_gcode(tab_gcode["layout"])
+        lo.addWidget(self._tabs, stretch=1)
 
-        parent_layout.addWidget(self.tabview, stretch=1)
+        self.btn_gen = QPushButton(self.t.get("simulate_gcode", "Simulate / Export G-Code"))
+        self.btn_gen.setFixedHeight(50)
+        self.btn_gen.setStyleSheet(
+            "QPushButton{background:#1f538d;color:white;border-radius:8px;"
+            "font-size:13px;font-weight:bold;border:none;}"
+            "QPushButton:hover{background:#2a6dbd;}"
+        )
+        self.btn_gen.clicked.connect(self.generate_gcode)
+        self.translation_map[self.btn_gen] = "simulate_gcode"
+        lo.addWidget(self.btn_gen)
 
-    def _make_scroll_tab(self):
-        """Crée un onglet avec QScrollArea interne."""
-        container = QWidget()
-        outer = QVBoxLayout(container)
-        outer.setContentsMargins(0, 0, 0, 0)
+        return sidebar
 
+    def _make_scrollable_tab(self):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("background: transparent;")
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.verticalScrollBar().setStyleSheet("""
-            QScrollBar:vertical { width: 8px; background: #2b2b2b; }
-            QScrollBar::handle:vertical { background: #555555; border-radius: 4px; min-height: 20px; }
-            QScrollBar::handle:vertical:hover { background: #1f538d; }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
-        """)
+        scroll.setStyleSheet("background:transparent;")
+        container = QWidget()
+        container.setStyleSheet("background:transparent;")
+        lo = QVBoxLayout(container)
+        lo.setAlignment(Qt.AlignmentFlag.AlignTop)
+        lo.setContentsMargins(6, 6, 6, 6)
+        lo.setSpacing(4)
+        scroll.setWidget(container)
+        scroll._inner = lo
+        return scroll
 
-        content = QWidget()
-        content.setStyleSheet("background: transparent;")
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
-        layout.addStretch()
+    def _make_file_buttons(self):
+        f = QFrame()
+        f.setStyleSheet("QFrame{background:#333;border-radius:6px;}")
+        lo = QVBoxLayout(f)
+        lo.setContentsMargins(6, 6, 6, 6)
+        lo.setSpacing(4)
 
-        scroll.setWidget(content)
-        outer.addWidget(scroll)
+        self.btn_input = QPushButton(self.t.get("select_image", "Select Image"))
+        self.btn_input.setFixedHeight(32)
+        self.btn_input.setStyleSheet(self._btn_style())
+        self.btn_input.clicked.connect(self.select_input)
+        self.translation_map[self.btn_input] = "select_image"
 
-        return {"widget": container, "layout": layout}
+        self.btn_output = QPushButton(self.t.get("select_output", "Select Output Folder"))
+        self.btn_output.setFixedHeight(32)
+        self.btn_output.setStyleSheet(self._btn_style())
+        self.btn_output.clicked.connect(self.select_output)
+        self.translation_map[self.btn_output] = "select_output"
 
-    # ─────────────────────────────────────────
-    #  TAB GÉOMÉTRIE
-    # ─────────────────────────────────────────
+        lo.addWidget(self.btn_input)
+        lo.addWidget(self.btn_output)
+        return f
 
-    def _setup_tab_geometry(self, layout):
-        # Insérer avant le stretch final
-        layout.insertWidget(layout.count() - 1, self._make_label(self.common.get("raster_mode", "Raster Mode")))
+    def _make_profile_buttons(self):
+        f = QFrame()
+        f.setStyleSheet("QFrame{background:transparent;border:none;}")
+        lo = QHBoxLayout(f)
+        lo.setContentsMargins(0, 0, 0, 0)
+        lo.setSpacing(6)
+
+        self.btn_load_prof = QPushButton(self.t.get("import_profile", "Import Profile"))
+        self.btn_load_prof.setFixedHeight(28)
+        self.btn_load_prof.setStyleSheet(self._btn_style(bg="#444"))
+        self.btn_load_prof.clicked.connect(self.load_profile_from)
+        self.translation_map[self.btn_load_prof] = "import_profile"
+
+        self.btn_save_prof = QPushButton(self.t.get("export_profile", "Export Profile"))
+        self.btn_save_prof.setFixedHeight(28)
+        self.btn_save_prof.setStyleSheet(self._btn_style(bg="#444"))
+        self.btn_save_prof.clicked.connect(self.export_profile)
+        self.translation_map[self.btn_save_prof] = "export_profile"
+
+        lo.addWidget(self.btn_load_prof, 1)
+        lo.addWidget(self.btn_save_prof, 1)
+        return f
+
+    # ── Onglets ───────────────────────────────────────────────────────
+
+    def _setup_tab_geom(self):
+        lo = self._tab_geom._inner
+
+        lbl_mode = QLabel(self.t.get("raster_mode", "Raster Mode"))
+        lbl_mode.setStyleSheet("color:#ddd;font-size:12px;")
+        lo.addWidget(lbl_mode)
+        self.translation_map[lbl_mode] = "raster_mode"
 
         self._raster_map = {
-            "horizontal": self.common.get("horizontal", "Horizontal"),
-            "vertical": self.common.get("vertical", "Vertical")
+            "horizontal": self.t.get("horizontal", "Horizontal"),
+            "vertical":   self.t.get("vertical",   "Vertical"),
         }
         self._raster_map_inv = {v: k for k, v in self._raster_map.items()}
+        self._raster_mode = "horizontal"
 
-        self.raster_dir_btn = SegmentedButton(list(self._raster_map.values()))
-        self.raster_dir_btn.set(self._raster_map["horizontal"])
-        self.raster_dir_btn.valueChanged.connect(self._on_raster_dir_change)
-        layout.insertWidget(layout.count() - 1, self.raster_dir_btn)
+        mode_row = QHBoxLayout()
+        self._btn_raster = {}
+        for key, lbl in self._raster_map.items():
+            b = QPushButton(lbl)
+            b.setCheckable(True)
+            b.setFixedHeight(28)
+            b.setStyleSheet(self._seg_btn_style())
+            b.clicked.connect(lambda _, k=key: self._on_raster_change(k))
+            mode_row.addWidget(b)
+            self._btn_raster[key] = b
+        self._btn_raster["horizontal"].setChecked(True)
+        lo.addLayout(mode_row)
+        lo.addSpacing(6)
 
-        self.width_label_widget = self._insert_input_pair(
-            layout, self.common.get("target_width", "Target Width"), 5, 400, 30.0, "width"
-        )
+        self.width_label_widget, _ = self._add_slider_input(
+            lo, self.t.get("target_width", "Target Width"), 5, 400, 30.0, "width")
 
-        # Force width
-        self.sw_force_width = self.create_switch(
-            layout=layout, 
-            label_key=self.common.get("force_width", "Force Width"), 
-            key="force_width"
-        )
-        
-        self.sw_force_width.stateChanged.connect(lambda: QTimer.singleShot(10, self.update_preview))
-        
-        row_widget = layout.itemAt(layout.count() - 2).widget() 
-        self.force_w_label = row_widget.findChild(QLabel)
+        sw_row = QHBoxLayout()
+        self.lbl_force_width = QLabel(self.t.get("force_width", "Force Exact Width"))
+        self.lbl_force_width.setStyleSheet("color:#ddd;font-size:12px;")
+        self.translation_map[self.lbl_force_width] = "force_width"
+        self.sw_force_width = Switch()
+        self.sw_force_width.toggled.connect(self._on_switch_with_delay)
+        sw_row.addWidget(self.lbl_force_width)
+        sw_row.addStretch()
+        sw_row.addWidget(self.sw_force_width)
+        lo.addLayout(sw_row)
 
-        self._insert_input_pair(layout, self.common.get("line_step", "Line Step"), 0.01, 1.0, 0.1307, "line_step", precision=4)
-        self._insert_input_pair(layout, self.common.get("dpi_resolution", "DPI"), 10, 1200, 254, "dpi", is_int=True)
+        self._add_slider_input(lo, self.t.get("line_step", "Line Step"), 0.01, 1.0, 0.1307, "line_step", precision=4)
+        self._add_slider_input(lo, self.t.get("dpi_resolution", "DPI"), 10, 1200, 254, "dpi", is_int=True)
+        lo.addSpacing(6)
 
-        # Origin mode
-        ORIGIN_KEYS = ["Lower-Left", "Upper-Left", "Lower-Right", "Upper-Right", "Center", "Custom"]
-        options = [(k, self.origin_translations.get(k, k)) for k in ORIGIN_KEYS]
-        self._insert_dropdown(layout, self.common.get("origin_point", "Origin"), options, "origin_mode")
-
-        # Custom offset
+        ORIGIN_KEYS = ["Lower-Left","Upper-Left","Lower-Right","Upper-Right","Center","Custom"]
+        origin_opts = [(k, self.t_orig.get(k, k)) for k in ORIGIN_KEYS]
+        self._add_combo(lo, self.t.get("origin_point", "Origin Point"), origin_opts, "origin_mode",
+                        callback=self._on_origin_change)
         self.custom_offset_frame = QFrame()
-        co_layout = QHBoxLayout(self.custom_offset_frame)
-        co_layout.setContentsMargins(0, 0, 0, 0)
-        self._insert_simple_input_into(co_layout, self.common.get("custom_offset_x", "X"), 0.0, "custom_x")
-        self._insert_simple_input_into(co_layout, self.common.get("custom_offset_y", "Y"), 0.0, "custom_y")
         self.custom_offset_frame.setVisible(False)
-        layout.insertWidget(layout.count() - 1, self.custom_offset_frame)
+        cf_lo = QVBoxLayout(self.custom_offset_frame)
+        cf_lo.setContentsMargins(0, 0, 0, 0)
+        self._add_simple_input(cf_lo, self.t.get("custom_offset_x", "Custom X"), 0.0, "custom_x")
+        self._add_simple_input(cf_lo, self.t.get("custom_offset_y", "Custom Y"), 0.0, "custom_y")
+        lo.addWidget(self.custom_offset_frame)
 
-    # ─────────────────────────────────────────
-    #  TAB IMAGE
-    # ─────────────────────────────────────────
+    def _setup_tab_img(self):
+        lo = self._tab_img._inner
+        self._add_slider_input(lo, self.t.get("contrast", "Contrast"), -1.0, 1.0, 0.0, "contrast")
+        self._add_slider_input(lo, self.t.get("gamma",    "Gamma"),     0.1, 6.0, 1.0, "gamma")
+        self._add_slider_input(lo, self.t.get("thermal",  "Thermal"),   0.1, 3.0, 1.5, "thermal")
 
-    def _setup_tab_image(self, layout):
-        self._insert_input_pair(layout, self.common.get("contrast", "Contrast"), -1.0, 1.0, 0.0, "contrast")
-        self._insert_input_pair(layout, self.common.get("gamma", "Gamma"), 0.1, 6.0, 1.0, "gamma")
-        self._insert_input_pair(layout, self.common.get("thermal", "Thermal"), 0.1, 3.0, 1.5, "thermal")
+        sw_row = QHBoxLayout()
+        lbl_inv = QLabel(self.t.get("invert_color", "Invert Colors"))
+        lbl_inv.setStyleSheet("color:#ddd;font-size:12px;")
+        self.translation_map[lbl_inv] = "invert_color"
+        self.sw_invert = Switch()
+        self.sw_invert.toggled.connect(self._on_switch_with_delay)
+        sw_row.addWidget(lbl_inv)
+        sw_row.addStretch()
+        sw_row.addWidget(self.sw_invert)
+        lo.addLayout(sw_row)
 
-        # Utilisation de la méthode centralisée pour l'inversion des couleurs
-        self.sw_invert = self.create_switch(
-            layout=layout, 
-            label_key=self.common.get("invert_color", "Invert Colors"), 
-            key="invert"
+    def _setup_tab_laser(self):
+        lo = self._tab_laser._inner
+        self._add_slider_input(lo, self.t.get("feedrate", "Feedrate (mm/min)"), 500, 20000, 3000, "feedrate", is_int=True)
+        self._add_slider_input(lo, self.t.get("overscan", "Overscan (mm)"),    0,   50,    10.0, "premove")
+
+        pow_row = QHBoxLayout()
+        left_p = QVBoxLayout()
+        self._add_simple_input(left_p, self.t.get("max_power", "Max Power"), 40.0, "max_p")
+        self._add_simple_input(left_p, self.t.get("min_power", "Min Power"), 10.0, "min_p")
+        pow_row.addLayout(left_p)
+        lo.addLayout(pow_row)
+
+        self._add_slider_input(lo, self.t.get("laser_latency", "Laser Latency (ms)"), -20, 20, 0, "m67_delay")
+        self._add_slider_input(lo, self.t.get("gray_steps", "Gray Steps"), 2, 256, 256, "gray_steps", is_int=True)
+
+    def _setup_tab_gcode(self):
+        lo = self._tab_gcode._inner
+
+        sec_frame = QFrame()
+        sec_frame.setStyleSheet(
+            "QFrame{background:#2b2b2b;border:1px solid #555;border-radius:8px;}"
+            "QLabel{border:none;background:transparent;}"
         )
-        
-        # Connexion directe pour rafraîchir la preview lors du basculement
-        self.sw_invert.stateChanged.connect(self.update_preview)
+        sec_lo = QVBoxLayout(sec_frame)
+        sec_lo.setContentsMargins(10, 8, 10, 8)
+        sec_lo.setSpacing(4)
 
-    # ─────────────────────────────────────────
-    #  TAB LASER
-    # ─────────────────────────────────────────
-
-    def _setup_tab_laser(self, layout):
-        self._insert_input_pair(layout, self.common.get("feedrate", "Feedrate"), 500, 20000, 3000, "feedrate", is_int=True)
-        self._insert_input_pair(layout, self.common.get("overscan", "Overscan"), 0, 50, 10.0, "premove")
-
-        # Min/Max power + visualiseur
-        p_frame = QFrame()
-        p_frame.setStyleSheet("background: transparent;")
-        p_outer = QHBoxLayout(p_frame)
-        p_outer.setContentsMargins(0, 0, 0, 0)
-
-        p_inputs_widget = QWidget()
-        p_inputs_layout = QVBoxLayout(p_inputs_widget)
-        p_inputs_layout.setContentsMargins(0, 0, 0, 0)
-        p_inputs_layout.setSpacing(4)
-        self._insert_simple_input_into(p_inputs_layout, self.common.get("max_power", "Max Power"), 40.0, "max_p")
-        self._insert_simple_input_into(p_inputs_layout, self.common.get("min_power", "Min Power"), 10.0, "min_p")
-        p_outer.addWidget(p_inputs_widget)
-
-        self.power_viz = PowerRangeVisualizer(
-            p_frame,
-            self.controls.get("min_p", {}).get("entry"),
-            self.controls.get("max_p", {}).get("entry"),
-            self.update_preview
-        )
-        p_outer.addWidget(self.power_viz)
-        layout.insertWidget(layout.count() - 1, p_frame)
-
-        self._insert_input_pair(layout, self.common.get("laser_latency", "Laser Latency"), -20, 20, 0, "m67_delay")
-        self._insert_input_pair(layout, self.common.get("gray_steps", "Gray Steps"), 2, 256, 256, "gray_steps", is_int=True)
-
-    # ─────────────────────────────────────────
-    #  TAB G-CODE
-    # ─────────────────────────────────────────
-
-    def _setup_tab_gcode(self, layout):
-        # Machine params (verrouillés)
-        global_frame = QFrame()
-        global_frame.setStyleSheet("""
-            QFrame {
-                border: 1px solid #555555;
-                border-radius: 4px;
-                background-color: transparent;
-            }
-        """)
-        gf_layout = QVBoxLayout(global_frame)
-        gf_layout.setContentsMargins(8, 6, 8, 6)
-        gf_layout.setSpacing(5)
-
-        # Header verrou
-        header_row = QWidget()
-        header_row.setStyleSheet("border: none; background: transparent;")
-        header_row_layout = QHBoxLayout(header_row)
-        header_row_layout.setContentsMargins(0, 0, 0, 0)
-        lbl_global = QLabel(self.common.get("global_machine_params", "Machine Parameters"))
-        lbl_global.setStyleSheet("color: #FF9500; font-weight: bold; font-size: 11px; border: none;")
-        header_row_layout.addWidget(lbl_global)
-        header_row_layout.addStretch()
+        hdr_row = QHBoxLayout()
+        lbl_glob = QLabel(self.t.get("global_machine_params", "Global Machine Parameters"))
+        lbl_glob.setStyleSheet("color:#FF9500;font-weight:bold;font-size:11px;")
         self.lock_btn = QPushButton("🔒")
-        self.lock_btn.setFixedSize(30, 25)
-        self.lock_btn.setStyleSheet("""
-            QPushButton { background-color: #444444; border-radius: 4px; font-size: 13px; border: none; }
-            QPushButton:hover { background-color: #666666; }
-        """)
+        self.lock_btn.setFixedSize(30, 26)
+        self.lock_btn.setStyleSheet(
+            "QPushButton{background:#444;color:white;border-radius:4px;border:none;font-size:13px;}"
+            "QPushButton:hover{background:#666;}"
+        )
+        self.is_locked = True
         self.lock_btn.clicked.connect(self.toggle_machine_lock)
-        header_row_layout.addWidget(self.lock_btn)
-        gf_layout.addWidget(header_row)
+        hdr_row.addWidget(lbl_glob)
+        hdr_row.addStretch()
+        hdr_row.addWidget(self.lock_btn)
+        sec_lo.addLayout(hdr_row)
 
-        # Container paramètres machine
-        self.machine_controls_container = QWidget()
-        self.machine_controls_container.setStyleSheet("background: transparent; border: none;")
-        mc_layout = QVBoxLayout(self.machine_controls_container)
-        mc_layout.setContentsMargins(0, 0, 0, 0)
-        mc_layout.setSpacing(4)
+        self._machine_container = QWidget()
+        self._machine_container.setStyleSheet("background:transparent;")
+        mc_lo = QVBoxLayout(self._machine_container)
+        mc_lo.setContentsMargins(0, 0, 0, 0)
+        mc_lo.setSpacing(4)
 
-        self._insert_dropdown_into(mc_layout, self.common.get("cmd_mode", "Command Mode"),
-                                   ["M67 (Analog)", "S (Spindle)"], "cmd_mode")
+        self._add_combo(mc_lo, self.t.get("cmd_mode", "Command Mode"),
+                        ["M67 (Analog)", "S (Spindle)"], "cmd_mode")
+        row_em = QHBoxLayout()
+        self._add_simple_input(row_em, self.t.get("m67_output", "M67 E#"), 0, "m67_e_num", precision=0, box_length=40)
+        self._add_simple_input(row_em, self.t.get("ctrl_max_value", "Ctrl Max"), 100, "ctrl_max", precision=0)
+        mc_lo.addLayout(row_em)
+        self._add_combo(mc_lo, self.t.get("firing_mode", "Firing Mode"),
+                        ["M3/M5", "M4/M5"], "firing_mode")
 
-        em_row = QHBoxLayout()
-        self._insert_simple_input_into(em_row, self.common.get("m67_output", "M67 Output E"), 0, "m67_e_num", precision=0)
-        self._insert_simple_input_into(em_row, self.common.get("ctrl_max_value", "Controller Max"), 100, "ctrl_max", precision=0)
-        mc_layout.addLayout(em_row)
-
-        self._insert_dropdown_into(mc_layout, self.common.get("firing_mode", "Firing Mode"),
-                                   ["M3/M5", "M4/M5"], "firing_mode")
-
-        gf_layout.addWidget(self.machine_controls_container)
-        layout.insertWidget(layout.count() - 1, global_frame)
-
+        sec_lo.addWidget(self._machine_container)
+        lo.addWidget(sec_frame)
         self.apply_lock_state()
+        lo.addSpacing(8)
 
-        # Header preview (lecture seule)
-        h_lbl = QLabel(self.common.get("gcode_header", "G-Code Header"))
-        h_lbl.setStyleSheet("color: white; font-weight: bold; font-size: 11px;")
-        layout.insertWidget(layout.count() - 1, h_lbl)
+        lbl_h = QLabel(self.t.get("gcode_header", "G-Code Header"))
+        lbl_h.setStyleSheet("font-weight:bold;font-size:11px;color:#ddd;")
+        self.translation_map[lbl_h] = "gcode_header"
+        lo.addWidget(lbl_h)
 
-        self.txt_global_header_preview = QPlainTextEdit()
-        self.txt_global_header_preview.setFixedHeight(30)
-        self.txt_global_header_preview.setPlainText("(Machine Settings Header...)")
+        self.txt_global_header_preview = QTextEdit()
+        self.txt_global_header_preview.setFixedHeight(28)
         self.txt_global_header_preview.setReadOnly(True)
-        self.txt_global_header_preview.setStyleSheet("""
-            QPlainTextEdit { background: #222222; color: #666666; border: none;
-                             font-family: Consolas; font-size: 10px; }
-        """)
-        layout.insertWidget(layout.count() - 1, self.txt_global_header_preview)
+        self.txt_global_header_preview.setStyleSheet(
+            "QTextEdit{background:#222;color:#666;border:none;font-family:Consolas;font-size:9px;}")
+        self.txt_global_header_preview.setPlainText("(Machine Settings Header…)")
+        lo.addWidget(self.txt_global_header_preview)
 
-        self.txt_header = QPlainTextEdit()
+        self.txt_header = QTextEdit()
         self.txt_header.setFixedHeight(50)
-        self.txt_header.setStyleSheet("""
-            QPlainTextEdit { background: #333333; color: white; border: 1px solid #444444;
-                             font-family: Consolas; font-size: 11px; border-radius: 4px; }
-        """)
-        layout.insertWidget(layout.count() - 1, self.txt_header)
+        self.txt_header.setStyleSheet(self._textedit_style())
+        lo.addWidget(self.txt_header)
 
-        # Footer preview
-        f_lbl = QLabel(self.common.get("gcode_footer", "G-Code Footer"))
-        f_lbl.setStyleSheet("color: white; font-weight: bold; font-size: 11px;")
-        layout.insertWidget(layout.count() - 1, f_lbl)
+        lbl_f = QLabel(self.t.get("gcode_footer", "G-Code Footer"))
+        lbl_f.setStyleSheet("font-weight:bold;font-size:11px;color:#ddd;")
+        self.translation_map[lbl_f] = "gcode_footer"
+        lo.addWidget(lbl_f)
 
-        self.txt_global_footer_preview = QPlainTextEdit()
-        self.txt_global_footer_preview.setFixedHeight(30)
-        self.txt_global_footer_preview.setPlainText("(Machine Settings Footer...)")
+        self.txt_global_footer_preview = QTextEdit()
+        self.txt_global_footer_preview.setFixedHeight(28)
         self.txt_global_footer_preview.setReadOnly(True)
-        self.txt_global_footer_preview.setStyleSheet("""
-            QPlainTextEdit { background: #222222; color: #666666; border: none;
-                             font-family: Consolas; font-size: 10px; }
-        """)
-        layout.insertWidget(layout.count() - 1, self.txt_global_footer_preview)
+        self.txt_global_footer_preview.setStyleSheet(
+            "QTextEdit{background:#222;color:#666;border:none;font-family:Consolas;font-size:9px;}")
+        self.txt_global_footer_preview.setPlainText("(Machine Settings Footer…)")
+        lo.addWidget(self.txt_global_footer_preview)
 
-        self.txt_footer = QPlainTextEdit()
+        self.txt_footer = QTextEdit()
         self.txt_footer.setFixedHeight(50)
-        self.txt_footer.setStyleSheet("""
-            QPlainTextEdit { background: #333333; color: white; border: 1px solid #444444;
-                             font-family: Consolas; font-size: 11px; border-radius: 4px; }
-        """)
-        layout.insertWidget(layout.count() - 1, self.txt_footer)
+        self.txt_footer.setStyleSheet(self._textedit_style())
+        lo.addWidget(self.txt_footer)
 
-        # Section framing
-        frm_title = QLabel(self.common.get("point_fram_options", "Pointing & Framing"))
-        frm_title.setStyleSheet("color: white; font-weight: bold; font-size: 11px;")
-        layout.insertWidget(layout.count() - 1, frm_title)
+        lo.addSpacing(8)
 
-        # Pause command
-        pause_frame, pause_layout = self._make_row_frame()
-        self.lbl_pause_cmd = QLabel(self.common.get("pause_command", "Pause Command"))
-        self.lbl_pause_cmd.setStyleSheet("color: #DCE4EE; font-size: 11px;")
-        pause_layout.addWidget(self.lbl_pause_cmd)
+        lbl_fr = QLabel(self.t.get("point_fram_options", "Framing / Pointing"))
+        lbl_fr.setStyleSheet("font-weight:bold;font-size:11px;color:#ddd;")
+        lo.addWidget(lbl_fr)
+
+        pause_row = QHBoxLayout()
+        lbl_pause = QLabel(self.t.get("pause_command", "Pause Command"))
+        lbl_pause.setStyleSheet("color:#ddd;font-size:12px;")
+        self.translation_map[lbl_pause] = "pause_command"
         self.pause_cmd_entry = QLineEdit("M0")
         self.pause_cmd_entry.setFixedWidth(60)
-        self.pause_cmd_entry.setFixedHeight(24)
         self.pause_cmd_entry.setStyleSheet(self._entry_style())
-        pause_layout.addWidget(self.pause_cmd_entry)
-        pause_layout.addStretch()
-        hint_pause = QLabel(self.common.get("void_pause", "(empty = no pause)"))
-        hint_pause.setStyleSheet("color: #888888; font-size: 10px; font-style: italic;")
-        self.lbl_pause_hint = hint_pause
-        pause_layout.addWidget(hint_pause)
-        layout.insertWidget(layout.count() - 1, pause_frame)
+        pause_row.addWidget(lbl_pause)
+        pause_row.addWidget(self.pause_cmd_entry)
+        pause_row.addStretch()
+        lo.addLayout(pause_row)
 
-        # --- Origin pointer switch ---
-        self.sw_pointer = self.create_switch(
-            layout=layout,
-            label_key=self.common.get("origin_pointing", "Origin Pointing"),
-            key="origin_pointing"
-        )
-        self.sw_pointer.stateChanged.connect(self.toggle_framing_options)
+        self.origin_pointer_var = False
+        sw_ptr_row = QHBoxLayout()
+        lbl_ptr = QLabel(self.t.get("origin_pointing", "Origin Pointing"))
+        lbl_ptr.setStyleSheet("color:#ddd;font-size:12px;")
+        self.translation_map[lbl_ptr] = "origin_pointing"
+        self.sw_pointer = Switch()
+        self.sw_pointer.toggled.connect(self._on_framing_toggle)
+        sw_ptr_row.addWidget(lbl_ptr)
+        sw_ptr_row.addStretch()
+        sw_ptr_row.addWidget(self.sw_pointer)
+        lo.addLayout(sw_ptr_row)
 
-        # --- Include framing switch ---
-        self.sw_frame = self.create_switch(
-            layout=layout,
-            label_key=self.common.get("framing_option", "Include Framing"),
-            key="include_framing"
-        )
-        self.sw_frame.stateChanged.connect(self.toggle_framing_options)
+        self.frame_var = False
+        sw_frm_row = QHBoxLayout()
+        lbl_frm = QLabel(self.t.get("framing_option", "Include Framing"))
+        lbl_frm.setStyleSheet("color:#ddd;font-size:12px;")
+        self.translation_map[lbl_frm] = "framing_option"
+        self.sw_frame = Switch()
+        self.sw_frame.toggled.connect(self._on_framing_toggle)
+        sw_frm_row.addWidget(lbl_frm)
+        sw_frm_row.addStretch()
+        sw_frm_row.addWidget(self.sw_frame)
+        lo.addLayout(sw_frm_row)
 
-        # Framing power
-        fp_frame, fp_layout = self._make_row_frame()
-        self.lbl_frame_p = QLabel(self.common.get("framing_power", "Framing Power"))
-        self.lbl_frame_p.setStyleSheet("color: #DCE4EE; font-size: 11px;")
-        fp_layout.addWidget(self.lbl_frame_p)
+        pwr_row = QHBoxLayout()
+        lbl_fpwr = QLabel(self.t.get("framing_power", "Framing Power"))
+        lbl_fpwr.setStyleSheet("color:#ddd;font-size:12px;")
+        self.translation_map[lbl_fpwr] = "framing_power"
         self.frame_power_entry = QLineEdit("0")
         self.frame_power_entry.setFixedWidth(60)
-        self.frame_power_entry.setFixedHeight(24)
         self.frame_power_entry.setStyleSheet(self._entry_style())
-        fp_layout.addWidget(self.frame_power_entry)
-        fp_layout.addStretch()
-        layout.insertWidget(layout.count() - 1, fp_frame)
+        pwr_row.addWidget(lbl_fpwr)
+        pwr_row.addWidget(self.frame_power_entry)
+        pwr_row.addStretch()
+        lo.addLayout(pwr_row)
 
-        # Hint power
-        self.lbl_plow_power_hint = QLabel(self.common.get("hint_power", "⚠ Low power recommended"))
-        self.lbl_plow_power_hint.setStyleSheet("color: #700000; font-size: 11px; font-style: italic;")
-        self.lbl_plow_power_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.insertWidget(layout.count() - 1, self.lbl_plow_power_hint)
+        self._add_combo(lo, self.t.get("framing_ratio", "Framing Speed Ratio"),
+                        ["5%","10%","20%","30%","50%","80%","100%"],
+                        "frame_feed_ratio_menu")
+        if "frame_feed_ratio_menu" in self.controls:
+            self.controls["frame_feed_ratio_menu"]["combo"].setCurrentText("20%")
 
-        # Framing ratio
-        self._insert_dropdown_into(
-            layout, self.common.get("framing_ratio", "Speed Ratio"),
-            ["5%", "10%", "20%", "30%", "50%", "80%", "100%"],
-            "frame_feed_ratio_menu",
-            default="20%"
+        self._update_framing_state()
+
+    # ── Panneau droit ─────────────────────────────────────────────────
+
+    def _build_right_panel(self):
+        w = QWidget()
+        w.setStyleSheet("background:#111;")
+        lo = QVBoxLayout(w)
+        lo.setContentsMargins(4, 4, 4, 4)
+        lo.setSpacing(2)
+
+        # Canvas + colorbar fixe côte à côte
+        canvas_row = QHBoxLayout()
+        canvas_row.setSpacing(2)
+        canvas_row.setContentsMargins(0, 0, 0, 0)
+
+        self._canvas = _RasterCanvas(self._fig)
+        self._setup_matplotlib()
+        canvas_row.addWidget(self._canvas, stretch=1)
+
+        self._cbar_widget = _ColorbarWidget()
+        canvas_row.addWidget(self._cbar_widget)
+
+        lo.addLayout(canvas_row, stretch=5)
+
+        # Bouton Reset View — wrapper transparent pour éviter ligne noire
+        self.btn_reset_view = QPushButton("⊞  Reset View", self._canvas)
+        self.btn_reset_view.setFixedSize(110, 24)
+        self.btn_reset_view.setStyleSheet(
+            "QPushButton{background:#2c2c2c;color:#aaa;border:none;"
+            "border-radius:4px;font-size:10px;}"
+            "QPushButton:hover{background:#3a3a3a;color:white;}"
         )
+        self.btn_reset_view.clicked.connect(self._canvas.reset_view)
+        self.btn_reset_view.raise_()
 
-        self.toggle_framing_options()
+        # Stats + Histogramme
+        stats_frame = QFrame()
+        stats_frame.setStyleSheet(
+            "QFrame{background:#202020;border:1px solid #333;border-radius:6px;}"
+        )
+        stats_frame.setFixedHeight(160)
+        sf_lo = QHBoxLayout(stats_frame)
+        sf_lo.setContentsMargins(8, 6, 8, 6)
+        sf_lo.setSpacing(8)
 
-    # ─────────────────────────────────────────
-    #  STATS + HISTOGRAMME
-    # ─────────────────────────────────────────
-
-    def _build_stats_panel(self, parent_layout):
-        stats_widget = QWidget()
-        stats_widget.setFixedHeight(160)
-        stats_layout = QHBoxLayout(stats_widget)
-        stats_layout.setContentsMargins(0, 0, 0, 0)
-        stats_layout.setSpacing(5)
-
-        # Texte stats gauche
-        stats_left = QFrame()
-        stats_left.setStyleSheet("QFrame { background-color: #202020; border-radius: 6px; border: 1px solid #333333; }")
-        sl_layout = QVBoxLayout(stats_left)
-        sl_layout.setContentsMargins(8, 6, 8, 6)
-        sl_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-
+        stats_text_w = QFrame()
+        stats_text_w.setStyleSheet("QFrame{border:none;background:transparent;}")
+        stats_text_lo = QVBoxLayout(stats_text_w)
+        stats_text_lo.setContentsMargins(8, 6, 8, 6)
+        stats_text_lo.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         self.stats_labels = []
         for _ in range(6):
             lbl = QLabel("")
-            lbl.setStyleSheet("color: #aaaaaa; font-family: Consolas; font-size: 12px; background: transparent; border: none;")
-            sl_layout.addWidget(lbl)
+            lbl.setFont(QFont("Consolas", 10))
+            lbl.setStyleSheet("color:#aaaaaa;font-family:Consolas;font-size:12px;"
+                              "background:transparent;border:none;")
+            stats_text_lo.addWidget(lbl)
             self.stats_labels.append(lbl)
+        sf_lo.addWidget(stats_text_w)
 
-        stats_layout.addWidget(stats_left, stretch=1)
+        self._hist_widget = _HistogramWidget()
+        sf_lo.addWidget(self._hist_widget, 2)
 
-        # Histogramme droit
-        self.histogram = HistogramWidget()
-        self.histogram.setStyleSheet("background-color: #202020; border-radius: 6px; border: 1px solid #333333;")
-        self.histogram.set_labels(
-            self.common.get("power_distribution", "Power Distribution"),
-            self.common.get("power_value", "Power"),
-            self.common.get("Distribution_label", "%")
+        lo.addWidget(stats_frame, stretch=2)
+        return w
+
+    def _setup_matplotlib(self):
+        """Un seul axe, sans colorbar matplotlib — gérée en Qt."""
+        self._ax = self._fig.add_subplot(111)
+        self._fig.subplots_adjust(left=0.10, right=0.90, top=0.90, bottom=0.10)
+
+        self._ax.set_facecolor("#1e1e1e")
+        self._ax.tick_params(axis="both", colors="#888888", labelsize=9)
+        self._ax.set_axisbelow(False)
+        self._ax.grid(True, color="#ffffff", linestyle=":", linewidth=0.5, alpha=0.3, zorder=10)
+        for spine in self._ax.spines.values():
+            spine.set_edgecolor("#333333")
+
+        self._placeholder_text = self._ax.text(
+            0.5, 0.5, self.t.get("choose_image", "Choose an image…"),
+            color="#444444", fontsize=12, fontweight="bold",
+            ha="center", va="center", transform=self._ax.transAxes
         )
-        stats_layout.addWidget(self.histogram, stretch=2)
 
-        parent_layout.addWidget(stats_widget, stretch=1)
+    # ── Helpers construction ──────────────────────────────────────────
 
-    # ─────────────────────────────────────────
-    #  WIDGETS HELPERS
-    # ─────────────────────────────────────────
-
-    def _make_label(self, text):
-        lbl = QLabel(text)
-        lbl.setStyleSheet("color: #cccccc; font-size: 11px; background: transparent;")
-        return lbl
-
-    def _make_row_frame(self):
-        frame = QFrame()
-        frame.setStyleSheet("background: transparent; border: none;")
-        layout = QHBoxLayout(frame)
-        layout.setContentsMargins(0, 2, 0, 2)
-        layout.setSpacing(6)
-        return frame, layout
-
-    def _btn_style(self, color="#1f538d"):
-        return f"""
-            QPushButton {{
-                background-color: {color};
-                color: white;
-                border-radius: 4px;
-                border: none;
-                font-size: 11px;
-            }}
-            QPushButton:hover {{ background-color: #555555; }}
-        """
-
-    def _entry_style(self):
-        return """
-            QLineEdit {
-                background-color: #3a3a3a;
-                color: white;
-                border: 1px solid #555555;
-                border-radius: 3px;
-                padding: 2px 4px;
-                font-size: 10px;
-            }
-            QLineEdit:focus { border-color: #1f538d; }
-        """
-
-    def _insert_input_pair(self, layout, label_text, start, end, default, key,
-                           is_int=False, precision=2):
-        """Insère label + slider + entry dans un layout QVBoxLayout (avant le stretch)."""
-        container = QWidget()
-        container.setStyleSheet("background: transparent;")
-        c_layout = QVBoxLayout(container)
-        c_layout.setContentsMargins(0, 2, 0, 2)
-        c_layout.setSpacing(3)
-
+    def _add_slider_input(self, layout, label_text, vmin, vmax, default, key,
+                          is_int=False, precision=2):
         lbl = QLabel(label_text)
-        lbl.setStyleSheet("color: #cccccc; font-size: 11px;")
-        c_layout.addWidget(lbl)
+        lbl.setStyleSheet("color:#ddd;font-size:12px;")
+        layout.addWidget(lbl)
 
-        row = QWidget()
-        row.setStyleSheet("background: transparent;")
-        row_layout = QHBoxLayout(row)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(5)
-
-        # Slider Qt (int uniquement → on multiplie pour float)
-        precision_mult = 10 ** precision if not is_int else 1
-        slider_min = int(start * precision_mult)
-        slider_max = int(end * precision_mult)
-        slider_default = int(default * precision_mult)
-
+        row = QHBoxLayout()
         slider = QSlider(Qt.Orientation.Horizontal)
-        slider.setMinimum(slider_min)
-        slider.setMaximum(slider_max)
-        slider.setValue(slider_default)
-        slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 4px; background: #444444; border-radius: 2px;
-            }
-            QSlider::handle:horizontal {
-                width: 12px; height: 12px; margin: -4px 0;
-                background: #1f538d; border-radius: 6px;
-            }
-            QSlider::handle:horizontal:hover { background: #2a6dbd; }
-            QSlider::sub-page:horizontal { background: #1f538d; border-radius: 2px; }
-        """)
+        slider.setRange(int(vmin * 100) if not is_int else int(vmin),
+                        int(vmax * 100) if not is_int else int(vmax))
+        slider.setValue(int(default * 100) if not is_int else int(default))
 
         entry = QLineEdit()
-        entry.setFixedWidth(65)
-        entry.setFixedHeight(22)
+        entry.setFixedWidth(70)
+        entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
         entry.setStyleSheet(self._entry_style())
         fmt = "{:d}" if is_int else f"{{:.{precision}f}}"
         entry.setText(fmt.format(int(default) if is_int else default))
 
-        # Connexions slider → entry (live) + update_preview (release)
-        slider.valueChanged.connect(
-            lambda v, e=entry, im=is_int, p=precision, pm=precision_mult:
-            self._sync_slider_to_entry(v, e, im, p, pm)
-        )
-        slider.sliderReleased.connect(self.update_preview)
+        def on_slider(v):
+            real = v if is_int else v / 100.0
+            entry.setText(fmt.format(int(real) if is_int else real))
 
-        # Connexions entry → slider + update
-        entry.returnPressed.connect(
-            lambda s=slider, e=entry, im=is_int, p=precision, pm=precision_mult:
-            self._sync_entry_to_slider(s, e, im, p, pm)
-        )
-        entry.editingFinished.connect(
-            lambda s=slider, e=entry, im=is_int, p=precision, pm=precision_mult:
-            self._sync_entry_to_slider(s, e, im, p, pm)
-        )
+        def on_entry():
+            try:
+                v = float(entry.text().replace(",", "."))
+                slider.setValue(int(v) if is_int else int(v * 100))
+                self._schedule_preview()
+            except ValueError:
+                pass
 
-        row_layout.addWidget(slider)
-        row_layout.addWidget(entry)
-        c_layout.addWidget(row)
+        slider.valueChanged.connect(on_slider)
+        slider.sliderReleased.connect(self._schedule_preview)
+        entry.editingFinished.connect(on_entry)
+
+        row.addWidget(slider)
+        row.addWidget(entry)
+        layout.addLayout(row)
 
         self.controls[key] = {
-            "slider": slider,
-            "entry": entry,
-            "is_int": is_int,
-            "precision": precision,
-            "precision_mult": precision_mult
+            "slider": slider, "entry": entry,
+            "is_int": is_int, "precision": precision,
+            "_vmin": vmin, "_vmax": vmax,
         }
+        return lbl, entry
 
-        layout.insertWidget(layout.count() - 1, container)
-        return lbl
-
-    def _insert_simple_input_into(self, layout, label_text, default, key, precision=2):
-        """Insère label + entry dans un layout HBox ou VBox."""
-        if isinstance(layout, QHBoxLayout):
-            container = QWidget()
-            container.setStyleSheet("background: transparent;")
-            inner = QHBoxLayout(container)
-            inner.setContentsMargins(0, 0, 0, 0)
-            inner.setSpacing(4)
-            lbl = QLabel(label_text)
-            lbl.setStyleSheet("color: #cccccc; font-size: 11px;")
-            inner.addWidget(lbl)
-            entry = QLineEdit()
-            entry.setFixedWidth(65)
-            entry.setFixedHeight(22)
-            entry.setStyleSheet(self._entry_style())
-            fmt = "{:d}" if precision == 0 else f"{{:.{precision}f}}"
-            entry.setText(fmt.format(int(default) if precision == 0 else default))
-            inner.addWidget(entry)
-            layout.addWidget(container)
-        else:
-            container = QWidget()
-            container.setStyleSheet("background: transparent;")
-            inner = QHBoxLayout(container)
-            inner.setContentsMargins(0, 2, 0, 2)
-            inner.setSpacing(4)
-            lbl = QLabel(label_text)
-            lbl.setStyleSheet("color: #cccccc; font-size: 11px;")
-            inner.addWidget(lbl)
-            inner.addStretch()
-            entry = QLineEdit()
-            entry.setFixedWidth(80)
-            entry.setFixedHeight(22)
-            entry.setStyleSheet(self._entry_style())
-            fmt = "{:d}" if precision == 0 else f"{{:.{precision}f}}"
-            entry.setText(fmt.format(int(default) if precision == 0 else default))
-            inner.addWidget(entry)
-            layout.insertWidget(layout.count() - 1, container)
-
-        entry.editingFinished.connect(self.update_preview)
-        self.controls[key] = {
-            "slider": entry,
-            "entry": entry,
-            "is_int": (precision == 0),
-            "precision": precision,
-            "precision_mult": 1
-        }
-        return self.controls[key]
-
-    def _insert_dropdown(self, layout, label_text, options, attr_name, default=None):
-        """Insère label + QComboBox dans un QVBoxLayout (avant le stretch)."""
-        container = QWidget()
-        container.setStyleSheet("background: transparent;")
-        c_layout = QVBoxLayout(container)
-        c_layout.setContentsMargins(0, 2, 0, 2)
-        c_layout.setSpacing(3)
-
+    def _add_simple_input(self, layout, label_text, default, key, precision=2, box_length=80):
+        row = QHBoxLayout()
         lbl = QLabel(label_text)
-        lbl.setStyleSheet("color: #cccccc; font-size: 11px;")
-        c_layout.addWidget(lbl)
+        lbl.setStyleSheet("color:#ddd;font-size:12px;")
+        entry = QLineEdit()
+        entry.setFixedWidth(box_length)
+        entry.setStyleSheet(self._entry_style())
+        fmt = "{:d}" if precision == 0 else f"{{:.{precision}f}}"
+        entry.setText(fmt.format(int(default) if precision == 0 else default))
+        entry.editingFinished.connect(self._schedule_preview)
+        row.addWidget(lbl)
+        row.addStretch()
+        row.addWidget(entry)
+        layout.addLayout(row)
+        self.controls[key] = {"slider": entry, "entry": entry,
+                               "is_int": (precision == 0), "precision": precision}
+        return lbl, entry
 
-        combo = self._make_combo(options, attr_name, default)
-        c_layout.addWidget(combo)
-        layout.insertWidget(layout.count() - 1, container)
-        setattr(self, attr_name, combo)
-        return combo
-
-    def _insert_dropdown_into(self, layout, label_text, options, attr_name, default=None):
-        """Idem mais pour layout quelconque."""
-        container = QWidget()
-        container.setStyleSheet("background: transparent;")
-        c_layout = QVBoxLayout(container)
-        c_layout.setContentsMargins(0, 2, 0, 2)
-        c_layout.setSpacing(3)
-
+    def _add_combo(self, layout, label_text, options, key, callback=None):
         lbl = QLabel(label_text)
-        lbl.setStyleSheet("color: #cccccc; font-size: 11px;")
-        c_layout.addWidget(lbl)
+        lbl.setStyleSheet("color:#ddd;font-size:12px;")
+        layout.addWidget(lbl)
 
-        combo = self._make_combo(options, attr_name, default)
-        c_layout.addWidget(combo)
-
-        if isinstance(layout, QVBoxLayout):
-            layout.insertWidget(layout.count() - 1, container)
-        else:
-            layout.addWidget(container)
-        setattr(self, attr_name, combo)
-        return combo
-
-    def _make_combo(self, options, attr_name, default=None):
         combo = QComboBox()
-        combo.setFixedHeight(28)
-        combo.setStyleSheet("""
-            QComboBox {
-                background-color: #444444;
-                color: white;
-                border: 1px solid #555555;
-                border-radius: 4px;
-                padding: 2px 6px;
-                font-size: 11px;
-            }
-            QComboBox::drop-down { border: none; width: 20px; }
-            QComboBox QAbstractItemView {
-                background-color: #3a3a3a;
-                color: white;
-                selection-background-color: #1f538d;
-            }
-        """)
+        combo.setFixedHeight(30)
+        combo.setStyleSheet(get_combo_stylesheet(_ARROW_PATH))
 
         is_tuple = options and isinstance(options[0], tuple)
-        self._combo_maps = getattr(self, "_combo_maps", {})
         if is_tuple:
-            key_to_label = dict(options)
-            label_to_key = {v: k for k, v in options}
-            self._combo_maps[attr_name] = label_to_key
             for k, v in options:
                 combo.addItem(v, userData=k)
         else:
-            for opt in options:
-                combo.addItem(opt)
+            for o in options:
+                combo.addItem(o)
 
-        if default:
-            idx = combo.findText(default)
-            if idx >= 0:
-                combo.setCurrentIndex(idx)
+        def on_change():
+            if callback:
+                ud = combo.currentData()
+                callback(ud if ud is not None else combo.currentText())
+            self._schedule_preview()
 
-        def on_change(idx, a=attr_name, c=combo):
-            self._on_combo_change(a, c)
         combo.currentIndexChanged.connect(on_change)
+        layout.addWidget(combo)
+        self.controls[key] = {"combo": combo, "_is_tuple": is_tuple}
         return combo
 
-    def _on_combo_change(self, attr_name, combo):
-        if attr_name == "origin_mode":
-            internal = combo.currentData() or combo.currentText()
-            self.custom_offset_frame.setVisible(internal == "Custom")
-        QTimer.singleShot(100, self.update_preview)
+    # ── Styles ────────────────────────────────────────────────────────
 
-    # ─────────────────────────────────────────
-    #  HELPER SWITCH
-    # ─────────────────────────────────────────
-    def create_switch(self, layout, label_key, key):
-        """Crée une ligne avec un Label et un Switch"""
-        check = Switch()
-        
-        # Connexions de base
-        if hasattr(self, 'mark_as_changed'):
-            check.stateChanged.connect(self.mark_as_changed)
-            
-        # Intégration dans le layout via ta méthode existante
-        self.create_input_row(layout, label_key, check, key=key)
-        
-        # Stockage pour accès via self.controls["force_width"]["check"]
-        self.controls[key] = {"check": check}
-        
-        return check
+    @staticmethod
+    def _btn_style(bg="#1F6AA5", hover="#2a6dbd"):
+        return (f"QPushButton{{background:{bg};color:white;border-radius:6px;"
+                f"border:none;font-weight:bold;}}"
+                f"QPushButton:hover{{background:{hover};}}")
 
-    def mark_as_changed(self):
-        """Indique que les paramètres ont été modifiés"""
-
-        self.update_preview()
-
-
-    def create_input_row(self, layout, label_text, widget, key=None):
-        """Crée une ligne standard avec Label + Widget"""
-        frame = QFrame()
-        # Correction : on définit le layout sur le frame
-        row_layout = QHBoxLayout(frame) 
-        row_layout.setContentsMargins(0, 5, 0, 5)
-
-        label = self._make_label(label_text)
-        row_layout.addWidget(label)
-        row_layout.addStretch()
-        row_layout.addWidget(widget)
-
-        # On insère le frame dans le layout principal de la section
-        layout.insertWidget(layout.count() - 1, frame)
-
-    # ─────────────────────────────────────────
-    #  SYNCHRONISATION SLIDERS / ENTRIES
-    # ─────────────────────────────────────────
-
-    def _sync_slider_to_entry(self, val, entry, is_int, precision, mult):
-        real_val = int(val) if is_int else val / mult
-        fmt = "{:d}" if is_int else f"{{:.{precision}f}}"
-        entry.setText(fmt.format(real_val))
-        if hasattr(self, "power_viz"):
-            self.power_viz.refresh_visuals()
-
-    def _sync_entry_to_slider(self, slider, entry, is_int, precision, mult):
-        try:
-            val = float(entry.text().replace(",", ".").strip())
-            slider_val = int(val) if is_int else int(val * mult)
-            slider.blockSignals(True)
-            slider.setValue(slider_val)
-            slider.blockSignals(False)
-            QTimer.singleShot(50, self.update_preview)
-        except ValueError:
-            pass
-
-    def get_val(self, ctrl):
-        if ctrl is None:
-            return 0.0
-        try:
-            txt = ctrl["entry"].text().replace(",", ".").strip()
-            if not txt:
-                return 0.0
-            val = float(txt)
-            return int(val) if ctrl.get("is_int", False) else val
-        except (ValueError, TypeError):
-            return 0.0
-
-    def _delayed_update(self, delay=50):
-        if hasattr(self, "_update_timer"):
-            self._update_timer.stop()
-        self._update_timer = QTimer()
-        self._update_timer.setSingleShot(True)
-        self._update_timer.timeout.connect(self.update_preview)
-        self._update_timer.start(delay)
-
-    # ─────────────────────────────────────────
-    #  FICHIERS INPUT / OUTPUT
-    # ─────────────────────────────────────────
-
-    def select_input(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select Image", "",
-            "Image files (*.jpg *.jpeg *.png *.bmp)"
+    @staticmethod
+    def _seg_btn_style():
+        return (
+            "QPushButton{background:#333;color:#aaa;border:1px solid #555;"
+            "border-radius:4px;padding:2px 8px;min-width:60px;font-size:11px;}"
+            "QPushButton:checked{background:#1F6AA5;color:white;border-color:#2a6dbd;}"
+            "QPushButton:hover:!checked{background:#444;color:white;}"
         )
-        if path:
-            self.input_image_path = path
-            name = os.path.basename(path).upper()
-            self.btn_input.setText(name)
-            self.btn_input.setStyleSheet(self._btn_style(color="#2d5a27"))
-            self.update_preview()
 
-    def select_output(self):
-        directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
-        if directory:
-            self.output_dir = directory
-            folder_name = os.path.basename(directory) or directory
-            self.btn_output.setText(f"OUT: {folder_name.upper()}/")
-            self.btn_output.setStyleSheet(self._btn_style(color="#2d5a27"))
+    @staticmethod
+    def _entry_style():
+        return ("QLineEdit{background:#1e1e1e;border:1px solid #444;"
+                "border-radius:4px;color:white;padding:2px;}")
 
-    # ─────────────────────────────────────────
-    #  LOGIQUE CALCUL / PREVIEW
-    # ─────────────────────────────────────────
+    @staticmethod
+    def _textedit_style():
+        return ("QTextEdit{background:#1a1a1a;border:1px solid #444;"
+                "border-radius:6px;color:#8fbdf0;font-family:Consolas;font-size:10px;padding:4px;}")
 
-    def calculate_offsets(self, real_w, real_h):
-        origin_combo = getattr(self, "origin_mode", None)
-        if origin_combo is None:
-            return 0, 0
-        internal = origin_combo.currentData() or origin_combo.currentText()
-        return self.engine.calculate_offsets(
-            internal,
-            real_w,
-            real_h,
-            self.get_val(self.controls.get("custom_x")),
-            self.get_val(self.controls.get("custom_y"))
+    # ── Handlers ──────────────────────────────────────────────────────
+
+    def _on_raster_change(self, key):
+        self._raster_mode = key
+        for k, b in self._btn_raster.items():
+            b.setChecked(k == key)
+        if key == "vertical":
+            self.width_label_widget.setText(self.t.get("target_height", "Target Height"))
+            self.lbl_force_width.setText(self.t.get("force_height", "Force Exact Height"))
+        else:
+            self.width_label_widget.setText(self.t.get("target_width", "Target Width"))
+            self.lbl_force_width.setText(self.t.get("force_width", "Force Exact Width"))
+        self._schedule_preview()
+
+    def _on_origin_change(self, value):
+        self.custom_offset_frame.setVisible(value == "Custom")
+
+    def _on_framing_toggle(self, _=None):
+        self._update_framing_state()
+
+    def _update_framing_state(self):
+        is_pointing = self.sw_pointer.isChecked()
+        is_framing  = self.sw_frame.isChecked()
+        any_active  = is_pointing or is_framing
+        self.pause_cmd_entry.setEnabled(any_active)
+        self.frame_power_entry.setEnabled(any_active)
+        if "frame_feed_ratio_menu" in self.controls:
+            self.controls["frame_feed_ratio_menu"]["combo"].setEnabled(is_framing)
+
+    def _on_switch_with_delay(self, _=None):
+        QTimer.singleShot(120, self._schedule_preview)
+
+    def _schedule_preview(self):
+        if not self._loading:
+            self._debounce_timer.start(80)
+
+    # ── Loading Overlay ───────────────────────────────────────────────
+
+    def _show_loading(self, msg=None):
+        if hasattr(self, "_overlay"):
+            return
+        if msg is None:
+            msg = self.t.get("loading", "Loading…")
+        self._overlay = show_loading_overlay(self, msg)
+
+    def _hide_loading(self):
+        if hasattr(self, "_overlay"):
+            hide_loading_overlay(self._overlay)
+            del self._overlay
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if hasattr(self, "_overlay"):
+            self._overlay.resize(self.size())
+
+    # ── Rendu / Preview ───────────────────────────────────────────────
+
+    def _initial_render(self):
+        # Overlay uniquement si une image est présente
+        if self.input_image_path and os.path.exists(self.input_image_path):
+            self._show_loading(self.t.get("loading", "Loading…"))
+        try:
+            self._do_update_preview(fit=True)
+        finally:
+            self._hide_loading()
+
+    def _do_update_preview(self, fit=False):
+        if self._loading:
+            return
+        if not self.input_image_path or not os.path.isfile(self.input_image_path):
+            self._canvas.redraw(fit=fit)
+            return
+
+        res = self.process_logic()
+
+        if not res or res[0] is None:
+            if self._img_plot:
+                self._img_plot.set_visible(False)
+            self._canvas.redraw(fit=fit)
+            return
+
+        matrix, geom = res
+        real_w = geom["real_w"]
+        real_h = geom["real_h"]
+        rf     = geom["rect_full"]
+        offX, offY = self.calculate_offsets(real_w, real_h)
+        v_min = self._get_val("min_p") or 0
+        v_max = self._get_val("max_p") or 255
+
+        # Nettoyage overscan patches + textes
+        for p in self._overscan_patches:
+            try: p.remove()
+            except Exception: pass
+        self._overscan_patches = []
+
+        for t in self._overscan_texts:
+            try: t.remove()
+            except Exception: pass
+        self._overscan_texts = []
+
+        if self._rect_overscan is not None:
+            try: self._rect_overscan.remove()
+            except Exception: pass
+            self._rect_overscan = None
+
+        self._update_image_artist(matrix, offX, offY, real_w, real_h, v_min, v_max)
+
+        # Colorbar Qt fixe
+        self._cbar_widget.set_range(v_min, v_max,
+                                    self.t.get("laser_power_level", "Laser Power"))
+
+        # Overscan
+        direction = self._raster_mode
+        hatch_pat = "|||" if direction == "vertical" else "---"
+        ax = self._ax
+
+        def draw_overscan(x_min, y_min, ow, oh):
+            if ow < 0.5 or oh < 0.5:
+                return
+            r = Rectangle((x_min, y_min), ow, oh, facecolor="none",
+                           hatch=hatch_pat, edgecolor="#3498db",
+                           linewidth=0, alpha=0.3, zorder=5)
+            ax.add_patch(r)
+            self._overscan_patches.append(r)
+            rot = 90 if direction == "horizontal" else 0
+            txt = ax.text(x_min + ow / 2, y_min + oh / 2, "OVERSCAN",
+                          rotation=rot, fontsize=7, va="center", ha="center",
+                          color="#3498db", weight="bold", zorder=20)
+            self._overscan_texts.append(txt)
+
+        if direction == "horizontal":
+            global_y = offY;  global_h = real_h
+            ow_l = abs(rf[0]);  ow_r = rf[2] - real_w
+            if ow_l > 0.1: draw_overscan(offX + rf[0], offY, ow_l, real_h)
+            if ow_r > 0.1: draw_overscan(offX + real_w, offY, ow_r, real_h)
+        else:
+            oh_b = abs(rf[1]);  oh_t = rf[3] - real_h
+            global_y = offY + rf[1];  global_h = rf[3] - rf[1]
+            if oh_b > 0.1: draw_overscan(offX, offY + rf[1], real_w, oh_b)
+            if oh_t > 0.1: draw_overscan(offX, offY + real_h, real_w, oh_t)
+
+        self._rect_overscan = Rectangle(
+            (offX + rf[0], global_y), rf[2] - rf[0], global_h,
+            linewidth=1.5, edgecolor="#3498db", facecolor="none",
+            linestyle="--", alpha=0.9, zorder=30, snap=True
         )
+        ax.add_patch(self._rect_overscan)
+
+        decal = 0.5
+        ax.set_xlim(offX + rf[0] - decal, offX + rf[2] + decal)
+        ax.set_ylim(global_y - decal, global_y + global_h + decal)
+        ax.tick_params(top=True, right=True, which="both")
+        ax.xaxis.set_tick_params(labelbottom=True, labeltop=True)
+        ax.yaxis.set_tick_params(labelleft=True, labelright=True)
+        ax.tick_params(axis="both", colors="#888888", labelsize=9)
+        ax.set_axisbelow(False)
+        ax.grid(True, color="#00ffff", linestyle="-", linewidth=1, alpha=0.5, zorder=15)
+
+        if self._origin_marker:
+            try: self._origin_marker[0].remove()
+            except Exception: pass
+        self._origin_marker = ax.plot(0, 0, "ro", markersize=6, zorder=25)
+
+        est_min = geom.get("est_min", 0.0)
+        ts = int(est_min * 60)
+        hh, mm, ss = ts // 3600, (ts % 3600) // 60, ts % 60
+        self._update_stats(geom["w_px"], geom["h_px"], real_w, real_h,
+                           geom["scan_step"], geom["l_step"], hh, mm, ss)
+
+        self._hist_widget.update_data(
+            matrix, v_min, v_max,
+            label_title=self.t_stats.get("power_distribution", "Power Distribution"),
+            label_power=self.t_stats.get("power_value", "Power"),
+            label_count=self.t_stats.get("pixel_count", "Pixel count"),
+        )
+
+        self._canvas.redraw(fit=fit)
+
+    def _update_image_artist(self, matrix, offX, offY, real_w, real_h, v_min, v_max):
+        if self._placeholder_text is not None:
+            try: self._placeholder_text.remove()
+            except Exception: pass
+            self._placeholder_text = None
+
+        img_extent = [offX, offX + real_w, offY, offY + real_h]
+
+        if self._img_plot is None:
+            self._img_plot = self._ax.imshow(
+                matrix, cmap="gray_r", origin="upper",
+                extent=img_extent, aspect="equal",
+                vmin=v_min, vmax=v_max,
+                interpolation="nearest", zorder=1
+            )
+        else:
+            self._img_plot.set_data(matrix)
+            self._img_plot.set_extent(img_extent)
+            self._img_plot.set_clim(v_min, v_max)
+            self._img_plot.set_visible(True)
+
+    def _update_stats(self, w_px, h_px, real_w, real_h,
+                      scan_step, line_step, hh, mm, ss):
+        ts = self.t_stats
+        lines = [
+            f"{ts.get('real_dims','REAL DIMS'):<18}: {real_w:.2f} x {real_h:.2f} mm",
+            f"{ts.get('est_time','EST. TIME'):<18}: {hh:02d}:{mm:02d}:{ss:02d}",
+            f"{ts.get('file_size','FILE SIZE'):<18}: {self.estimated_file_size}",
+            f"{ts.get('matrix_size','MATRIX'):<18}: {w_px} x {h_px} px",
+            f"{ts.get('scan_step','SCAN STEP'):<18}: {scan_step:.4f} mm",
+            f"{ts.get('line_step','LINE STEP'):<18}: {line_step:.4f} mm",
+        ]
+        for lbl, txt in zip(self.stats_labels, lines):
+            lbl.setText(txt)
+
+    # ── Logique moteur ────────────────────────────────────────────────
 
     def process_logic(self):
         if not self.input_image_path or not os.path.isfile(self.input_image_path):
             return None, None
-
-        ui_dimension = self.get_val(self.controls.get("width", {}))
-        raster_mode = self._raster_dir
-
-        settings = {
-            "line_step": self.get_val(self.controls.get("line_step")),
-            "gamma": self.get_val(self.controls.get("gamma")),
-            "contrast": self.get_val(self.controls.get("contrast")),
-            "thermal": self.get_val(self.controls.get("thermal")),
-            "min_p": self.get_val(self.controls.get("min_p")),
-            "max_p": self.get_val(self.controls.get("max_p")),
-            "dpi": self.get_val(self.controls.get("dpi")),
-            "gray_steps": self.get_val(self.controls.get("gray_steps")),
-            "premove": self.get_val(self.controls.get("premove")),
-            "feedrate": self.get_val(self.controls.get("feedrate")),
-            "speed": self.get_val(self.controls.get("feedrate")),
-            "invert": self.sw_invert.isChecked() if hasattr(self, "sw_invert") else False,
-            "ui_dimension": ui_dimension,
-            "raster_mode": raster_mode,
-            "force_dim": self.sw_force_width.isChecked() if hasattr(self, "sw_force_width") else False
-        }
-        if raster_mode == "horizontal":
-            settings["width"] = ui_dimension
-        else:
-            settings["height"] = ui_dimension
-
-        current_cache = None
-        if hasattr(self, "_source_img_path") and self._source_img_path == self.input_image_path:
-            current_cache = getattr(self, "_source_img_cache", None)
-
         try:
+            ui_dim      = self._get_val("width")
+            raster_mode = self._raster_mode
+
+            settings = {
+                "line_step":    self._get_val("line_step"),
+                "gamma":        self._get_val("gamma"),
+                "contrast":     self._get_val("contrast"),
+                "thermal":      self._get_val("thermal"),
+                "min_p":        self._get_val("min_p"),
+                "max_p":        self._get_val("max_p"),
+                "dpi":          self._get_val("dpi"),
+                "gray_steps":   self._get_val("gray_steps"),
+                "premove":      self._get_val("premove"),
+                "feedrate":     self._get_val("feedrate"),
+                "speed":        self._get_val("feedrate"),
+                "invert":       self.sw_invert.isChecked(),
+                "ui_dimension": ui_dim,
+                "raster_mode":  raster_mode,
+                "force_dim":    self.sw_force_width.isChecked(),
+            }
+            if settings["force_dim"]:
+                if raster_mode == "horizontal":
+                    settings["width"]  = ui_dim
+                else:
+                    settings["height"] = ui_dim
+
+            current_cache = None
+            if self._source_img_path == self.input_image_path:
+                current_cache = self._source_img_cache
+
             results = self.engine.process_image_logic(
-                self.input_image_path, settings, source_img_cache=current_cache
+                self.input_image_path, settings,
+                source_img_cache=current_cache
             )
             matrix, img_obj, geom, mem_warn = results
 
@@ -1744,463 +1326,340 @@ class RasterViewQt(QWidget):
                 geom["machine_step_x"] = geom.get("x_step", 0.1)
                 geom["machine_step_y"] = geom.get("y_step", 0.1)
 
-            self._source_img_cache = img_obj
-            self._source_img_path = self.input_image_path
-            self._last_matrix = matrix
-            self._last_geom = geom
+            self._source_img_cache   = img_obj
+            self._source_img_path    = self.input_image_path
+            self._last_matrix        = matrix
+            self._last_geom          = geom
             self.estimated_file_size = geom.get("file_size_str", "N/A")
-            self._estimated_time = geom.get("est_min", 0)
-
             return matrix, geom
 
         except Exception as e:
-            import traceback
-            print(f"Logic Error: {e}")
-            traceback.print_exc()
+            import traceback; traceback.print_exc()
             return None, None
 
-    def update_preview(self):
-        if not self.controls or "width" not in self.controls:
-            return
-        if not hasattr(self, "origin_mode"):
-            return
+    def calculate_offsets(self, real_w, real_h):
+        origin_ctrl = self.controls.get("origin_mode")
+        origin_key  = "Lower-Left"
+        if origin_ctrl:
+            combo = origin_ctrl["combo"]
+            ud = combo.currentData()
+            origin_key = ud if ud else combo.currentText()
+        cx = self._get_val("custom_x") or 0.0
+        cy = self._get_val("custom_y") or 0.0
+        return self.engine.calculate_offsets(origin_key, real_w, real_h, cx, cy)
 
+    def _get_val(self, key, default=0.0):
+        ctrl = self.controls.get(key)
+        if not ctrl: return default
         try:
-            res = self.process_logic()
-            if not res or res[0] is None:
-                self.image_preview.clear()
-                return
+            return float(ctrl["entry"].text().replace(",", "."))
+        except (ValueError, AttributeError):
+            return default
 
-            matrix, geom = res
-            real_w = geom["real_w"]
-            real_h = geom["real_h"]
-            rf = geom["rect_full"]
+    # ── Génération G-Code ─────────────────────────────────────────────
 
-            offX, offY = self.calculate_offsets(real_w, real_h)
-            v_min = self.get_val(self.controls.get("min_p")) if self.controls.get("min_p") else 0
-            v_max = self.get_val(self.controls.get("max_p")) if self.controls.get("max_p") else 255
-
-            # Mise à jour preview image
-            self.image_preview.update_image(matrix, offX, offY, real_w, real_h, v_min, v_max)
-
-            # Calcul zones overscan
-            direction = self._raster_dir
-            overscan_rects = []
-
-            if direction == "horizontal":
-                over_w_left = abs(rf[0])
-                over_w_right = rf[2] - real_w
-                if over_w_left > 0.1:
-                    overscan_rects.append((offX + rf[0], offY, over_w_left, real_h, "OVERSCAN_90"))
-                if over_w_right > 0.1:
-                    overscan_rects.append((offX + real_w, offY, over_w_right, real_h, "OVERSCAN_-90"))
-            else:
-                over_h_bottom = abs(rf[1])
-                over_h_top = rf[3] - real_h
-                if over_h_bottom > 0.1:
-                    overscan_rects.append((offX, offY + rf[1], real_w, over_h_bottom, "OVERSCAN"))
-                if over_h_top > 0.1:
-                    overscan_rects.append((offX, offY + real_h, real_w, over_h_top, "OVERSCAN"))
-
-            self.image_preview.set_overscan_rects(overscan_rects)
-            self.image_preview.set_origin_dot(0, 0)
-
-            # Stats
-            est_min = geom.get("est_min", 0.0)
-            total_sec = int(est_min * 60)
-            hours = total_sec // 3600
-            minutes = (total_sec % 3600) // 60
-            seconds = total_sec % 60
-
-            self._update_dashboard_stats(
-                geom["w_px"], geom["h_px"],
-                real_w, real_h,
-                geom["scan_step"], geom["l_step"],
-                hours, minutes, seconds,
-                self.estimated_file_size
-            )
-
-            # Histogramme
-            QTimer.singleShot(50, lambda: self.histogram.update_histogram(matrix, v_min, v_max))
-
-        except Exception as e:
-            import traceback
-            print(f"Preview Error: {e}")
-            traceback.print_exc()
-
-    # ─────────────────────────────────────────
-    #  STATS
-    # ─────────────────────────────────────────
-
-    def _update_dashboard_stats(self, w_px, h_px, real_w, real_h,
-                                scan_step, line_step,
-                                hours, minutes, seconds, est_size="N/A"):
-        if not hasattr(self, "stats_labels"):
+    def generate_gcode(self):
+        self.save_settings()
+        res = self.process_logic()
+        if not res or res[0] is None:
+            QMessageBox.warning(self, "No image", "Please select a valid image first.")
             return
 
-        lines = [
-            f"{self.stats_texts.get('real_dims', 'REAL DIMS'):<20}: {real_w:.2f} x {real_h:.2f} mm",
-            f"{self.stats_texts.get('est_time', 'EST TIME'):<20}: {hours:02d}:{minutes:02d}:{seconds:02d}",
-            f"{self.stats_texts.get('file_size', 'FILE SIZE'):<20}: {est_size}",
-            f"{self.stats_texts.get('matrix_size', 'MATRIX'):<20}: {w_px} x {h_px} px",
-            f"{self.stats_texts.get('scan_step', 'SCAN STEP'):<20}: {scan_step:.4f} mm",
-            f"{self.stats_texts.get('line_step', 'LINE STEP'):<20}: {line_step:.4f} mm"
-        ]
-        for lbl, txt in zip(self.stats_labels, lines):
-            lbl.setText(txt)
+        matrix, geom = res
+        real_w  = geom["real_w"]
+        real_h  = geom["real_h"]
+        offX, offY = self.calculate_offsets(real_w, real_h)
 
-    # ─────────────────────────────────────────
-    #  RASTER DIRECTION
-    # ─────────────────────────────────────────
+        raster_mode  = self._raster_mode
+        cmd_mode_val = self.controls["cmd_mode"]["combo"].currentText() \
+            if "cmd_mode" in self.controls else "M67 (Analog)"
+        firing_val   = self.controls["firing_mode"]["combo"].currentText() \
+            if "firing_mode" in self.controls else "M3/M5"
+        origin_val   = (self.controls["origin_mode"]["combo"].currentData()
+                        or self.controls["origin_mode"]["combo"].currentText()) \
+            if "origin_mode" in self.controls else "Lower-Left"
 
-    def _on_raster_dir_change(self, selected_label):
-        tech = self._raster_map_inv.get(selected_label, "horizontal")
-        self._raster_dir = tech
+        ratio_raw = "20%"
+        if "frame_feed_ratio_menu" in self.controls:
+            ratio_raw = self.controls["frame_feed_ratio_menu"]["combo"].currentText()
 
-        if tech == "vertical":
-            w_text = self.common.get("target_height", "Target Height")
-            f_text = self.common.get("force_height", "Force Exact Height")
-        else:
-            w_text = self.common.get("target_width", "Target Width")
-            f_text = self.common.get("force_width", "Force Exact Width")
+        global_h = self.controller.config_manager.get_item("machine_settings", "custom_header", "").strip()
+        global_f = self.controller.config_manager.get_item("machine_settings", "custom_footer", "").strip()
+        raster_h = self.txt_header.toPlainText().strip()
+        raster_f = self.txt_footer.toPlainText().strip()
+        full_header = f"{global_h}\n{raster_h}".strip() if global_h and raster_h else (global_h or raster_h)
+        full_footer = f"{raster_f}\n{global_f}".strip() if global_f and raster_f else (global_f or raster_f)
 
-        if hasattr(self, "width_label_widget") and self.width_label_widget:
-            self.width_label_widget.setText(w_text)
-        if hasattr(self, "force_w_label") and self.force_w_label:
-            self.force_w_label.setText(f_text)
+        file_ext  = self.controller.config_manager.get_item("machine_settings", "gcode_extension", ".nc")
+        file_name = (os.path.splitext(os.path.basename(self.input_image_path))[0]
+                     if self.input_image_path else "export")
 
-        self.update_preview()
+        payload = {
+            "matrix": matrix,
+            "dims":   (geom["h_px"], geom["w_px"], geom["y_step"], geom["x_step"]),
+            "estimated_size": self.estimated_file_size,
+            "offsets": (offX, offY),
+            "params": {
+                "e_num":       int(self._get_val("m67_e_num")),
+                "use_s_mode":  "S (Spindle)" in cmd_mode_val,
+                "ctrl_max":    self._get_val("ctrl_max"),
+                "min_power":   self._get_val("min_p"),
+                "max_power":   self._get_val("max_p"),
+                "premove":     self._get_val("premove"),
+                "feedrate":    self._get_val("feedrate"),
+                "m67_delay":   self._get_val("m67_delay"),
+                "gray_scales": int(self._get_val("gray_steps")),
+                "gray_steps":  int(self._get_val("gray_steps")),
+                "raster_mode": raster_mode,
+            },
+            "framing": {
+                "is_pointing":   self.sw_pointer.isChecked(),
+                "is_framing":    self.sw_frame.isChecked(),
+                "f_pwr":         self.frame_power_entry.text(),
+                "f_ratio":       ratio_raw.replace("%", ""),
+                "f_pause":       self.pause_cmd_entry.text().strip() or None,
+                "use_s_mode":    "S (Spindle)" in cmd_mode_val,
+                "e_num":         int(self._get_val("m67_e_num")),
+                "base_feedrate": self._get_val("feedrate"),
+            },
+            "text_blocks": {"header": full_header, "footer": full_footer},
+            "metadata": {
+                "version":          self.version,
+                "mode":             cmd_mode_val.split(" ")[0],
+                "firing_cmd":       firing_val.split("/")[0],
+                "file_extension":   file_ext,
+                "file_name":        file_name,
+                "output_dir":       self.output_dir,
+                "origin_mode":      origin_val,
+                "real_w":           real_w,
+                "real_h":           real_h,
+                "est_sec":          int(geom.get("est_min", 0) * 60),
+                "raster_direction": raster_mode,
+            }
+        }
 
-    # ─────────────────────────────────────────
-    #  FRAMING / POINTING
-    # ─────────────────────────────────────────
+        self.controller.show_simulation(self.engine, payload, return_view="raster")
 
-    def toggle_framing_options(self):
-        pointing = self.sw_pointer.isChecked() if hasattr(self, "sw_pointer") else False
-        framing = self.sw_frame.isChecked() if hasattr(self, "sw_frame") else False
+    # ── Sélection fichiers ────────────────────────────────────────────
 
-        any_active = pointing or framing
-        label_color = "#DCE4EE" if any_active else "#555555"
-        entry_enabled = any_active
+    def select_input(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Image", "",
+            "Image files (*.jpg *.jpeg *.png *.bmp)"
+        )
+        if path:
+            self.input_image_path = path
+            self.btn_input.setText(os.path.basename(path).upper())
+            self.btn_input.setStyleSheet(self._btn_style(bg="#2d5a27", hover="#367a31"))
+            self._canvas.request_auto_fit()
+            self._canvas._fit_next = True
+            self._schedule_preview()
 
-        widgets_to_toggle = []
-        if hasattr(self, "pause_cmd_entry"):
-            self.pause_cmd_entry.setEnabled(entry_enabled)
-        if hasattr(self, "frame_power_entry"):
-            self.frame_power_entry.setEnabled(entry_enabled)
-        if hasattr(self, "frame_feed_ratio_menu"):
-            self.frame_feed_ratio_menu.setEnabled(framing)
+    def select_output(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+        if directory:
+            self.output_dir = directory
+            folder = os.path.basename(directory) or directory
+            self.btn_output.setText(f"OUT: {folder.upper()}/")
+            self.btn_output.setStyleSheet(self._btn_style(bg="#2d5a27", hover="#367a31"))
 
-        for attr in ["lbl_pause_cmd", "lbl_frame_p"]:
-            if hasattr(self, attr):
-                getattr(self, attr).setStyleSheet(f"color: {label_color}; font-size: 11px;")
+    # ── Profils ───────────────────────────────────────────────────────
 
-        hint_color = "#888888" if any_active else "#444444"
-        for attr in ["lbl_pause_hint", "lbl_plow_power_hint"]:
-            if hasattr(self, attr):
-                getattr(self, attr).setStyleSheet(f"color: {hint_color}; font-size: 10px; font-style: italic;")
+    def export_profile(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Profile",
+            os.path.join(self.application_path, "alig_profile.json"),
+            "JSON (*.json)"
+        )
+        if path:
+            data = self._collect_settings()
+            machine_keys = ["cmd_mode", "firing_mode", "m67_e_num", "ctrl_max", "m67_delay"]
+            export = {
+                "machine_settings": {k: data.pop(k) for k in machine_keys if k in data},
+                "raster_settings": data
+            }
+            success, err = save_json_file(path, export)
+            if success:
+                QMessageBox.information(self, "Export", "Profile saved successfully.")
+            else:
+                QMessageBox.critical(self, "Error", f"Export failed:\n{err}")
 
-    # ─────────────────────────────────────────
-    #  VERROU MACHINE
-    # ─────────────────────────────────────────
+    def load_profile_from(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Load Profile", self.application_path, "JSON (*.json)"
+        )
+        if path:
+            data, err = load_json_file(path)
+            if data:
+                if "machine_settings" in data:
+                    self._apply_settings(data.get("machine_settings", {}), is_machine=True)
+                if "raster_settings" in data:
+                    self._apply_settings(data.get("raster_settings", {}))
+                else:
+                    self._apply_settings(data)
+                self._schedule_preview()
+                QMessageBox.information(self, "Profile", f"Loaded:\n{os.path.basename(path)}")
+            else:
+                QMessageBox.critical(self, "Error", f"Could not load:\n{err}")
+
+    # ── Save / Load settings ──────────────────────────────────────────
+
+    def save_settings(self):
+        all_data = self._collect_settings()
+        machine_keys = ["cmd_mode", "firing_mode", "m67_e_num", "ctrl_max", "m67_delay"]
+        machine_updates = {k: all_data.pop(k) for k in machine_keys if k in all_data}
+
+        current_machine = self.controller.config_manager.get_section("machine_settings") or {}
+        current_machine.update(machine_updates)
+        self.controller.config_manager.set_section("machine_settings", current_machine)
+        self.controller.config_manager.set_section("raster_settings", all_data)
+        self.controller.config_manager.save()
+
+    def load_settings(self):
+        machine_data = self.controller.config_manager.get_section("machine_settings") or {}
+        raster_data  = self.controller.config_manager.get_section("raster_settings")  or {}
+
+        self._loading = True
+        self._apply_settings(machine_data, is_machine=True)
+        self._apply_settings(raster_data)
+        self._loading = False
+
+        self.refresh_global_previews()
+
+    def _collect_settings(self):
+        data = {}
+        for k, ctrl in self.controls.items():
+            if "combo" in ctrl:
+                ud = ctrl["combo"].currentData()
+                data[k] = ud if ud else ctrl["combo"].currentText()
+            elif "entry" in ctrl:
+                try:
+                    data[k] = float(ctrl["entry"].text().replace(",", "."))
+                except ValueError:
+                    data[k] = ctrl["entry"].text()
+
+        data["input_path"]      = self.input_image_path
+        data["output_dir"]      = self.output_dir
+        data["custom_header"]   = self.txt_header.toPlainText().strip()
+        data["custom_footer"]   = self.txt_footer.toPlainText().strip()
+        data["include_frame"]   = self.sw_frame.isChecked()
+        data["include_pointer"] = self.sw_pointer.isChecked()
+        data["force_width"]     = self.sw_force_width.isChecked()
+        data["invert_relief"]   = self.sw_invert.isChecked()
+        data["frame_power"]     = self.frame_power_entry.text()
+        data["custom_pause_cmd"]= self.pause_cmd_entry.text()
+        data["raster_mode"]     = self._raster_mode
+        return data
+
+    def _apply_settings(self, data, is_machine=False):
+        if not data: return
+
+        for k, v in data.items():
+            if k not in self.controls: continue
+            ctrl = self.controls[k]
+            if "combo" in ctrl:
+                combo = ctrl["combo"]
+                for i in range(combo.count()):
+                    if combo.itemData(i) == v or combo.itemText(i) == str(v):
+                        combo.setCurrentIndex(i)
+                        break
+            elif "entry" in ctrl:
+                try:
+                    is_int = ctrl.get("is_int", False)
+                    prec   = ctrl.get("precision", 2)
+                    fmt = "{:d}" if is_int else f"{{:.{prec}f}}"
+                    val = float(v)
+                    ctrl["entry"].setText(fmt.format(int(val) if is_int else val))
+                    sl = ctrl.get("slider")
+                    if sl and sl is not ctrl["entry"]:
+                        sl.setValue(int(val) if is_int else int(val * 100))
+                except (ValueError, TypeError):
+                    pass
+
+        sw_map = {
+            "invert_relief":   self.sw_invert,
+            "include_frame":   self.sw_frame,
+            "include_pointer": self.sw_pointer,
+            "force_width":     self.sw_force_width,
+        }
+        for key, sw in sw_map.items():
+            if key in data:
+                sw.setChecked(bool(data[key]))
+
+        if "raster_mode" in data:
+            self._on_raster_change(data["raster_mode"])
+
+        if not is_machine:
+            raw_path = data.get("input_path", "")
+            if raw_path and os.path.isfile(raw_path):
+                self.input_image_path = raw_path
+                self.btn_input.setText(os.path.basename(raw_path).upper())
+                self.btn_input.setStyleSheet(self._btn_style(bg="#2d5a27", hover="#367a31"))
+
+            out = data.get("output_dir", "")
+            if out:
+                self.output_dir = out
+                folder = os.path.basename(out) or out
+                self.btn_output.setText(f"OUT: {folder.upper()}/")
+                self.btn_output.setStyleSheet(self._btn_style(bg="#2d5a27", hover="#367a31"))
+
+            if "custom_header" in data:
+                self.txt_header.setPlainText(data["custom_header"])
+            if "custom_footer" in data:
+                self.txt_footer.setPlainText(data["custom_footer"])
+            if "frame_power" in data:
+                self.frame_power_entry.setText(str(data["frame_power"]))
+            if "custom_pause_cmd" in data:
+                self.pause_cmd_entry.setText(str(data["custom_pause_cmd"]))
+            if data.get("origin_mode") == "Custom":
+                self.custom_offset_frame.setVisible(True)
+
+            self._update_framing_state()
+
+    # ── Lock machine params ───────────────────────────────────────────
 
     def toggle_machine_lock(self):
         self.is_locked = not self.is_locked
         self.apply_lock_state()
 
     def apply_lock_state(self):
-        new_text = "🔒" if self.is_locked else "🔓"
-        btn_color = "#444444" if self.is_locked else "#D32F2F"
-        self.lock_btn.setText(new_text)
-        self.lock_btn.setStyleSheet(f"""
-            QPushButton {{ background-color: {btn_color}; border-radius: 4px;
-                          font-size: 13px; border: none; }}
-            QPushButton:hover {{ background-color: {'#666666' if self.is_locked else '#f44336'}; }}
-        """)
-
-        if not hasattr(self, "machine_controls_container"):
-            return
-
-        label_color = "#666666" if self.is_locked else "#FFFFFF"
-        entry_style_locked = self._entry_style().replace("color: white", "color: #888888")
-        entry_style_normal = self._entry_style()
-
-        def walk(widget):
-            for child in widget.findChildren(QLineEdit):
-                child.setEnabled(not self.is_locked)
-                child.setStyleSheet(entry_style_locked if self.is_locked else entry_style_normal)
-            for child in widget.findChildren(QComboBox):
-                child.setEnabled(not self.is_locked)
-            for child in widget.findChildren(QLabel):
-                if "GLOBAL" not in child.text().upper():
-                    child.setStyleSheet(f"color: {label_color}; font-size: 11px;")
-
-        walk(self.machine_controls_container)
-
-    # ─────────────────────────────────────────
-    #  GÉNÉRATION G-CODE
-    # ─────────────────────────────────────────
-
-    def generate_gcode(self):
-        self._save_settings()
-
-        try:
-            current_cmd_mode = self.cmd_mode.currentText() if hasattr(self, "cmd_mode") else "M67 (Analog)"
-            current_firing_mode = self.firing_mode.currentText() if hasattr(self, "firing_mode") else "M3/M5"
-            current_origin_mode = (self.origin_mode.currentData() or self.origin_mode.currentText()) if hasattr(self, "origin_mode") else "Lower-Left"
-            current_raster_mode = self._raster_dir
-        except AttributeError:
-            return
-
-        res = self.process_logic()
-        if not res or res[0] is None:
-            return
-
-        matrix, geom = res
-        x_step_final = geom["x_step"]
-        y_step_final = geom["y_step"]
-        offX, offY = self.calculate_offsets(geom["real_w"], geom["real_h"])
-
-        global_h = self.controller.config_manager.get_item("machine_settings", "custom_header", "").strip()
-        global_f = self.controller.config_manager.get_item("machine_settings", "custom_footer", "").strip()
-        raster_h = self.txt_header.toPlainText().strip()
-        raster_f = self.txt_footer.toPlainText().strip()
-
-        full_header = f"{global_h}\n{raster_h}".strip() if global_h and raster_h else (global_h or raster_h)
-        full_footer = f"{raster_f}\n{global_f}".strip() if global_f and raster_f else (global_f or raster_f)
-
-        payload = {
-            "matrix": matrix,
-            "dims": (geom["h_px"], geom["w_px"], y_step_final, x_step_final),
-            "estimated_size": self.estimated_file_size,
-            "offsets": (offX, offY),
-            "params": {
-                "e_num": int(self.get_val(self.controls.get("m67_e_num"))),
-                "use_s_mode": "S (Spindle)" in current_cmd_mode,
-                "ctrl_max": self.get_val(self.controls.get("ctrl_max")),
-                "min_power": self.get_val(self.controls.get("min_p")),
-                "max_power": self.get_val(self.controls.get("max_p")),
-                "premove": self.get_val(self.controls.get("premove")),
-                "feedrate": self.get_val(self.controls.get("feedrate")),
-                "m67_delay": self.get_val(self.controls.get("m67_delay")),
-                "gray_scales": int(self.get_val(self.controls.get("gray_steps"))),
-                "gray_steps": int(self.get_val(self.controls.get("gray_steps"))),
-                "raster_mode": current_raster_mode
-            },
-            "framing": {
-                "is_pointing": self.sw_pointer.isChecked() if hasattr(self, "sw_pointer") else False,
-                "is_framing": self.sw_frame.isChecked() if hasattr(self, "sw_frame") else False,
-                "f_pwr": self.frame_power_entry.text() if hasattr(self, "frame_power_entry") else "0",
-                "f_ratio": self.frame_feed_ratio_menu.currentText().replace("%", "") if hasattr(self, "frame_feed_ratio_menu") else "20",
-                "f_pause": self.pause_cmd_entry.text().strip() or None if hasattr(self, "pause_cmd_entry") else None,
-                "use_s_mode": "S (Spindle)" in current_cmd_mode,
-                "e_num": int(self.get_val(self.controls.get("m67_e_num"))),
-                "base_feedrate": self.get_val(self.controls.get("feedrate"))
-            },
-            "text_blocks": {"header": full_header, "footer": full_footer},
-            "metadata": {
-                "version": self.version,
-                "mode": current_cmd_mode.split(" ")[0],
-                "firing_cmd": current_firing_mode.split("/")[0],
-                "file_extension": self.controller.config_manager.get_item("machine_settings", "gcode_extension", ".nc"),
-                "file_name": os.path.basename(self.input_image_path).split(".")[0] if self.input_image_path else "export",
-                "output_dir": self.output_dir,
-                "origin_mode": current_origin_mode,
-                "real_w": geom["real_w"],
-                "real_h": geom["real_h"],
-                "est_sec": int(geom.get("est_min", 0) * 60),
-                "raster_direction": current_raster_mode
-            }
-        }
-
-        self.controller.show_simulation(self.engine, payload, return_view="raster")
-
-    # ─────────────────────────────────────────
-    #  SAUVEGARDE / CHARGEMENT SETTINGS
-    # ─────────────────────────────────────────
-
-    def _get_all_settings_data(self):
-        data = {k: self.get_val(v) for k, v in self.controls.items()}
-        data["input_path"] = self.input_image_path
-        data["output_dir"] = self.output_dir
-        data["custom_header"] = self.txt_header.toPlainText().strip() if hasattr(self, "txt_header") else ""
-        data["custom_footer"] = self.txt_footer.toPlainText().strip() if hasattr(self, "txt_footer") else ""
-        data["origin_mode"] = (self.origin_mode.currentData() or self.origin_mode.currentText()) if hasattr(self, "origin_mode") else "Lower-Left"
-        data["cmd_mode"] = self.cmd_mode.currentText() if hasattr(self, "cmd_mode") else "M67 (Analog)"
-        data["firing_mode"] = self.firing_mode.currentText() if hasattr(self, "firing_mode") else "M3/M5"
-        data["include_frame"] = self.sw_frame.isChecked() if hasattr(self, "sw_frame") else False
-        data["include_pointer"] = self.sw_pointer.isChecked() if hasattr(self, "sw_pointer") else False
-        data["frame_power"] = self.frame_power_entry.text() if hasattr(self, "frame_power_entry") else "0"
-        data["custom_pause_cmd"] = self.pause_cmd_entry.text() if hasattr(self, "pause_cmd_entry") else "M0"
-        data["framing_ratio"] = self.frame_feed_ratio_menu.currentText() if hasattr(self, "frame_feed_ratio_menu") else "20%"
-        data["force_width"] = self.sw_force_width.isChecked() if hasattr(self, "sw_force_width") else False
-        data["invert_relief"] = self.sw_invert.isChecked() if hasattr(self, "sw_invert") else False
-        data["raster_dir"] = self._raster_dir
-        return data
-
-    def _save_settings(self):
-        all_data = self._get_all_settings_data()
-        machine_keys = ["cmd_mode", "firing_mode", "m67_e_num", "ctrl_max", "m67_delay"]
-        machine_updates = {k: all_data.pop(k) for k in machine_keys if k in all_data}
-        current_machine = self.controller.config_manager.get_section("machine_settings")
-        current_machine.update(machine_updates)
-        self.controller.config_manager.set_section("machine_settings", current_machine)
-        self.controller.config_manager.set_section("raster_settings", all_data)
-        if not self.controller.config_manager.save():
-            print("ERREUR : Impossible d'écrire le fichier de config.")
-
-    def _load_settings(self):
-        machine_data = self.controller.config_manager.get_section("machine_settings")
-        raster_data = self.controller.config_manager.get_section("raster_settings")
-        if machine_data:
-            self._apply_settings_data(machine_data, is_machine_config=True)
-        if raster_data:
-            self._apply_settings_data(raster_data, is_machine_config=False)
-
-    def _apply_settings_data(self, data, is_machine_config=False):
-        # Sliders & entries
-        for k, v in data.items():
-            if k in self.controls:
-                ctrl = self.controls[k]
-                entry = ctrl.get("entry")
-                slider = ctrl.get("slider")
-                if entry and entry != slider:
-                    is_int = ctrl.get("is_int", False)
-                    prec = ctrl.get("precision", 2)
-                    mult = ctrl.get("precision_mult", 1)
-                    fmt = "{:d}" if is_int else f"{{:.{prec}f}}"
-                    try:
-                        entry.setText(fmt.format(int(v) if is_int else float(v)))
-                        if hasattr(slider, "setValue"):
-                            sv = int(v) if is_int else int(float(v) * mult)
-                            slider.blockSignals(True)
-                            slider.setValue(sv)
-                            slider.blockSignals(False)
-                    except Exception:
-                        pass
-                elif entry:
-                    is_int = ctrl.get("is_int", False)
-                    prec = ctrl.get("precision", 2)
-                    fmt = "{:d}" if is_int else f"{{:.{prec}f}}"
-                    try:
-                        entry.setText(fmt.format(int(v) if is_int else float(v)))
-                    except Exception:
-                        pass
-
-        # Combos
-        combo_map = {
-            "origin_mode": "origin_mode",
-            "cmd_mode": "cmd_mode",
-            "firing_mode": "firing_mode",
-            "framing_ratio": "frame_feed_ratio_menu"
-        }
-        for key, attr in combo_map.items():
-            if key in data and hasattr(self, attr):
-                combo = getattr(self, attr)
-                idx = combo.findText(str(data[key]))
-                if idx >= 0:
-                    combo.setCurrentIndex(idx)
-
-        # Switches
-        switch_map = {
-            "invert_relief": "sw_invert",
-            "include_frame": "sw_frame",
-            "include_pointer": "sw_pointer",
-            "force_width": "sw_force_width"
-        }
-        for key, attr in switch_map.items():
-            if key in data and hasattr(self, attr):
-                getattr(self, attr).setChecked(bool(data[key]))
-
-        # Raster direction
-        if "raster_dir" in data and hasattr(self, "raster_dir_btn"):
-            tech = data["raster_dir"]
-            self._raster_dir = tech
-            label = self._raster_map.get(tech, self._raster_map["horizontal"])
-            self.raster_dir_btn.set(label)
-
-        # Image path
-        raw_path = data.get("input_path", "")
-        validated = self.controller.config_manager.validate_image_path(raw_path) if hasattr(self.controller.config_manager, "validate_image_path") else (raw_path if os.path.exists(raw_path) else "")
-        self.input_image_path = validated
-        if self.input_image_path:
-            name = os.path.basename(self.input_image_path).upper()
-            self.btn_input.setText(name)
-            self.btn_input.setStyleSheet(self._btn_style(color="#2d5a27"))
-
-        # Output dir
-        out = data.get("output_dir", self.application_path)
-        self.output_dir = out
-        if out and out != self.application_path:
-            folder = os.path.basename(out) or out
-            self.btn_output.setText(f"OUT: {folder.upper()}/")
-            self.btn_output.setStyleSheet(self._btn_style(color="#2d5a27"))
-
-        if not is_machine_config:
-            if "custom_header" in data and hasattr(self, "txt_header"):
-                self.txt_header.setPlainText(data["custom_header"])
-            if "custom_footer" in data and hasattr(self, "txt_footer"):
-                self.txt_footer.setPlainText(data["custom_footer"])
-
-        if hasattr(self, "frame_power_entry") and "frame_power" in data:
-            self.frame_power_entry.setText(str(data["frame_power"]))
-        if hasattr(self, "pause_cmd_entry") and "custom_pause_cmd" in data:
-            self.pause_cmd_entry.setText(str(data["custom_pause_cmd"]))
-
-        # Custom offset visibility
-        origin_mode_val = data.get("origin_mode", "")
-        if hasattr(self, "custom_offset_frame"):
-            self.custom_offset_frame.setVisible(origin_mode_val == "Custom")
-
-        self.toggle_framing_options()
-        self._refresh_global_previews()
-
-    def _refresh_global_previews(self):
-        if hasattr(self, "txt_global_header_preview"):
-            h = self.controller.config_manager.get_item("machine_settings", "custom_header", "")
-            self.txt_global_header_preview.setPlainText(h or self.common.get("no_global_header", "(no global header)"))
-
-        if hasattr(self, "txt_global_footer_preview"):
-            f = self.controller.config_manager.get_item("machine_settings", "custom_footer", "")
-            self.txt_global_footer_preview.setPlainText(f or self.common.get("no_global_footer", "(no global footer)"))
-
-    # ─────────────────────────────────────────
-    #  PROFILS IMPORT / EXPORT
-    # ─────────────────────────────────────────
-
-    def export_profile(self):
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export Profile", os.path.join(self.application_path, "alig_full_profile.json"),
-            "JSON files (*.json)"
+        self.lock_btn.setText("🔒" if self.is_locked else "🔓")
+        self._machine_container.setEnabled(not self.is_locked)
+        style = ("background:#444;" if self.is_locked else "background:#D32F2F;")
+        self.lock_btn.setStyleSheet(
+            f"QPushButton{{{style}color:white;border-radius:4px;border:none;font-size:13px;}}"
+            "QPushButton:hover{background:#666;}"
         )
-        if path:
-            all_data = self._get_all_settings_data()
-            machine_keys = ["cmd_mode", "firing_mode", "m67_e_num", "ctrl_max", "m67_delay"]
-            export_struct = {
-                "machine_settings": {k: all_data.pop(k) for k in machine_keys if k in all_data},
-                "raster_settings": all_data
-            }
-            success, err = save_json_file(path, export_struct)
-            if success:
-                QMessageBox.information(self, "Export Success", "Full profile saved!")
 
-    def load_profile_from(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Import Profile", self.application_path, "JSON files (*.json)"
-        )
-        if path:
-            data, err = load_json_file(path)
-            if data:
-                self._apply_settings_data(data)
-                self.update_preview()
-                QMessageBox.information(self, "Success", f"Profile loaded:\n{os.path.basename(path)}")
-            else:
-                QMessageBox.critical(self, "Error", f"Could not load profile:\n{err}")
+    # ── Global previews ───────────────────────────────────────────────
 
-    # ─────────────────────────────────────────
-    #  FERMETURE
-    # ─────────────────────────────────────────
+    def refresh_global_previews(self):
+        gh = self.controller.config_manager.get_item("machine_settings", "custom_header", "")
+        gf = self.controller.config_manager.get_item("machine_settings", "custom_footer", "")
+        self.txt_global_header_preview.setPlainText(
+            gh if gh else self.t.get("no_global_header", "(Machine Settings Header…)"))
+        self.txt_global_footer_preview.setPlainText(
+            gf if gf else self.t.get("no_global_footer", "(Machine Settings Footer…)"))
 
-    def closeEvent(self, event):
-        self._save_settings()
-        super().closeEvent(event)
+    # ── Traduction dynamique ──────────────────────────────────────────
+
+    def update_texts(self):
+        lang = self.controller.config_manager.get_item("machine_settings", "language", "English")
+        if not lang or lang not in TRANSLATIONS:
+            lang = "English"
+        self._lang   = lang
+        self.t       = TRANSLATIONS[lang]["common"]
+        self.t_stats = TRANSLATIONS[lang]["stats"]
+        self.t_orig  = TRANSLATIONS[lang]["origin_options"]
+
+        translate_ui_widgets(self.translation_map, self.t)
+
+        self._tabs.setTabText(0, self.t.get("geometry", "Geometry"))
+        self._tabs.setTabText(1, self.t.get("image",    "Image"))
+        self._tabs.setTabText(2, self.t.get("laser",    "Laser"))
+        self._tabs.setTabText(3, self.t.get("gcode",    "G-Code"))
+
+        for key, btn in self._btn_raster.items():
+            btn.setText(self.t.get(key, key.capitalize()))
+
+        self.refresh_global_previews()

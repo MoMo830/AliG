@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPalette, QColor
 
-from utils.config_manager import ConfigManager
+from core.config_manager import ConfigManager
 from utils.gui_utils import setup_app_id
 from gui.main_window_qt import MainWindowQt
 

@@ -392,12 +392,14 @@ class DashboardViewQt(QWidget):
         ]
 
         # 4. Création dynamique des colonnes
+        self._stat_value_labels = []
         for value, label in stat_items:
             v_layout = QVBoxLayout()
             v_layout.setSpacing(2) # Espace réduit entre valeur et texte
             
             # Valeur (Bleu et gras)
             val_lbl = QLabel(value)
+            self._stat_value_labels.append(val_lbl)
             val_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             val_lbl.setStyleSheet("color: #1F6AA5; font-size: 18px; font-weight: bold; border: none; background: transparent;")
             
@@ -499,3 +501,30 @@ class DashboardViewQt(QWidget):
         # 2. Utilisation de l'utilitaire de traduction centralisé
         from gui.utils_qt import translate_ui_widgets
         translate_ui_widgets(self.translation_map, self.texts)
+
+    def refresh(self):
+        """Recharge les stats et les vignettes depuis le disque."""
+        # Mettre à jour les stats si les labels existent déjà
+        if hasattr(self, '_stat_value_labels') and len(self._stat_value_labels) == 3:
+            cfg = self.controller.config_manager
+            total_l = cfg.get_item("stats", "total_lines", 0)
+            total_g = cfg.get_item("stats", "total_gcodes", 0)
+            total_s = float(cfg.get_item("stats", "total_time_seconds", 0))
+
+            hours = int(total_s // 3600)
+            minutes = int((total_s % 3600) // 60)
+            if hours > 0:
+                time_str = f"{hours}h {minutes:02d}m"
+            elif minutes > 0:
+                time_str = f"{minutes}m"
+            elif total_s > 0:
+                time_str = "< 1m"
+            else:
+                time_str = "0m"
+
+            self._stat_value_labels[0].setText(f"{int(total_l):,}")
+            self._stat_value_labels[1].setText(str(total_g))
+            self._stat_value_labels[2].setText(time_str)
+
+        # Recharger les vignettes
+        self.load_thumbnails()

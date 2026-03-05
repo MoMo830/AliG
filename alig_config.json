@@ -2,53 +2,54 @@
     "machine_settings": {
         "theme": "Dark",
         "language": "English",
-        "enable_thumbnails": true,
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
-        "m67_e_num": "0",
-        "ctrl_max": "100",
+        "m67_e_num": 0.0,
+        "ctrl_max": 1000.0,
         "gcode_extension": ".nc",
-        "laser_latency": -11.5,
-        "premove": 15.0,
+        "laser_latency": 0.0,
+        "premove": 10.0,
+        "enable_thumbnails": true,
         "custom_header": "",
-        "custom_footer": "M334"
+        "custom_footer": "",
+        "m67_delay": 0.0
     },
     "stats": {
-        "total_lines": 0,
-        "total_gcodes": 0,
-        "total_time_seconds": 0.0,
-        "last_project_time": 0.0
+        "total_lines": 87639,
+        "total_gcodes": 5,
+        "total_time_seconds": 1234.1136169433594,
+        "last_project_time": 231.5837860107422
     },
     "window_settings": {
         "is_maximized": true,
-        "geometry": "2560x1369+0+-8"
+        "geometry": "1440x890+0+-6"
     },
     "raster_settings": {
-        "width": 350.0,
+        "width": 30.0,
         "line_step": 0.1307,
-        "dpi": 254,
+        "dpi": 254.0,
+        "origin_mode": "Lower-Left",
         "custom_x": 0.0,
         "custom_y": 0.0,
         "contrast": 0.0,
         "gamma": 1.0,
         "thermal": 1.5,
-        "feedrate": 3000,
-        "premove": 15.0,
+        "feedrate": 3000.0,
+        "premove": 10.0,
         "max_p": 40.0,
-        "min_p": 15.0,
-        "gray_steps": 256,
-        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/IMG_3938.jpeg",
+        "min_p": 10.0,
+        "gray_steps": 256.0,
+        "frame_feed_ratio_menu": "20%",
+        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/Original-image-512x512-pixels.png",
         "output_dir": "c:\\Users\\momof\\SynologyDrive\\Python\\CNC\\ALIG_Project",
         "custom_header": "",
         "custom_footer": "",
-        "origin_mode": "Lower-Left",
         "include_frame": false,
         "include_pointer": false,
-        "frame_power": "0",
-        "custom_pause_cmd": "M0",
-        "framing_ratio": "20%",
         "force_width": false,
         "invert_relief": false,
-        "raster_dir": "horizontal"
+        "frame_power": "0",
+        "custom_pause_cmd": "M0",
+        "raster_mode": "horizontal"
     }
 }

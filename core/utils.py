@@ -59,29 +59,42 @@ def save_dashboard_data(config_manager, matrix, gcode_content, estimated_time=0)
         thumb_path = os.path.join(thumb_dir, f"thumb_{timestamp}.png")
         square_img.save(thumb_path, "PNG")
 
-        # --- 6. MISE À JOUR DES STATISTIQUES (Correction ici) ---
-        # On récupère les valeurs actuelles
+        # --- 6. MISE À JOUR DES STATISTIQUES ---
+        # On s'assure que toutes les données lues sont des types Python natifs
         current_lines = int(config_manager.get_item("stats", "total_lines", 0))
         current_gcodes = int(config_manager.get_item("stats", "total_gcodes", 0))
-        current_time = float(config_manager.get_item("stats", "total_time_seconds", 0.0))
         
+        # Attention ici : vous utilisiez "total_sec" pour lire et "total_time_seconds" pour écrire. 
+        # Harmonisons sur "total_time_seconds"
+        current_time = float(config_manager.get_item("stats", "total_time_seconds", 0.0))
+
         # Calcul des nouvelles valeurs
         new_lines = len(gcode_content.splitlines())
         
+        # --- CORRECTION ICI : Conversion forcée en types Python natifs ---
+        # On utilise float() et int() pour nettoyer les types NumPy éventuels
+        total_lines_updated = int(current_lines + new_lines)
+        total_gcodes_updated = int(current_gcodes + 1)
+        total_time_updated = float(current_time + float(estimated_time)) # Double conversion par sécurité
+        
         # Enregistrement des données cumulées
-        config_manager.set_item("stats", "total_lines", current_lines + new_lines)
-        config_manager.set_item("stats", "total_gcodes", current_gcodes + 1)
-        config_manager.set_item("stats", "total_time_seconds", current_time + estimated_time) # <--- AJOUT
+        config_manager.set_item("stats", "total_lines", total_lines_updated)
+        config_manager.set_item("stats", "total_gcodes", total_gcodes_updated)
+        config_manager.set_item("stats", "total_time_seconds", total_time_updated) 
         
-        # Optionnel : Enregistrer aussi le temps du DERNIER projet pour le dashboard
-        config_manager.set_item("stats", "last_project_time", estimated_time)
+        # Enregistrement du dernier projet (forcé en float Python)
+        config_manager.set_item("stats", "last_project_time", float(estimated_time))
         
+        # Note : Votre set_item appelle déjà save(), donc cet appel est optionnel 
+        # mais ne fait pas de mal.
         config_manager.save()
         
         return thumb_path
 
     except Exception as e:
         print(f"Error saving dashboard data: {e}")
+        import traceback
+        traceback.print_exc() # Pour voir exactement quelle ligne plante
         return None
         
 

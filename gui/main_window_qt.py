@@ -309,10 +309,11 @@ class MainWindowQt(QMainWindow):
     def show_dashboard(self):
         self.view_title.setText(self.texts.get("dashboard", "DASHBOARD"))
         
-        # Ne recréer que si pas encore créé
         if not hasattr(self, 'dashboard_view'):
             self.dashboard_view = DashboardViewQt(controller=self)
             self.content_area.addWidget(self.dashboard_view)
+        else:
+            self.dashboard_view.refresh()  # ← AJOUTER cette ligne
         
         self.current_view = self.dashboard_view
         self.content_area.setCurrentWidget(self.dashboard_view)
