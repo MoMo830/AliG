@@ -360,49 +360,50 @@ class GCodeEngine:
         return buf.getvalue()
     
     def generate_framing_gcode(self, w, h, offX, offY, power,
-                            feedrate, pause_cmd=None,
-                            use_s_mode=True, e_num=0):
-
+                                feedrate, pause_cmd=None,
+                                use_s_mode=True, e_num=0):
         lines = ["( --- FRAMING START --- )"]
 
-        # 1. Sécurité : S'assurer que le laser est éteint avant de se déplacer
         off_cmd = "S0" if use_s_mode else f"M67 E{e_num} Q0"
-        lines.append(f"{off_cmd} (Laser OFF)")
-        
-        # 2. Approche à vide vers le point de départ (Bas-Gauche)
+        p_cmd   = f"S{power:.2f}" if use_s_mode else f"M67 E{e_num} Q{power:.2f}"
+
+        # 1. Laser OFF + sync avant déplacement
+        if not use_s_mode:
+            lines.append(f"M67 E{e_num} Q0 (Laser OFF)")
+            lines.append("G4 P0.1 (Sync)")
+        else:
+            lines.append(f"{off_cmd} (Laser OFF)")
+
+        # 2. Approche à vide vers le point de départ
         lines.append(f"G0 X{offX:.3f} Y{offY:.3f} F3000")
-        
-        # 3. Définition de la vitesse de travail
+
+        # 3. Vitesse de travail
         lines.append(f"G1 F{feedrate}")
 
-        p_cmd = f"S{power:.2f}" if use_s_mode else f"M67 E{e_num} Q{power:.2f}"
-
         # 4. Dessin du rectangle
-        # On utilise une syntaxe standard : Mouvement puis Puissance (ou l'inverse selon machine)
-        # Ici, on place la puissance sur chaque segment pour plus de sécurité
         if not use_s_mode:
-            # Syntaxe M67 : La commande E doit précéder ou accompagner le G1
-            lines.append(f"G1 X{offX+w:.3f} Y{offY:.3f} {p_cmd}")
-            lines.append(f"G1 X{offX+w:.3f} Y{offY+h:.3f} {p_cmd}")
-            lines.append(f"G1 X{offX:.3f} Y{offY+h:.3f} {p_cmd}")
-            lines.append(f"G1 X{offX:.3f} Y{offY:.3f} {p_cmd}")
+            # M67 AVANT G1 sur chaque segment
+            lines.append(f"M67 E{e_num} Q{power:.2f} G1 X{offX+w:.3f} Y{offY:.3f}")
+            lines.append(f"M67 E{e_num} Q{power:.2f} G1 X{offX+w:.3f} Y{offY+h:.3f}")
+            lines.append(f"M67 E{e_num} Q{power:.2f} G1 X{offX:.3f} Y{offY+h:.3f}")
+            lines.append(f"M67 E{e_num} Q{power:.2f} G1 X{offX:.3f} Y{offY:.3f}")
         else:
-            # Syntaxe Spindle (S)
             lines.append(f"G1 X{offX+w:.3f} Y{offY:.3f} {p_cmd}")
             lines.append(f"G1 X{offX+w:.3f} Y{offY+h:.3f} {p_cmd}")
             lines.append(f"G1 X{offX:.3f} Y{offY+h:.3f} {p_cmd}")
             lines.append(f"G1 X{offX:.3f} Y{offY:.3f} {p_cmd}")
 
         # 5. Extinction finale
-        lines.append(f"{off_cmd} (Laser OFF)")
+        if not use_s_mode:
+            lines.append(f"M67 E{e_num} Q0 G1 (Laser OFF)")
+        else:
+            lines.append(f"{off_cmd} (Laser OFF)")
 
         # 6. Pause optionnelle
         if pause_cmd:
-            # On ajoute souvent un message pour l'utilisateur sur l'écran CNC
             lines.append(f"{pause_cmd} (Framing done, check position)")
 
         lines.append("( --- FRAMING END --- )")
-
         return "\n".join(lines) + "\n"
     
     

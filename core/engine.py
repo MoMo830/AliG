@@ -247,35 +247,35 @@ def calculate_offsets(selected_origin, real_w, real_h, custom_x=0, custom_y=0):
 
 def generate_framing_gcode(w, h, offX, offY, power, feedrate, pause_cmd=None, use_s_mode=True, e_num=0):
     lines = ["( --- FRAMING START --- )"]
-    
-    # Positionnement rapide au point de départ
-    lines.append(f"G0 X{offX:.3f} Y{offY:.3f} F3000")
+
+    # Positionnement rapide au point de départ (laser éteint)
+    if not use_s_mode:
+        lines.append(f"M67 E{e_num} Q0.00")
+        lines.append("G4 P0.1 (Sync before framing)")
+        lines.append(f"M67 E{e_num} Q0.00 G0 X{offX:.3f} Y{offY:.3f} F3000")
+    else:
+        lines.append(f"G0 X{offX:.3f} Y{offY:.3f} S0 F3000")
+
     lines.append(f"G1 F{feedrate}")
-    
-    # Préparation des commandes
-    p_cmd = f"S{power:.2f}" if use_s_mode else f"M67 E{e_num} Q{power:.2f}"
-    off_cmd = "S0" if use_s_mode else f"M67 E{e_num} Q0"
 
     # Tracé du rectangle de cadrage
-    # Si M67, on met la puissance AVANT le G1 pour la synchro temps réel
     if not use_s_mode:
-        lines.append(f"{p_cmd} G1 X{offX+w:.3f} Y{offY:.3f}")
-        lines.append(f"{p_cmd} G1 X{offX+w:.3f} Y{offY+h:.3f}")
-        lines.append(f"{p_cmd} G1 X{offX:.3f} Y{offY+h:.3f}")
-        lines.append(f"{p_cmd} G1 X{offX:.3f} Y{offY:.3f}")
-        lines.append(f"{off_cmd} G1")
+        lines.append(f"M67 E{e_num} Q{power:.2f} G1 X{offX+w:.3f} Y{offY:.3f}")
+        lines.append(f"M67 E{e_num} Q{power:.2f} G1 X{offX+w:.3f} Y{offY+h:.3f}")
+        lines.append(f"M67 E{e_num} Q{power:.2f} G1 X{offX:.3f} Y{offY+h:.3f}")
+        lines.append(f"M67 E{e_num} Q{power:.2f} G1 X{offX:.3f} Y{offY:.3f}")
+        lines.append(f"M67 E{e_num} Q0.00 G1")
     else:
-        # Mode S standard (plus tolérant sur l'ordre)
-        lines.append(f"G1 X{offX+w:.3f} Y{offY:.3f} {p_cmd}")
-        lines.append(f"G1 X{offX+w:.3f} Y{offY+h:.3f} {p_cmd}")
-        lines.append(f"G1 X{offX:.3f} Y{offY+h:.3f} {p_cmd}")
-        lines.append(f"G1 X{offX:.3f} Y{offY:.3f} {p_cmd}")
-        lines.append(f"G1 {off_cmd}")
-    
+        lines.append(f"G1 X{offX+w:.3f} Y{offY:.3f} S{power:.2f}")
+        lines.append(f"G1 X{offX+w:.3f} Y{offY+h:.3f} S{power:.2f}")
+        lines.append(f"G1 X{offX:.3f} Y{offY+h:.3f} S{power:.2f}")
+        lines.append(f"G1 X{offX:.3f} Y{offY:.3f} S{power:.2f}")
+        lines.append(f"G1 S0")
+
     # Pause avec message explicite
     if pause_cmd:
         lines.append(f"{pause_cmd} (Press Cycle Start to continue)")
-        
+
     lines.append("( --- FRAMING END --- )")
     return "\n".join(lines) + "\n"
 
