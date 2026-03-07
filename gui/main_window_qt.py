@@ -352,6 +352,8 @@ class MainWindowQt(QMainWindow):
             from gui.views.raster_view_qt import RasterViewQt
             self.raster_view = RasterViewQt(parent=self, controller=self)
             self.content_area.addWidget(self.raster_view)
+        else:
+            self.raster_view.load_settings()  # ← AJOUTER cette ligne
 
         self.current_view = self.raster_view
         self.content_area.setCurrentWidget(self.raster_view)

@@ -463,7 +463,7 @@ class GCodeEngine:
         # Calcul de la latence (compensation matérielle)
         latency_mm = (
             settings_raw["feedrate"] *
-            settings_raw["m67_delay"]
+            settings_raw["laser_latency"]
         ) / 60000
 
         gc_settings = {

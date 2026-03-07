@@ -711,7 +711,7 @@ class RasterViewQt(QWidget):
         pow_row.addLayout(left_p)
         lo.addLayout(pow_row)
 
-        self._add_slider_input(lo, self.t.get("laser_latency", "Laser Latency (ms)"), -20, 20, 0, "m67_delay")
+        self._add_slider_input(lo, self.t.get("laser_latency", "Laser Latency (ms)"), -20, 20, 0, "laser_latency")
         self._add_slider_input(lo, self.t.get("gray_steps", "Gray Steps"), 2, 256, 256, "gray_steps", is_int=True)
 
     def _setup_tab_gcode(self):
@@ -1407,7 +1407,7 @@ class RasterViewQt(QWidget):
                 "max_power":   self._get_val("max_p"),
                 "premove":     self._get_val("premove"),
                 "feedrate":    self._get_val("feedrate"),
-                "m67_delay":   self._get_val("m67_delay"),
+                "laser_latency":   self._get_val("laser_latency"),
                 "gray_scales": int(self._get_val("gray_steps")),
                 "gray_steps":  int(self._get_val("gray_steps")),
                 "raster_mode": raster_mode,
@@ -1473,7 +1473,7 @@ class RasterViewQt(QWidget):
         )
         if path:
             data = self._collect_settings()
-            machine_keys = ["cmd_mode", "firing_mode", "m67_e_num", "ctrl_max", "m67_delay"]
+            machine_keys = ["cmd_mode", "firing_mode", "m67_e_num", "ctrl_max", "laser_latency"]
             export = {
                 "machine_settings": {k: data.pop(k) for k in machine_keys if k in data},
                 "raster_settings": data
@@ -1506,7 +1506,7 @@ class RasterViewQt(QWidget):
 
     def save_settings(self):
         all_data = self._collect_settings()
-        machine_keys = ["cmd_mode", "firing_mode", "m67_e_num", "ctrl_max", "m67_delay"]
+        machine_keys = ["cmd_mode", "firing_mode", "m67_e_num", "ctrl_max", "laser_latency"]
         machine_updates = {k: all_data.pop(k) for k in machine_keys if k in all_data}
 
         current_machine = self.controller.config_manager.get_section("machine_settings") or {}

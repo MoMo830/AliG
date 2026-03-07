@@ -731,7 +731,7 @@ class SimulationViewQt(QWidget):
         lo.addLayout(br)
 
         self.lat_btn = None
-        lat_val = float(self.payload.get('params', {}).get('m67_delay', 0))
+        lat_val = float(self.payload.get('params', {}).get('laser_latency', 0))
         if lat_val != 0:
             self.lat_btn = QPushButton('SIMULATE LATENCY  ○')
             self.lat_btn.setCheckable(True)
