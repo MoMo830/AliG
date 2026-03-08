@@ -282,32 +282,33 @@ class _Renderer:
         is_horiz = np.abs(fx2-fx1) >= np.abs(fy2-fy1)
 
         if self.l_step_mm and self.l_step_px:
+
             step_mm = self.l_step_mm
             step_px = self.l_step_px
 
             yc_mm = (y1_mm + y2_mm) * 0.5
 
-            # Index stable (utilisation de round au lieu de floor + 0.5)
-            row_idx = np.round((yc_mm - mny) / step_mm).astype(np.int32)
-            row_idx = np.maximum(row_idx, 0)
+            # index stable (pas de round)
+            row_idx = np.floor((yc_mm - mny)/step_mm + 0.5).astype(np.int32)
+            row_idx = np.maximum(row_idx,0)
 
-            # Centre exact (suppression du + 0.5 pour que Y=0 straddle bien la ligne de référence)
-            fy_center = th - (row_idx * step_px)
+            # centre exact de ligne
+            fy_center = th - (row_idx + 0.5) * step_px
 
             fy1 = np.where(is_horiz, fy_center, fy1)
             fy2 = np.where(is_horiz, fy_center, fy2)
 
         else:
-            # Remplacement de floor par round ici aussi
-            fy_center = np.round((fy1+fy2)*0.5)
-            fy1 = np.where(is_horiz, fy_center, fy1)
-            fy2 = np.where(is_horiz, fy_center, fy2)
+
+            fy_center = np.floor((fy1+fy2)*0.5)+0.5
+            fy1 = np.where(is_horiz,fy_center,fy1)
+            fy2 = np.where(is_horiz,fy_center,fy2)
 
         # ── snap X pour segments verticaux
-        fx_center = np.round((fx1+fx2)*0.5)
+        fx_center = np.floor((fx1+fx2)*0.5)+0.5
 
-        fx1 = np.where(~is_horiz, fx_center, fx1)
-        fx2 = np.where(~is_horiz, fx_center, fx2)
+        fx1 = np.where(~is_horiz,fx_center,fx1)
+        fx2 = np.where(~is_horiz,fx_center,fx2)
 
         # ── regroupement par gris
         result={}
@@ -333,17 +334,13 @@ class _Renderer:
         step = self.l_step_px if self.l_step_px else self.laser_width_px
         half = step / 2.0
 
-        buf = self.display_data.tobytes()
-        qi = QImage(buf, w, h, w, QImage.Format.Format_Grayscale8)
-        qi = qi.copy()
+        qi = QImage(w, h, QImage.Format.Format_Grayscale8)
+        qi.fill(QColor(255, 255, 255))
 
         qp = QPainter(qi)
         qp.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        qp.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
         qp.setPen(Qt.PenStyle.NoPen)
-
-        # On fige l'épaisseur en entier
-        step_int = max(1, int(round(self.l_step_px))) if self.l_step_px else self.laser_width_px
-        half = step_int / 2.0
 
         for c, segs in segs_by_color.items():
 
@@ -356,32 +353,30 @@ class _Renderer:
 
                     left  = int(np.floor(min(x1, x2)))
                     right = int(np.ceil(max(x1, x2)))
-                    
-                    # Seul le haut est calculé, la hauteur est garantie par step_int
-                    top_px = int(np.floor(y1 - half))
+
+                    top = int(np.floor(y1 - half))
 
                     qp.fillRect(
                         left,
-                        top_px,
+                        top,
                         max(1, right - left),
-                        step_int,  # <-- HAUTEUR FIXE
+                        int(round(step)),
                         QColor(c, c, c)
                     )
 
                 # segment vertical
                 else:
 
-                    top_px    = int(np.floor(min(y1, y2)))
-                    bottom_px = int(np.ceil(max(y1, y2)))
+                    top    = int(np.floor(min(y1, y2)))
+                    bottom = int(np.ceil(max(y1, y2)))
 
-                    # Seule la gauche est calculée, la largeur est garantie par step_int
-                    left_px = int(np.floor(x1 - half))
+                    left = int(np.floor(x1 - half))
 
                     qp.fillRect(
-                        left_px,
-                        top_px,
-                        step_int,  # <-- LARGEUR FIXE
-                        max(1, bottom_px - top_px),
+                        left,
+                        top,
+                        int(round(step)),
+                        max(1, bottom - top),
                         QColor(c, c, c)
                     )
 
@@ -391,8 +386,8 @@ class _Renderer:
         ptr = qi.bits()
         ptr.setsize(bpl * h)
 
-        full_arr = np.frombuffer(ptr, dtype=np.uint8).reshape(h, bpl)
-        np.copyto(self.display_data, full_arr[:, :w])
+        new_arr = np.frombuffer(ptr, dtype=np.uint8).reshape(h, bpl)[:, :w]
+        np.minimum(self.display_data, new_arr, out=self.display_data)
 
         self._qi_ref = qi
 
@@ -445,13 +440,14 @@ class _SimCanvas(QWidget):
 
     # ─── API ─────────────────────────────
 
-    def setup(self, img_buf, x0, y0, pw, ph, sc, mnx, mxx, mny, mxy):
+    def setup(self, img_buf, x0, y0, pw, ph, sc, mnx, mxx, mny, mxy, l_step=0.1):
         self._img_buf = img_buf
         self._x0, self._y0 = x0, y0
         self._pw, self._ph = pw, ph
         self._sc = sc
         self._mnx, self._mxx = mnx, mxx
         self._mny, self._mxy = mny, mxy
+        self._l_step = l_step
         self._zoom = 1.0
         self._pan  = QPointF(0, 0)
         self._rebuild()
@@ -559,13 +555,38 @@ class _SimCanvas(QWidget):
     # ─── Zoom / Pan ──────────────────────
 
     def wheelEvent(self, e):
-        factor = 1.15 if e.angleDelta().y() > 0 else 1/1.15
+        if self._img_buf is None or not hasattr(self, '_l_step'): 
+            return
+
+        # 1. Épaisseur actuelle d'une ligne en pixels écran
+        current_step_px = self._sc * self._zoom * self._l_step
+        
+        # 2. Calcul de la nouvelle épaisseur
+        if e.angleDelta().y() > 0:
+            # --- ZOOM AVANT : On veut de la netteté (Pixel-Perfect) ---
+            # On saute à l'entier supérieur (ex: 2.1px -> 3.0px)
+            new_step_px = np.floor(current_step_px + 1.0)
+        else:
+            # --- ZOOM ARRIÈRE : On veut de la souplesse ---
+            # On utilise un ratio simple (0.8) au lieu de soustraire 1 pixel.
+            # Cela permet de descendre à 0.8px, 0.6px, 0.4px sans jamais bloquer.
+            new_step_px = current_step_px * 0.8
+            
+        # Sécurité mini/maxi pour éviter les divisions par zéro ou les crashs
+        new_step_px = max(0.01, min(200.0, new_step_px)) 
+        
+        # 3. Calcul du nouveau zoom
+        new_zoom = new_step_px / (self._sc * self._l_step)
+
+        # 4. Point fixe sous la souris (ton code de navigation)
         pos = e.position()
         cx, cy = pos.x(), pos.y()
         wx = (cx - self._pan.x()) / self._zoom
         wy = (cy - self._pan.y()) / self._zoom
-        self._zoom = max(0.15, min(40.0, self._zoom * factor))
+        
+        self._zoom = new_zoom
         self._pan  = QPointF(cx - wx*self._zoom, cy - wy*self._zoom)
+        
         self.update()
 
     def mousePressEvent(self, e):
@@ -687,6 +708,10 @@ class SimulationViewQt(QWidget):
             'font-family:Consolas;'
             'border:1px solid #333;border-radius:3px;}')
         self._update_gcode_font()
+        # Click sur une ligne G-Code → seek à ce point
+        self.gcode_view.mousePressEvent = self._on_gcode_click
+        # Flèches clavier → navigation par ligne / par 20 lignes
+        self.gcode_view.keyPressEvent   = self._on_gcode_key
         lo.addWidget(self.gcode_view, stretch=1)
 
         lo.addWidget(self._make_options_widget())
@@ -793,47 +818,7 @@ class SimulationViewQt(QWidget):
                 qp.end()
 
         return _PBar(p_min, p_max)
-        p_min = float(p.get('min_power', 0))
-        p_max = float(p.get('max_power', 100))
 
-        class _PBar(QWidget):
-            def __init__(s, mn, mx):
-                super().__init__()
-                s._mn = mn;  s._mx = mx
-                s.setFixedHeight(55)
-
-            def paintEvent(s, _):
-                qp = QPainter(s)
-                qp.setRenderHint(QPainter.RenderHint.Antialiasing)
-                w, h = s.width(), s.height()
-                qp.fillRect(0, 0, w, h, QColor('#252525'))
-                m, by, bh = 20, 25, 10
-                bw = w - 2*m
-                g = QLinearGradient(m, 0, m+bw, 0)
-                g.setColorAt(0, QColor('white'))
-                g.setColorAt(1, QColor('black'))
-                qp.fillRect(m, by, bw, bh, QBrush(g))
-                qp.setPen(QPen(QColor('#555'), 1))
-                qp.drawRect(m, by, bw, bh)
-                qp.setPen(QColor('#777'))
-                qp.setFont(QFont('Arial', 8))
-                qp.drawText(m, by+bh+12, '0%')
-                qp.drawText(m+bw-22, by+bh+12, '100%')
-                for val, lbl in [(s._mn, f'Min:{int(s._mn)}%'),
-                                 (s._mx, f'Max:{int(s._mx)}%')]:
-                    x = int(m + val/100*bw)
-                    tri = QPolygonF([QPointF(x, by-1),
-                                     QPointF(x-5, by-9),
-                                     QPointF(x+5, by-9)])
-                    qp.setBrush(QBrush(QColor('#ff9f43')))
-                    qp.setPen(Qt.PenStyle.NoPen)
-                    qp.drawPolygon(tri)
-                    qp.setPen(QColor('#ff9f43'))
-                    qp.setFont(QFont('Arial', 8, QFont.Weight.Bold))
-                    qp.drawText(x-20, by-10, lbl)
-                qp.end()
-
-        return _PBar(p_min, p_max)
 
     def _make_options_widget(self):
         f = QFrame()
@@ -979,25 +964,26 @@ class SimulationViewQt(QWidget):
         # Sélecteur vitesse
         sf = QFrame()
         sf.setStyleSheet('QFrame{background:#222;border:1px solid #444;'
-                         'border-radius:8px;}')
+                         'border-radius:5px;}')
         sr = QHBoxLayout(sf)
-        sr.setContentsMargins(10, 4, 10, 4)
+        sr.setContentsMargins(5, 2, 5, 2)
+        sr.setSpacing(2)
 
         spd_lbl = QLabel(self.t.get('speed', 'Speed:'))
-        spd_lbl.setStyleSheet('color:white;font-weight:bold;font-size:11px;border:none;')
+        spd_lbl.setStyleSheet('color:white;font-weight:bold;font-size:9px;border:none;')
         sr.addWidget(spd_lbl)
 
         self._spd_btns: dict[str, QPushButton] = {}
         spd_style = ('QPushButton{background:#3a3a3a;color:#aaa;'
-                     'border:1px solid #555;border-radius:4px;'
-                     'padding:2px 8px;font-size:10px;min-width:36px;}'
+                     'border:1px solid #555;border-radius:3px;'
+                     'padding:0px 4px;font-size:8px;min-width:18px;max-width:30px;}'
                      'QPushButton:checked{background:#1f538d;color:white;'
                      'border-color:#2a6dbd;}'
                      'QPushButton:hover:!checked{background:#444;color:white;}')
-        for v in ['0.5', '1', '3', '10', '20', '50']:
+        for v in ['0.5', '1', '5', '10', '50']:
             b = QPushButton(v)
             b.setCheckable(True)
-            b.setFixedHeight(28)
+            b.setFixedHeight(14)
             b.setStyleSheet(spd_style)
             b.clicked.connect(lambda _, val=v: self._set_speed(val))
             sr.addWidget(b)
@@ -1010,25 +996,25 @@ class SimulationViewQt(QWidget):
     def _make_progress_bar(self):
         f = QFrame()
         lo = QVBoxLayout(f)
-        lo.setContentsMargins(16, 0, 16, 6)
+        lo.setContentsMargins(0, 0, 0, 0) # On laisse le resizeEvent gérer les bords
         lo.setSpacing(0)
 
-        # Conteneur qui accueille la barre + le label centré par-dessus
         container = QWidget()
-        container.setFixedHeight(20)
+        container.setFixedHeight(30) # Un peu plus haut pour faciliter le clic
         container.setStyleSheet('background:transparent;')
 
         self.prog_bar = QProgressBar(container)
-        self.prog_bar.setGeometry(0, 5, 1, 10)   # sera redimensionné dans resizeEvent
+        # Supprimez le setGeometry fixe ici, ou mettez une valeur bidon
         self.prog_bar.setRange(0, 10000)
         self.prog_bar.setValue(0)
         self.prog_bar.setTextVisible(False)
         self.prog_bar.setStyleSheet(
-            'QProgressBar{background:#333;border-radius:5px;border:none;}'
-            'QProgressBar::chunk{background:#27ae60;border-radius:5px;}')
+            'QProgressBar{background:#333;border-radius:7px;border:none;}'
+            'QProgressBar::chunk{background:#27ae60;border-radius:7px;}')
+        
+        # IMPORTANT : On lie le clic
         self.prog_bar.mousePressEvent = self._on_prog_click
 
-        # Label de temps centré par-dessus la barre
         self.lbl_time = QLabel('00:00:00 / 00:00:00', container)
         self.lbl_time.setStyleSheet(
             'color:white;font-size:9px;font-weight:bold;'
@@ -1038,12 +1024,10 @@ class SimulationViewQt(QWidget):
 
         lo.addWidget(container)
 
-        # lbl_prog conservé caché pour éviter les AttributeError ailleurs
         self.lbl_prog = QLabel('')
         self.lbl_prog.hide()
         lo.addWidget(self.lbl_prog)
 
-        # Garder une référence au container pour le resize
         self._prog_container = container
         return f
 
@@ -1102,34 +1086,49 @@ class SimulationViewQt(QWidget):
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self._update_gcode_font()
-        # Redimensionner la barre de progression et le label superposé
-        if hasattr(self, '_prog_container'):
-            cw = self._prog_container.width()
-            if cw > 0:
-                self.prog_bar.setGeometry(0, 5, cw, 10)
-                self.lbl_time.setGeometry(0, 0, cw, 20)
+
         if hasattr(self, '_ov'):
             self._ov.resize(self.size())
-        # Repositionnement des overlays flottants sur le panneau droit
+
+        # Repositionnement des blocs (Playback et Progress)
         if hasattr(self, '_playback_frame') and hasattr(self, '_progress_frame'):
             rw = self._right_widget
             rw_w = rw.width()
             rw_h = rw.height()
-            margin = 16
+
+            margin_side = 40
+            margin_bottom = 2   # px depuis le bas
 
             pb_hint = self._playback_frame.sizeHint()
             pr_hint = self._progress_frame.sizeHint()
-            pb_h = max(pb_hint.height(), 110)
-            pr_h = max(pr_hint.height(), 38)
+            pb_h = max(pb_hint.height(), 70)
+            pr_h = max(pr_hint.height(), 26)
 
-            total_h = pb_h + pr_h + 4
-            bottom_y = rw_h - total_h - margin
+            total_h  = pb_h + pr_h + 2
+            bottom_y = rw_h - total_h - margin_bottom
 
-            self._playback_frame.setGeometry(margin, bottom_y, rw_w - 2*margin, pb_h)
-            self._progress_frame.setGeometry(margin, bottom_y + pb_h + 4,
-                                             rw_w - 2*margin, pr_h)
+            # 1. On donne d'abord sa position au cadre transparent global
+            prog_frame_w = rw_w - 2 * margin_side
+            self._progress_frame.setGeometry(margin_side, bottom_y,
+                                             prog_frame_w, pr_h)
+            
+            self._playback_frame.setGeometry(margin_side, bottom_y + pr_h + 2,
+                                             rw_w - 2 * margin_side, pb_h)
+
+            # 2. On dimensionne la barre ET le texte immédiatement 
+            # (Plus aucun décalage temporel)
+            if hasattr(self, 'prog_bar'):
+                bar_w = int(prog_frame_w * 0.8)
+                bar_x = (prog_frame_w - bar_w) // 2
+                self.prog_bar.setGeometry(bar_x, 3, bar_w, 14)
+                # Le label prend toute la largeur, Qt le centrera parfaitement au-dessus de la barre
+                self.lbl_time.setGeometry(0, 3, prog_frame_w, 14)
+
             self._playback_frame.raise_()
             self._progress_frame.raise_()
+
+            # Mémoriser la hauteur occupée par les overlays pour _init_canvas
+            self._overlay_h = rw_h - bottom_y + 8
 
     # ══════════════════════════════════════════════════════════════
     #  GÉNÉRATION (QThread)
@@ -1138,7 +1137,6 @@ class SimulationViewQt(QWidget):
     def _start_gen(self):
         self._parser = GCodeParser(self.payload)
         self._worker = _GenWorker(self.engine, self.payload, self._parser)
-        print(self.payload)
         self._worker.done.connect(self._on_done)
         self._worker.error.connect(self._on_error)
         self._worker.start()
@@ -1157,7 +1155,7 @@ class SimulationViewQt(QWidget):
         self.framing_gcode = d.get('framing_gcode', '')
         self.full_metadata = d.get('meta', {})
         self.framing_end   = d.get('framing_end', 0)
-        #self._last_drawn_idx = self.framing_end - 1
+        
         self._last_drawn_idx = -1
         bx0, bx1, by0, by1 = d.get('bounds', (0, 0, 0, 0))
         self._mnx, self._mxx = bx0, bx1
@@ -1170,8 +1168,16 @@ class SimulationViewQt(QWidget):
             self.gcode_view.setPlainText(self.final_gcode)
             self._update_gcode_font()
 
+        # 1. Mise à jour du texte
         self.lbl_time.setText(f'00:00:00 / {self._fmt(self.total_sec)}')
-        QTimer.singleShot(60, self._init_canvas)
+        
+        # 2. FIX : Forcer le calcul des géométries AVANT le rendu du canvas
+        # On s'assure que le panneau droit a bien pris sa place finale
+        self._right_widget.updateGeometry()
+        
+        # 3. On appelle _init_canvas qui contient déjà self.resizeEvent(None)
+        # QTimer.singleShot(60, self._init_canvas)
+        self._init_canvas()
 
     # ══════════════════════════════════════════════════════════════
     #  INITIALISATION CANVAS
@@ -1180,6 +1186,7 @@ class SimulationViewQt(QWidget):
     def _init_canvas(self):
         cw, ch = self.canvas.width(), self.canvas.height()
 
+        # Attendre que le widget soit réellement dimensionné
         if cw <= 1 or ch <= 1:
             QTimer.singleShot(60, self._init_canvas)
             return
@@ -1187,58 +1194,46 @@ class SimulationViewQt(QWidget):
         if self.points_list is None or len(self.points_list) == 0:
             return
 
-        # ─────────────────────────────
-        # Line step exact depuis payload
-        # ─────────────────────────────
+        # 1. On récupère le l_step immédiatement pour calibrer l'échelle
         dims = self.payload.get('dims', (0, 0, 0.1, 0.1))
         raster_mode = self.payload.get('params', {}).get('raster_mode', 'horizontal')
-
         if len(dims) >= 4:
             l_step = float(dims[2]) if raster_mode == 'horizontal' else float(dims[3])
         else:
             l_step = 0.1
 
         # ─────────────────────────────
-        # Dimensions & Échelle (Snapping)
+        # Dimensions réelles pièce (mm)
         # ─────────────────────────────
         tw = max(0.1, self._mxx - self._mnx)
         th = max(0.1, self._mxy - self._mny)
 
-        overlay_h = 120
-        ch_usable = max(ch - overlay_h, int(ch * 0.6))
+        # Espace utile : réserver la zone des contrôles flottants (hauteur réelle mémorisée)
+        overlay_h = getattr(self, '_overlay_h', 150)
+        ch_usable = max(ch - overlay_h, int(ch * 0.5))
 
-        # Scale théorique pour s'adapter à l'écran
+        # Scale écran théorique (pour tenir dans la vue)
         sc = min((cw * 0.80) / tw, (ch_usable * 0.80) / th)
 
-        # NOUVEAU : On "snap" l'échelle pour que l_step fasse un nombre ENTIER de pixels
-        # Cela garantit une épaisseur strictement constante sans créer de décalage
+        # --- CORRECTION ARRONDI : Snapping de l'échelle ---
+        # On force l'échelle pour que l_step mm correspondent à un nombre ENTIER de pixels.
         if l_step > 0:
-            step_px_int = max(1.0, np.floor(l_step * sc))
-            sc = step_px_int / l_step
+            lw_px = max(1.0, np.round(l_step * sc))
+            sc = lw_px / l_step  # On recalcule l'échelle exacte basée sur cet entier
+        else:
+            lw_px = 1.0
 
+        # Dimensions projetées écran (maintenant parfaitement alignées sur le pas)
         pw = tw * sc
         ph = th * sc
 
+        # Dimensions buffer image (entiers)
         rw = max(1, int(round(pw)))
         rh = max(1, int(round(ph)))
 
+        # Position : centré horizontalement, calé en haut de la zone utile
         x0 = (cw - pw) / 2.0
         y0 = (ch_usable - ph) * 0.20
-        
-
-        # ─────────────────────────────
-        # Line step exact depuis payload
-        # ─────────────────────────────
-        dims = self.payload.get('dims', (0, 0, 0.1, 0.1))
-        raster_mode = self.payload.get('params', {}).get('raster_mode', 'horizontal')
-
-        if len(dims) >= 4:
-            l_step = float(dims[2]) if raster_mode == 'horizontal' else float(dims[3])
-        else:
-            l_step = 0.1
-
-        # Largeur laser en pixels — forcée à l'entier pour des lignes régulières
-        lw_px = max(1, round(l_step * sc))
 
         # ─────────────────────────────
         # Initialisation renderer
@@ -1246,10 +1241,10 @@ class SimulationViewQt(QWidget):
         p_params  = self.payload.get('params', {})
         p_min_pct = float(p_params.get('min_power', 0))
         p_max_pct = float(p_params.get('max_power', 100))
-        # Convertir les % en valeurs S dans l'échelle ctrl_max
         pwr_min_s = self.ctrl_max * p_min_pct / 100.0
         pwr_max_s = self.ctrl_max * p_max_pct / 100.0
 
+        # Note : On passe lw_px (l'entier) pour garantir la largeur constante
         self._renderer = _Renderer(
             rw,
             rh,
@@ -1257,7 +1252,7 @@ class SimulationViewQt(QWidget):
             rh,
             self._mnx,
             self._mny,
-            lw_px,
+            int(lw_px), 
             self.ctrl_max,
             pwr_min=pwr_min_s,
             pwr_max=pwr_max_s,
@@ -1281,18 +1276,19 @@ class SimulationViewQt(QWidget):
         ly = y0 + ph - (p0[1] - self._mny) * sc
 
         # ─────────────────────────────
-        # Setup canvas
+        # Setup canvas (AVEC l_step en dernier argument)
         # ─────────────────────────────
         self.canvas.setup(
             self._renderer.display_data,
             x0, y0, pw, ph, sc,
             self._mnx, self._mxx,
-            self._mny, self._mxy
+            self._mny, self._mxy,
+            l_step  # <--- Passage du paramètre pour le zoom cranté
         )
 
         self.canvas.set_laser(lx, ly)
 
-        # Forcer le repositionnement des overlays maintenant que les tailles sont connues
+        # Forcer le repositionnement des overlays
         self.resizeEvent(None)
 
     # ══════════════════════════════════════════════════════════════
@@ -1421,21 +1417,27 @@ class SimulationViewQt(QWidget):
         total_pts = len(self.points_list)
 
         target_idx = max(0, min(int(target_idx), total_pts - 1))
-        #start_idx  = max(0, self.framing_end - 1)
+        # start_idx  = max(0, self.framing_end - 1)
         start_idx = 0
 
         if target_idx <= start_idx:
             self._renderer.reset()
             self._last_drawn_idx = start_idx
         else:
-            self._renderer.redraw_range(
-                self.points_list,
-                start_idx,
-                target_idx,
-                self.latence_enabled,
-                self.latence_mm,
-                self.full_metadata.get('scan_axis', 'X')
-            )
+            # Fond blanc
+            self._renderer.display_data.fill(255)
+            scan_axis = self.full_metadata.get('scan_axis', 'X')
+            # Dessiner le framing en premier (il sera le plus foncé si puissance forte)
+            if self.framing_end > 0:
+                polys = self._renderer._compute_segments(
+                    self.points_list, 0, self.framing_end, False, 0.0, scan_axis)
+                self._renderer._rasterize(polys)
+            # Dessiner le raster — np.minimum protège les pixels du framing
+            if target_idx > self.framing_end:
+                polys = self._renderer._compute_segments(
+                    self.points_list, self.framing_end, target_idx,
+                    self.latence_enabled, self.latence_mm, scan_axis)
+                self._renderer._rasterize(polys)
             self._last_drawn_idx = target_idx
 
         self.canvas.notify_dirty()
@@ -1483,9 +1485,7 @@ class SimulationViewQt(QWidget):
         self.current_idx      = 0
         self.current_sim_time = 0.0
         self.last_frame_time  = 0.0
-        # self._last_drawn_idx  = self.framing_end - 1
-        self._last_drawn_idx = -1
-
+        self._last_drawn_idx  = -1
         if self._renderer:
             self._renderer.reset()
             self.canvas.notify_dirty()
@@ -1525,40 +1525,60 @@ class SimulationViewQt(QWidget):
         self._redraw_to(self.current_idx)
 
     def _on_prog_click(self, e):
-
-        if self.points_list is None:
-            return
-
-        if self.total_sec <= 0:
+        # Sécurités de base
+        if self.points_list is None or self.total_sec <= 0:
             return
 
         total_pts = len(self.points_list)
         if total_pts == 0:
             return
 
-        width = max(1, self.prog_bar.width())
-        pos_x = e.position().x()
-        ratio = max(0.0, min(1.0, pos_x / width))
+        # 1. RÉCUPÉRATION DE LA GÉOMÉTRIE RÉELLE
+        # On récupère la largeur actuelle de la barre (celle affichée à l'écran)
+        bar_w = self.prog_bar.width()
+        if bar_w <= 1:
+            return
 
+        # 2. CALCUL DU RATIO (Pixel-Perfect)
+        # mapFromGlobal convertit la position absolue de la souris sur l'écran 
+        # vers le référentiel interne de la prog_bar (0 = bord gauche exact).
+        # Cela élimine tout décalage du aux marges ou au centrage (le bar_x).
+        local_pos = self.prog_bar.mapFromGlobal(e.globalPosition().toPoint())
+        pos_x = local_pos.x()
+        
+        # On sature le ratio entre 0.0 (début) et 1.0 (fin)
+        ratio = max(0.0, min(1.0, pos_x / bar_w))
+
+        # 3. LOGIQUE DE SAUT DANS LA SIMULATION
+        # On mémorise si la lecture était en cours pour la reprendre après
         was_running = self.sim_running
-        self._stop_play()
+        if was_running:
+            self._stop_play()
 
+        # Calcul du nouveau temps cible basé sur le ratio cliqué
         self.current_sim_time = ratio * self.total_sec
 
+        # Recherche de l'index correspondant au temps dans les données NumPy
+        # (on suppose que self.points_list[:, 4] contient les timestamps cumulés)
         idx = np.searchsorted(
             self.points_list[:, 4],
             self.current_sim_time,
             side='right'
         ) - 1
 
+        # Sécurisation de l'index
         idx = max(0, min(int(idx), total_pts - 1))
-
         self.current_idx = idx
 
+        # 4. MISE À JOUR VISUELLE IMMÉDIATE
+        # Redessine le canvas jusqu'à ce point
         self._redraw_to(self.current_idx)
+        # Met à jour les labels, le curseur laser et la valeur de la barre
         self._update_ui(self.current_idx)
 
+        # 5. REPRISE DE LA LECTURE
         if was_running:
+            # On réinitialise le timer de frame pour éviter un bond temporel
             self.last_frame_time = time.perf_counter()
             self._start_play()
 
@@ -1566,12 +1586,78 @@ class SimulationViewQt(QWidget):
     #  UI SYNC
     # ══════════════════════════════════════════════════════════════
 
+    # ══════════════════════════════════════════════════════════════
+    #  NAVIGATION G-CODE (click + clavier)
+    # ══════════════════════════════════════════════════════════════
+
+    def _seek_to_gcode_line(self, line_num):
+        """Seek la simulation au premier point dont la ligne G-Code == line_num."""
+        if self.points_list is None or len(self.points_list) == 0:
+            return
+        pts = self.points_list
+        # pts[:,3] contient le numéro de ligne G-Code
+        matches = np.where(pts[:, 3].astype(int) >= line_num)[0]
+        if len(matches) == 0:
+            idx = len(pts) - 1
+        else:
+            idx = int(matches[0])
+        was_running = self.sim_running
+        self._stop_play()
+        self.current_idx      = idx
+        self.current_sim_time = float(pts[idx][4])
+        self._redraw_to(idx)
+        self._update_ui(idx)
+        if was_running:
+            self.last_frame_time = time.perf_counter()
+            self._start_play()
+
+    def _on_gcode_click(self, e):
+        """Click sur le G-Code : positionne le curseur ET seek la simulation."""
+        # Laisser le comportement normal de QPlainTextEdit (déplace le curseur)
+        QPlainTextEdit.mousePressEvent(self.gcode_view, e)
+        line_num = self.gcode_view.textCursor().blockNumber() + 1
+        self._seek_to_gcode_line(line_num)
+
+    def _on_gcode_key(self, e):
+        """Flèches clavier sur le G-Code : navigation ±1 ligne ou ±20 lignes."""
+        from PyQt6.QtCore import Qt as _Qt
+        key = e.key()
+        if key in (_Qt.Key.Key_Left, _Qt.Key.Key_Right,
+                   _Qt.Key.Key_Up, _Qt.Key.Key_Down):
+            cur_line = self.gcode_view.textCursor().blockNumber() + 1
+            if key == _Qt.Key.Key_Left:
+                new_line = max(1, cur_line - 1)
+            elif key == _Qt.Key.Key_Right:
+                doc_lines = self.gcode_view.document().blockCount()
+                new_line = min(doc_lines, cur_line + 1)
+            elif key == _Qt.Key.Key_Up:
+                new_line = max(1, cur_line - 20)
+            else:  # Down
+                doc_lines = self.gcode_view.document().blockCount()
+                new_line = min(doc_lines, cur_line + 20)
+            # Déplacer le curseur du gcode_view
+            block = self.gcode_view.document().findBlockByLineNumber(new_line - 1)
+            if block.isValid():
+                cur = self.gcode_view.textCursor()
+                cur.setPosition(block.position())
+                cur.select(cur.SelectionType.LineUnderCursor)
+                self.gcode_view.setTextCursor(cur)
+                self.gcode_view.ensureCursorVisible()
+            self._seek_to_gcode_line(new_line)
+        else:
+            # Comportement normal pour toutes les autres touches
+            QPlainTextEdit.keyPressEvent(self.gcode_view, e)
+
     def _update_ui(self, idx):
         if self.points_list is None or idx >= len(self.points_list): return
+        
         ts  = float(self.points_list[idx][4])
-        pct = idx / max(1, len(self.points_list))
+        
+        # On base le rendu visuel sur l'écoulement du TEMPS, pas sur l'index des points
+        pct = ts / max(0.001, self.total_sec) 
+        pct = max(0.0, min(1.0, pct))
+        
         self.prog_bar.setValue(int(pct * 10000))
-        # lbl_prog supprimé de l'affichage (caché)
         self.lbl_time.setText(
             f'{self._fmt(ts)} / {self._fmt(self.total_sec)}')
         self._highlight_gcode(idx)

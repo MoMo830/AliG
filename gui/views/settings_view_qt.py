@@ -592,7 +592,11 @@ class SettingsViewQt(QWidget):
         self.loading = False
         self.set_button_style("idle")
 
- 
+    def showEvent(self, event):
+        """Recharge les valeurs depuis la config à chaque fois que la vue devient visible.
+        Indispensable pour refléter les sauvegardes faites depuis d'autres vues (ex: calibration)."""
+        super().showEvent(event)
+        self.load_settings()
 
 
     def clear_thumbnails_and_stats(self):

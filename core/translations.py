@@ -178,7 +178,12 @@ TRANSLATIONS = {
             "progress": "Progress:",
             "time" : "Time:",
             "pointing_opt": "POINTING",
-            "framing_opt": "FRAMING"
+            "framing_opt": "FRAMING",
+            "simulate_latency": "SIMULATE LATENCY",
+            "save_success" : "G-Code saved:",
+            "save_failed": "Save failed:",
+            "no_gcode": "No G-Code to save."
+
         }
     },
     "Français": {
@@ -356,7 +361,11 @@ TRANSLATIONS = {
             "progress": "Progression :",
             "time" : "Temps :",
             "pointing_opt": "POINTAGE",
-            "framing_opt": "ENCADREMENT"
+            "framing_opt": "ENCADREMENT",
+            "simulate_latency": "SIMULATER LA LATENCE",
+            "save_success" : "G-Code sauvegardé :",
+            "save_failed": "Problème durant la sauvegarde :",
+            "no_gcode": "G-code vide."
         }
     },
     "Deutsch": {

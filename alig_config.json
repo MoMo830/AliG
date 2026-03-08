@@ -1,7 +1,7 @@
 {
     "machine_settings": {
         "theme": "Dark",
-        "language": "English",
+        "language": "Fran\u00e7ais",
         "enable_thumbnails": true,
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
@@ -14,9 +14,9 @@
         "custom_footer": "M334"
     },
     "stats": {
-        "total_lines": 537254,
-        "total_gcodes": 3,
-        "total_time_seconds": 9947.367021484373,
+        "total_lines": 594004,
+        "total_gcodes": 5,
+        "total_time_seconds": 10704.120439453123,
         "last_project_time": 378.376708984375
     },
     "window_settings": {

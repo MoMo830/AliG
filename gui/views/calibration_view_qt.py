@@ -1,7 +1,8 @@
 import os
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QFrame, 
                              QLabel, QScrollArea, QStackedWidget, QPushButton, 
-                             QLineEdit, QGridLayout, QButtonGroup)
+                             QLineEdit, QGridLayout, QButtonGroup, QFileDialog,
+                             QMessageBox)
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap
 
@@ -9,6 +10,7 @@ from utils.paths import SVG_ICONS, EXPLAIN_PNG
 from gui.switch import Switch
 from core.translations import TRANSLATIONS
 from gui.utils_qt import get_svg_pixmap
+from engine.calibrate_engine import CalibrateEngine
 
 
 
@@ -18,8 +20,10 @@ class CalibrationView(QWidget):
         super().__init__(parent)
         self.controller = controller
         self.translation_map = {}
-        self.test_cards = []  # Liste pour stocker les boutons de la sidebar
-        self.current_test_id = None  # Pour savoir quel test est actif
+        self.test_cards = []
+        self.current_test_id = None
+        self.calibrate_engine = CalibrateEngine()
+        self._last_calc_ms   = None
         
         # 1. Chargement initial des textes
         self.load_texts()
@@ -48,6 +52,7 @@ class CalibrationView(QWidget):
         self.action_btn = QPushButton(self.texts.get("btn_prepare", "Prepare"))
         self.action_btn.setFixedHeight(52)
         self.action_btn.setStyleSheet("background-color: #e67e22; font-weight: bold; border-radius: 10px;")
+        self.action_btn.hide()   # caché jusqu'à ce qu'un test soit sélectionné
         self.right_layout.addWidget(self.action_btn)
 
     def load_texts(self):
@@ -120,59 +125,58 @@ class CalibrationView(QWidget):
 
 
     def create_test_card(self, test_info):
-        """Crée un bouton stylisé pour la sidebar avec identification pour traduction et reset"""
+        """Crée un bouton stylisé pour la sidebar."""
         card = QPushButton()
         card.setCheckable(True)
         card.setCursor(Qt.CursorShape.PointingHandCursor)
         card.setFixedHeight(80)
-        
-        # --- STOCKAGE DE L'ID ---
-        # On stocke l'ID du test directement dans l'objet pour le retrouver facilement
+
         test_id = test_info.get("id")
         card.setProperty("test_id", test_id)
-        
-        # Ajout au groupe pour l'exclusivité
+        card._test_info = test_info
+
         if hasattr(self, 'button_group'):
             self.button_group.addButton(card)
-        
-        layout = QHBoxLayout(card)
-        
-        # --- LOGIQUE D'ICÔNE SVG ---
-        # On attache icon_label à la card pour pouvoir changer sa couleur dynamiquement
-        card.icon_label = QLabel() 
-        card.icon_label.setObjectName("card_icon")
-        
-        icon_path = test_info.get("icon_path")
+
+        # ── Icône via QIcon — résiste aux state changes (checked/hover/repaint) ──
+        icon_path     = test_info.get("icon_path")
         keep_original = test_info.get("fixed_color", False)
-        target_color = None if keep_original else "#EEEEEE"
+        target_color  = None if keep_original else "#EEEEEE"
 
         if icon_path and os.path.exists(icon_path):
-            pixmap = get_svg_pixmap(icon_path, size=QSize(35, 35), color_hex=target_color)
-            if not pixmap.isNull():
-                card.icon_label.setPixmap(pixmap)
-        
-        card.icon_label.setFixedWidth(50)
-        card.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # --- TEXTES (Avec ObjectName pour retranslate_ui) ---
+            pix = get_svg_pixmap(icon_path, size=QSize(35, 35), color_hex=target_color)
+            if not pix.isNull():
+                card.setIcon(QIcon(pix))
+                card.setIconSize(QSize(35, 35))
+
+        # ── Textes dans un layout interne ───────────────────────────────────────
+        card.setText("")
+        layout = QHBoxLayout(card)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(12)
+        layout.addSpacing(42)   # réserve la place de l'icône Qt (gérée nativement)
+
         text_container = QVBoxLayout()
-        
-        title = QLabel(test_info.get("title", "Sans titre"))
-        title.setObjectName("card_title") # Identifiant pour findChild()
-        title.setStyleSheet("font-weight: bold; font-size: 13px; color: white; border: none; background: transparent;")
-        
+        text_container.setSpacing(2)
+
+        title = QLabel(test_info.get("title", ""))
+        title.setObjectName("card_title")
+        title.setStyleSheet("font-weight: bold; font-size: 13px; color: white; "
+                            "border: none; background: transparent;")
+        title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
         desc = QLabel(test_info.get("desc", ""))
-        desc.setObjectName("card_desc")  # Identifiant pour findChild()
-        desc.setStyleSheet("font-size: 11px; color: #aaaaaa; border: none; background: transparent;")
+        desc.setObjectName("card_desc")
+        desc.setStyleSheet("font-size: 11px; color: #aaaaaa; "
+                           "border: none; background: transparent;")
         desc.setWordWrap(True)
-        
+        desc.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
         text_container.addWidget(title)
         text_container.addWidget(desc)
-        
-        layout.addWidget(card.icon_label)
         layout.addLayout(text_container)
-        
-        # Style du bouton
+
+        # ── Style (sans :hover CSS) ─────────────────────────────────────────────
         card.setStyleSheet("""
             QPushButton {
                 background-color: #2b2b2b;
@@ -181,19 +185,46 @@ class CalibrationView(QWidget):
                 text-align: left;
                 padding: 10px;
             }
-            QPushButton:hover {
-                background-color: #353535;
-                border-color: #e67e22;
-            }
             QPushButton:checked {
                 background-color: #3d3d3d;
                 border: 2px solid #e67e22;
             }
         """)
 
-        # On utilise une fonction intermédiaire pour capturer l'ID actuel
+        card._bg_normal = "#2b2b2b"
+        card._bg_hover  = "#353535"
+        card._bd_normal = "#3d3d3d"
+        card._bd_hover  = "#e67e22"
+
+        def _enter(e, c=card):
+            if not c.isChecked():
+                c.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {c._bg_hover};
+                        border: 1px solid {c._bd_hover};
+                        border-radius: 8px; text-align: left; padding: 10px;
+                    }}
+                    QPushButton:checked {{
+                        background-color: #3d3d3d; border: 2px solid #e67e22;
+                    }}
+                """)
+
+        def _leave(e, c=card):
+            if not c.isChecked():
+                c.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {c._bg_normal};
+                        border: 1px solid {c._bd_normal};
+                        border-radius: 8px; text-align: left; padding: 10px;
+                    }}
+                    QPushButton:checked {{
+                        background-color: #3d3d3d; border: 2px solid #e67e22;
+                    }}
+                """)
+
+        card.enterEvent = _enter
+        card.leaveEvent = _leave
         card.clicked.connect(lambda: self.on_test_selected(test_info))
-        
         return card
     
     def on_test_selected(self, test_info):
@@ -219,27 +250,21 @@ class CalibrationView(QWidget):
         self.detail_desc.setText(self.texts.get(f"{self.current_test_id}_long", ""))
 
         # --- 2. SIDEBAR (Icônes dynamiques) ---
-        # On boucle sur notre liste de cartes stockées
         for card in self.test_cards:
-            # On utilise property() car nous avons fait setProperty dans create_test_card
             t_id = card.property("test_id")
             is_selected = (t_id == self.current_test_id)
-            
-            # Récupération des métadonnées du test pour cette carte
             test_meta = next((t for t in self.tests_data if t["id"] == t_id), {})
-            
-            # On ne recolore pas les icônes à couleurs fixes (ex: Power/Logo)
+
+            # Recoloriage via setIcon — ne provoque pas de repaint des enfants
             if not test_meta.get("fixed_color", False):
                 current_icon_color = color_active if is_selected else color_main
-                
-                # Mise à jour de l'icône via la référence directe stockée dans la carte
-                if hasattr(card, 'icon_label'):
-                    pix = get_svg_pixmap(
-                        test_meta.get("icon_path"), 
-                        size=QSize(35, 35), 
-                        color_hex=current_icon_color
-                    )
-                    card.icon_label.setPixmap(pix)
+                pix = get_svg_pixmap(
+                    test_meta.get("icon_path"),
+                    size=QSize(35, 35),
+                    color_hex=current_icon_color
+                )
+                if pix and not pix.isNull():
+                    card.setIcon(QIcon(pix))
 
         # --- 3. ILLUSTRATION (Preview PNG) ---
         if hasattr(self, 'preview_image_label'):
@@ -261,16 +286,32 @@ class CalibrationView(QWidget):
                 self.preview_image_label.clear()
 
         # --- 4. PARAMÈTRES DYNAMIQUES ---
-        self.clear_dynamic_layout() # Nettoyage de la zone
-        
+        self.clear_dynamic_layout()
+
+        # --- CORRECTION DE LA DÉCONNEXION ---
+        # On tente de déconnecter toutes les fonctions liées au clic du bouton.
+        # On attrape (Exception) pour couvrir TypeError et RuntimeError selon le contexte.
+        try:
+            self.action_btn.clicked.disconnect()
+        except Exception:
+            pass 
+
+        # --- CONFIGURATION DU BOUTON SELON LE TEST ---
         if self.current_test_id == "latency":
             self.setup_latency_params()
+            self.action_btn.setText(self.texts.get("btn_generate", "Generate G-Code"))
+            self.action_btn.clicked.connect(self.validate_and_generate)
+            
         elif self.current_test_id == "linestep":
-            # self.setup_linestep_params()
-            pass
+            self.action_btn.setText(self.texts.get("btn_prepare", "Prepare"))
+            # self.action_btn.clicked.connect(self.prepare_linestep) # Exemple si besoin
+            
         elif self.current_test_id == "power":
-            # self.setup_power_params()
-            pass
+            self.action_btn.setText(self.texts.get("btn_prepare", "Prepare"))
+            # self.action_btn.clicked.connect(self.prepare_power) # Exemple si besoin
+
+        # On affiche le bouton une fois qu'il est configuré
+        self.action_btn.show()
 
     def clear_dynamic_layout(self):
         """Supprime tous les widgets de la zone de paramètres dynamique"""
@@ -313,11 +354,10 @@ class CalibrationView(QWidget):
 
 
     def setup_latency_params(self):
-        """Construit les champs de saisie pour le test de Latence"""
-        # 1. On nettoie la zone avant d'ajouter les nouveaux widgets
+        """Construit les champs de saisie pour le test de Latence + calculatrice"""
         self.clear_dynamic_layout()
 
-        # 2. Création du conteneur stylisé
+        # ── Conteneur paramètres ─────────────────────────────────────
         container = QFrame()
         container.setObjectName("ParamsContainer")
         container.setStyleSheet("""
@@ -327,44 +367,222 @@ class CalibrationView(QWidget):
                 padding: 15px;
             }
             QLabel { color: #DCE4EE; font-size: 13px; }
-            QLineEdit { 
-                background-color: #3d3d3d; 
-                border: 1px solid #555555; 
-                border-radius: 4px; 
-                color: white; 
-                padding: 5px; 
+            QLineEdit {
+                background-color: #3d3d3d;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                color: white;
+                padding: 5px;
             }
         """)
-        
         grid = QGridLayout(container)
-        grid.setSpacing(15)
+        grid.setSpacing(12)
 
-        # --- Ligne 1 : Feedrate ---
-        grid.addWidget(QLabel(self.texts.get("feedrate_calc", "Feedrate:")), 0, 0)
+        # Ligne 0 : Feedrate
+        grid.addWidget(QLabel(self.texts.get("feedrate_calc", "Feedrate (mm/min):")), 0, 0)
         self.speed_entry = QLineEdit()
         self.speed_entry.setPlaceholderText("ex: 1000")
-        # On récupère la valeur actuelle depuis la config
         current_speed = self.controller.get_item("machine_settings", "feedrate", "1000")
         self.speed_entry.setText(str(current_speed))
         grid.addWidget(self.speed_entry, 0, 1)
 
-        # --- Ligne 2 : Mode S (Utilisation de votre Switch) ---
-        grid.addWidget(QLabel("Use S-Mode Command:"), 1, 0)
-        self.s_mode_switch = Switch()
-        # On centre le switch à droite
-        grid.addWidget(self.s_mode_switch, 1, 1, Qt.AlignmentFlag.AlignRight)
+        # Ligne 0 col 2 : Latency
+        grid.addWidget(QLabel(self.texts.get("latency_calc", "Latency (ms):")), 0, 2)
+        self.latency_entry = QLineEdit()
+        self.latency_entry.setPlaceholderText("ex: 0")
+        current_lat = self.controller.get_item("machine_settings", "laser_latency", "0")
+        self.latency_entry.setText(str(current_lat))
+        grid.addWidget(self.latency_entry, 0, 3)
 
-        # --- Ligne 3 : Puissance ---
-        grid.addWidget(QLabel(self.texts.get("power_pct", "Power (%):")), 2, 0)
+        # Ligne 0 col 4 : mm info (calculé dynamiquement)
+        self.mm_info_label = QLabel("= 0.000 mm")
+        self.mm_info_label.setStyleSheet("color: #1f538d; font-weight: bold; border: none;")
+        grid.addWidget(self.mm_info_label, 0, 4)
+
+        # Ligne 1 : Power
+        grid.addWidget(QLabel(self.texts.get("power_pct", "Power (%):")), 1, 0)
         self.power_entry = QLineEdit()
         self.power_entry.setText("10")
-        grid.addWidget(self.power_entry, 2, 1)
+        grid.addWidget(self.power_entry, 1, 1)
 
-        # Ajout du container au layout dynamique
         self.dynamic_layout.addWidget(container)
-        
-        # On ajoute un ressort en bas pour que tout reste groupé en haut
+
+        # ── Calculatrice ──────────────────────────────────────────────
+        calc_frame = QFrame()
+        calc_frame.setObjectName("CalcContainer")
+        calc_frame.setStyleSheet("""
+            QFrame#CalcContainer {
+                background-color: #2b2b2b;
+                border-radius: 10px;
+                padding: 15px;
+            }
+            QLabel { color: #DCE4EE; font-size: 13px; }
+            QLineEdit {
+                background-color: #3d3d3d;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                color: white;
+                padding: 5px;
+            }
+        """)
+        calc_vbox = QVBoxLayout(calc_frame)
+        calc_vbox.setSpacing(8)
+
+        calc_title = QLabel(self.texts.get("latency_calculator", "Latency Calculator (from measurement):"))
+        calc_title.setStyleSheet("font-weight: bold; font-size: 13px; color: #e67e22; border: none;")
+        calc_vbox.addWidget(calc_title)
+
+        calc_grid = QGridLayout()
+        calc_grid.setSpacing(10)
+
+        calc_grid.addWidget(QLabel(self.texts.get("measured_offset", "Measured Offset (mm):")), 0, 0)
+        self.measured_mm_entry = QLineEdit()
+        self.measured_mm_entry.setPlaceholderText("ex: 0.25")
+        calc_grid.addWidget(self.measured_mm_entry, 0, 1)
+
+        self.calc_result_label = QLabel(f"{self.texts.get('latency_results', 'Result:')} -- ms")
+        self.calc_result_label.setStyleSheet("font-weight: bold; color: #e67e22; border: none;")
+        calc_grid.addWidget(self.calc_result_label, 0, 2)
+
+        save_lat_btn = QPushButton(self.texts.get("apply_save", "Apply & Save"))
+        save_lat_btn.setFixedHeight(30)
+        save_lat_btn.setStyleSheet("""
+            QPushButton { background-color: #1f538d; color: white; border-radius: 6px;
+                          font-size: 12px; border: none; padding: 0 10px; }
+            QPushButton:hover { background-color: #2a6dbd; }
+        """)
+        save_lat_btn.clicked.connect(self.apply_calculated_latency)
+        calc_grid.addWidget(save_lat_btn, 0, 3)
+
+        self.calc_hint_label = QLabel("")
+        self.calc_hint_label.setStyleSheet("font-size: 11px; font-style: italic; color: gray; border: none;")
+        calc_grid.addWidget(self.calc_hint_label, 1, 0, 1, 4)
+
+        calc_vbox.addLayout(calc_grid)
+        self.dynamic_layout.addWidget(calc_frame)
+
+        # ── Bindings ─────────────────────────────────────────────────
+        self.measured_mm_entry.textChanged.connect(self.update_latency_calculation)
+        self.speed_entry.textChanged.connect(lambda: (self.update_latency_calculation(), self.update_mm_display()))
+        self.latency_entry.textChanged.connect(self.update_mm_display)
+
         self.dynamic_layout.addStretch()
+        self.update_mm_display()
+
+    def update_mm_display(self):
+        """Calcule et affiche le décalage en mm depuis speed + latency."""
+        try:
+            speed   = float(self.speed_entry.text().strip()   or 0)
+            latency = float(self.latency_entry.text().strip()  or 0)
+            offset  = (speed * latency) / 60000.0
+            self.mm_info_label.setText(f"= {offset:.3f} mm")
+            color = "#e74c3c" if abs(offset) > 2.0 else "#1f538d"
+            self.mm_info_label.setStyleSheet(f"color: {color}; font-weight: bold; border: none;")
+        except (ValueError, AttributeError):
+            if hasattr(self, 'mm_info_label'):
+                self.mm_info_label.setText("= --- mm")
+                self.mm_info_label.setStyleSheet("color: gray; font-weight: bold; border: none;")
+
+    def update_latency_calculation(self):
+        """Calcule la latence depuis offset mesuré + vitesse."""
+        try:
+            speed   = float(self.speed_entry.text().strip()      or 0)
+            dist_mm = float(self.measured_mm_entry.text().strip() or 0)
+
+            if speed > 0 and dist_mm != 0:
+                calc_ms = (dist_mm * 60000.0) / speed
+                self._last_calc_ms = calc_ms
+                if dist_mm > 0:
+                    status = f"(+) {calc_ms:.2f} ms"
+                    hint   = self.texts.get("latency_hint_late", "Late firing: Increase latency (+)")
+                    color  = "#e67e22"
+                else:
+                    status = f"(-) {abs(calc_ms):.2f} ms"
+                    hint   = self.texts.get("latency_hint_early", "Early firing: Decrease latency (-)")
+                    color  = "#3498db"
+                self.calc_result_label.setText(f"{self.texts.get('latency_results', 'Result:')} {status}")
+                self.calc_result_label.setStyleSheet(f"font-weight: bold; color: {color}; border: none;")
+                self.calc_hint_label.setText(f"ℹ️ {hint}")
+            elif dist_mm == 0:
+                self._last_calc_ms = 0.0
+                self.calc_result_label.setText(f"{self.texts.get('latency_results', 'Result:')} 0.00 ms")
+                self.calc_result_label.setStyleSheet("font-weight: bold; color: gray; border: none;")
+                self.calc_hint_label.setText(self.texts.get("latency_perfect", "Perfectly aligned"))
+            else:
+                self.calc_result_label.setText(f"{self.texts.get('latency_results', 'Result:')} -- ms")
+                self.calc_result_label.setStyleSheet("font-weight: bold; color: gray; border: none;")
+                self.calc_hint_label.setText("")
+        except (ValueError, AttributeError):
+            if hasattr(self, 'calc_result_label'):
+                self.calc_result_label.setText("Result: Error")
+                self.calc_result_label.setStyleSheet("font-weight: bold; color: #e74c3c; border: none;")
+
+    def apply_calculated_latency(self):
+        """Injecte la valeur calculée dans le champ latency et sauvegarde."""
+        val_ms = getattr(self, "_last_calc_ms", None)
+        if val_ms is not None:
+            self.latency_entry.setText(f"{val_ms:.2f}")
+            self.update_mm_display()
+            # On utilise la même API que settings_view_qt pour être sûr
+            # d'écrire dans la même couche (set_section + save)
+            try:
+                current = self.controller.get_section("machine_settings") or {}
+                current["laser_latency"] = round(val_ms, 3)
+                self.controller.set_section("machine_settings", current)
+                self.controller.save()
+            except Exception as e:
+                print(f"[calibration] save laser_latency failed: {e}")
+
+    def validate_and_generate(self):
+        """Valide les champs, génère le G-Code de test de latence et propose l'enregistrement."""
+        power_raw = self.power_entry.text().strip() if hasattr(self, 'power_entry') else ""
+        if not power_raw:
+            QMessageBox.warning(self, "Missing field", "⚠️ Please enter a power value.")
+            return
+        try:
+            cfg          = self.controller.config_manager if hasattr(self.controller, 'config_manager') else None
+            cmd_mode     = cfg.get_item("machine_settings", "cmd_mode", "") if cfg else ""
+            use_s_mode   = "S (" in cmd_mode
+
+            settings = {
+                "power":     float(self.power_entry.text().strip()),
+                "max_value": float(cfg.get_item("machine_settings", "ctrl_max", 255)) if cfg else 255,
+                "feedrate":  float(self.speed_entry.text().strip()),
+                "latency":   float(self.latency_entry.text().strip() or 0),
+                "e_num":     int(cfg.get_item("machine_settings", "m67_e_num", 0)) if cfg else 0,
+                "use_s_mode": use_s_mode,
+                "header":    cfg.get_item("gcode_options", "header", "") if cfg else "",
+                "footer":    cfg.get_item("gcode_options", "footer", "M30") if cfg else "M30",
+            }
+
+            gcode_content = self.calibrate_engine.generate_latency_calibration(settings)
+
+            lat_val = settings["latency"]
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                self.texts.get("save_dialog_title", "Save Calibration G-Code"),
+                f"latency_test_{lat_val}ms.nc",
+                "G-Code (*.nc *.gcode);;All files (*)"
+            )
+            if file_path:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(gcode_content)
+                # Feedback visuel temporaire sur le bouton
+                orig_text = self.action_btn.text()
+                orig_style = self.action_btn.styleSheet()
+                self.action_btn.setText("✅ G-Code Saved!")
+                self.action_btn.setStyleSheet(
+                    "background-color: #27AE60; font-weight: bold; border-radius: 10px;")
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(2000, lambda: (
+                    self.action_btn.setText(orig_text),
+                    self.action_btn.setStyleSheet(orig_style)
+                ))
+
+        except ValueError:
+            QMessageBox.warning(self, "Invalid input", "⚠️ Please enter valid numbers in all fields.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Generation failed:\n{e}")
 
     def create_switch(self, layout, label_text, key, row):
         """Ajoute une ligne avec un label et Switch animé"""
@@ -460,6 +678,7 @@ class CalibrationView(QWidget):
         
         # Vider les paramètres
         self.clear_dynamic_layout()
+        self.action_btn.hide()
 
     def showEvent(self, event):
         """

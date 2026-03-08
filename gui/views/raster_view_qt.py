@@ -350,11 +350,32 @@ class _RasterCanvas(PanZoomMixin, QWidget):
         self._fig        = fig
         self._pixmap     = None
         self._auto_fit   = False
-        self._fit_next = False 
+        self._fit_next   = False
 
         self._mpl_canvas = FigureCanvas(fig)
         self._mpl_canvas.setParent(self)
         self._mpl_canvas.setVisible(False)
+
+        # Overlay QPainter natif (toujours net au zoom)
+        self._overlay      = None   # None ou dict
+        self._after_draw_cb = None  # callable(pw, ph) appelé après draw()
+
+    def set_overlay(self, ov):
+        """
+        ov = {
+          'transform': callable (mx, my) -> (px, py)  # mm → pixels pixmap
+          'overscan_rects': [(x, y, w, h), ...],       # mm
+          'border_rect':    (x, y, w, h),              # mm
+          'origin':         (ox, oy),                  # mm
+          'grid_xs':        [float, ...],              # abscisses grille (mm)
+          'grid_ys':        [float, ...],              # ordonnées grille (mm)
+          'xlim':           (x0, x1),                  # mm, pour borner les lignes
+          'ylim':           (y0, y1),
+          'direction':      'horizontal'|'vertical',
+        }
+        """
+        self._overlay = ov
+        self.update()
 
     def request_auto_fit(self):
         self._auto_fit = True
@@ -366,7 +387,6 @@ class _RasterCanvas(PanZoomMixin, QWidget):
         from PyQt6.QtCore import QTimer
 
         self._fig.tight_layout(pad=0.5)
-
         self._mpl_canvas.draw()
 
         # Capture du buffer matplotlib vers QPixmap
@@ -374,6 +394,14 @@ class _RasterCanvas(PanZoomMixin, QWidget):
         w, h = self._mpl_canvas.get_width_height()
         qi = QImage(bytes(buf), w, h, QImage.Format.Format_RGBA8888)
         self._pixmap = QPixmap.fromImage(qi)
+
+        # Calcul du mapping mm → pixels pixmap via transData (valide après draw)
+        # Appelé par set_overlay_from_ax() si fourni
+        if self._after_draw_cb is not None:
+            try:
+                self._after_draw_cb(w, h)
+            except Exception:
+                pass
 
         do_fit = fit or self._fit_next
         self._fit_next = False
@@ -417,8 +445,137 @@ class _RasterCanvas(PanZoomMixin, QWidget):
             qp.end()
             return
 
+        # ── Pixmap matplotlib (image raster + ticks + labels) ───────
         self.apply_pan_zoom_transform(qp)
         qp.drawPixmap(0, 0, self._pixmap)
+
+        # ── Overlay QPainter natif (toujours net au zoom) ────────────
+        ov = self._overlay
+        if ov is None:
+            qp.end()
+            return
+
+        m2p = ov['transform']         # (mm_x, mm_y) → (px_x, px_y) dans pixmap
+        x0, x1 = ov['xlim']
+        y0, y1 = ov['ylim']
+        horiz   = ov.get('direction', 'horizontal') == 'horizontal'
+
+        def cosmetic_pen(hex_col, alpha=1.0, widthF=0.0,
+                         style=Qt.PenStyle.SolidLine):
+            c = QColor(hex_col); c.setAlphaF(alpha)
+            p = QPen(c); p.setWidthF(widthF); p.setStyle(style)
+            return p
+
+        # ── 1. Grille ────────────────────────────────────────────────
+        qp.setPen(cosmetic_pen("#00ffff", alpha=0.45))
+        for gx in ov.get('grid_xs', []):
+            ax1, ay1 = m2p(gx, y0)
+            ax2, ay2 = m2p(gx, y1)
+            qp.drawLine(QPointF(ax1, ay1), QPointF(ax2, ay2))
+        for gy in ov.get('grid_ys', []):
+            ax1, ay1 = m2p(x0, gy)
+            ax2, ay2 = m2p(x1, gy)
+            qp.drawLine(QPointF(ax1, ay1), QPointF(ax2, ay2))
+
+        # ── 1b. Labels des ticks (Y gauche+droite, X haut+bas) ──────
+        ax_left  = ov.get('ax_left',  0.0)
+        ax_right = ov.get('ax_right', float(self._pixmap.width()))
+        ax_top   = ov.get('ax_top',   0.0)
+        ax_bot   = ov.get('ax_bot',   float(self._pixmap.height()))
+
+        lbl_font = QFont("Arial", 8)
+        qp.setFont(lbl_font)
+        lbl_col = QColor("#888888")
+        qp.setPen(QPen(lbl_col))
+        lbl_w = 36; lbl_h = 14
+
+        for (val, txt) in ov.get('yticks', []):
+            _, py = m2p(x0, val)
+            # gauche
+            qp.drawText(QRectF(ax_left - lbl_w - 4, py - lbl_h / 2, lbl_w, lbl_h),
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, txt)
+            # droite
+            qp.drawText(QRectF(ax_right + 4, py - lbl_h / 2, lbl_w, lbl_h),
+                        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, txt)
+
+        for (val, txt) in ov.get('xticks', []):
+            px, _ = m2p(val, y0)
+            # bas
+            qp.drawText(QRectF(px - lbl_w / 2, ax_bot + 3, lbl_w, lbl_h),
+                        Qt.AlignmentFlag.AlignCenter, txt)
+            # haut
+            qp.drawText(QRectF(px - lbl_w / 2, ax_top - lbl_h - 3, lbl_w, lbl_h),
+                        Qt.AlignmentFlag.AlignCenter, txt)
+
+        # ── 2. Hachures + texte OVERSCAN ────────────────────────────
+        for (rx, ry, rw, rh) in ov.get('overscan_rects', []):
+            # y inversé : coin haut = y+h, coin bas = y
+            tlx, tly = m2p(rx,      ry + rh)   # top-left  pixel
+            brx, bry = m2p(rx + rw, ry)        # bot-right pixel
+            rpx = min(tlx, brx); rpy = min(tly, bry)
+            rpw = max(1.0, abs(brx - tlx))
+            rph = max(1.0, abs(bry - tly))
+
+            fill = QColor("#3498db"); fill.setAlphaF(0.10)
+            qp.fillRect(QRectF(rpx, rpy, rpw, rph), fill)
+
+            # hachures manuelles 8 px réels
+            # horizontal = lignes de gravure horizontales → overscan gauche/droite (zones hautes/étroites)
+            # → hachures "---" = lignes HORIZONTALES dans la zone
+            # vertical   = lignes de gravure verticales  → overscan haut/bas (zones larges/plates)
+            # → hachures "|||" = lignes VERTICALES dans la zone
+            qp.setPen(cosmetic_pen("#3498db", alpha=0.35))
+            step = 8.0
+            if horiz:
+                # hachures horizontales (---) dans zones gauche/droite
+                y = rpy
+                while y <= rpy + rph:
+                    qp.drawLine(QPointF(rpx, y), QPointF(rpx + rpw, y))
+                    y += step
+            else:
+                # hachures verticales (|||) dans zones haut/bas
+                x = rpx
+                while x <= rpx + rpw:
+                    qp.drawLine(QPointF(x, rpy), QPointF(x, rpy + rph))
+                    x += step
+
+            # texte "OVERSCAN"
+            # horizontal → zones étroites et hautes → texte tourné 90°
+            # vertical   → zones larges et plates  → texte droit
+            qp.save()
+            tc = QColor("#3498db"); tc.setAlphaF(0.9)
+            qp.setPen(QPen(tc))
+            qp.setFont(QFont("Arial", 7, QFont.Weight.Bold))
+            cx = rpx + rpw / 2;  cy = rpy + rph / 2
+            qp.translate(cx, cy)
+            if horiz:
+                qp.rotate(-90)
+            qp.drawText(QRectF(-40, -8, 80, 16),
+                        Qt.AlignmentFlag.AlignCenter, "OVERSCAN")
+            qp.restore()
+
+        # ── 3. Rectangle bordure pointillé ──────────────────────────
+        br = ov.get('border_rect')
+        if br:
+            bx, by, bw, bh = br
+            tlx, tly = m2p(bx,      by + bh)
+            brx2, bry2 = m2p(bx + bw, by)
+            pen = cosmetic_pen("#3498db", alpha=0.9, widthF=1.5,
+                               style=Qt.PenStyle.DashLine)
+            qp.setPen(pen)
+            qp.setBrush(Qt.BrushStyle.NoBrush)
+            rx_ = min(tlx, brx2); ry_ = min(tly, bry2)
+            qp.drawRect(QRectF(rx_, ry_, abs(brx2 - tlx), abs(bry2 - tly)))
+
+        # ── 4. Point d'origine (disque rouge) ────────────────────────
+        orig = ov.get('origin')
+        if orig:
+            opx, opy = m2p(orig[0], orig[1])
+            r = 5.0
+            qp.setPen(QPen(QColor("#cc0000"), 1.5))
+            qp.setBrush(QBrush(QColor("#ff3333")))
+            qp.drawEllipse(QRectF(opx - r, opy - r, r * 2, r * 2))
+
         qp.end()
 
     def resizeEvent(self, e):
@@ -1134,6 +1291,8 @@ class RasterViewQt(QWidget):
         if self._loading:
             return
         if not self.input_image_path or not os.path.isfile(self.input_image_path):
+            self._canvas._after_draw_cb = None
+            self._canvas.set_overlay(None)
             self._canvas.redraw(fit=fit)
             return
 
@@ -1142,6 +1301,8 @@ class RasterViewQt(QWidget):
         if not res or res[0] is None:
             if self._img_plot:
                 self._img_plot.set_visible(False)
+            self._canvas._after_draw_cb = None
+            self._canvas.set_overlay(None)
             self._canvas.redraw(fit=fit)
             return
 
@@ -1175,57 +1336,89 @@ class RasterViewQt(QWidget):
         self._cbar_widget.set_range(v_min, v_max,
                                     self.t.get("laser_power_level", "Laser Power"))
 
-        # Overscan
+        # Overscan — calcul des rectangles (coordonnées mm exactes)
         direction = self._raster_mode
-        hatch_pat = "|||" if direction == "vertical" else "---"
         ax = self._ax
-
-        def draw_overscan(x_min, y_min, ow, oh):
-            if ow < 0.5 or oh < 0.5:
-                return
-            r = Rectangle((x_min, y_min), ow, oh, facecolor="none",
-                           hatch=hatch_pat, edgecolor="#3498db",
-                           linewidth=0, alpha=0.3, zorder=5)
-            ax.add_patch(r)
-            self._overscan_patches.append(r)
-            rot = 90 if direction == "horizontal" else 0
-            txt = ax.text(x_min + ow / 2, y_min + oh / 2, "OVERSCAN",
-                          rotation=rot, fontsize=7, va="center", ha="center",
-                          color="#3498db", weight="bold", zorder=20)
-            self._overscan_texts.append(txt)
 
         if direction == "horizontal":
             global_y = offY;  global_h = real_h
             ow_l = abs(rf[0]);  ow_r = rf[2] - real_w
-            if ow_l > 0.1: draw_overscan(offX + rf[0], offY, ow_l, real_h)
-            if ow_r > 0.1: draw_overscan(offX + real_w, offY, ow_r, real_h)
+            overscan_rects = []
+            if ow_l > 0.1: overscan_rects.append((offX + rf[0], offY, ow_l, real_h))
+            if ow_r > 0.1: overscan_rects.append((offX + real_w, offY, ow_r, real_h))
         else:
             oh_b = abs(rf[1]);  oh_t = rf[3] - real_h
             global_y = offY + rf[1];  global_h = rf[3] - rf[1]
-            if oh_b > 0.1: draw_overscan(offX, offY + rf[1], real_w, oh_b)
-            if oh_t > 0.1: draw_overscan(offX, offY + real_h, real_w, oh_t)
+            overscan_rects = []
+            if oh_b > 0.1: overscan_rects.append((offX, offY + rf[1], real_w, oh_b))
+            if oh_t > 0.1: overscan_rects.append((offX, offY + real_h, real_w, oh_t))
 
-        self._rect_overscan = Rectangle(
-            (offX + rf[0], global_y), rf[2] - rf[0], global_h,
-            linewidth=1.5, edgecolor="#3498db", facecolor="none",
-            linestyle="--", alpha=0.9, zorder=30, snap=True
-        )
-        ax.add_patch(self._rect_overscan)
+        border_rect = (offX + rf[0], global_y, rf[2] - rf[0], global_h)
 
         decal = 0.5
         ax.set_xlim(offX + rf[0] - decal, offX + rf[2] + decal)
         ax.set_ylim(global_y - decal, global_y + global_h + decal)
         ax.tick_params(top=True, right=True, which="both")
-        ax.xaxis.set_tick_params(labelbottom=True, labeltop=True)
-        ax.yaxis.set_tick_params(labelleft=True, labelright=True)
-        ax.tick_params(axis="both", colors="#888888", labelsize=9)
+        # Labels masqués dans matplotlib → redessinés en QPainter natif (nets au zoom)
+        ax.xaxis.set_tick_params(labelbottom=False, labeltop=False)
+        ax.yaxis.set_tick_params(labelleft=False,   labelright=False)
+        ax.tick_params(axis="both", colors="#888888", length=4, width=1)
         ax.set_axisbelow(False)
-        ax.grid(True, color="#00ffff", linestyle="-", linewidth=1, alpha=0.5, zorder=15)
+        ax.grid(False)   # grille redessinée en QPainter natif (nette au zoom)
 
         if self._origin_marker:
             try: self._origin_marker[0].remove()
             except Exception: pass
-        self._origin_marker = ax.plot(0, 0, "ro", markersize=6, zorder=25)
+        self._origin_marker = None   # redessiné en QPainter natif
+
+        # Callback appelé par redraw() après tight_layout+draw() — transData valide ici
+        def _build_overlay(pw, ph):
+            td  = ax.transData
+            tax = ax.transAxes
+
+            def m2p(mx, my):
+                d = td.transform((mx, my))
+                return float(d[0]), float(ph - d[1])
+
+            xlim = tuple(ax.get_xlim())
+            ylim = tuple(ax.get_ylim())
+
+            # Ticks réels de matplotlib (filtrés dans les limites)
+            yticks = [v for v in ax.get_yticks() if ylim[0] - 1e-9 <= v <= ylim[1] + 1e-9]
+            xticks = [v for v in ax.get_xticks() if xlim[0] - 1e-9 <= v <= xlim[1] + 1e-9]
+
+            # Bords de l'axe en pixels pixmap
+            ax_x0d, ax_y0d = tax.transform((0, 0))
+            ax_x1d, ax_y1d = tax.transform((1, 1))
+            ax_left  = float(ax_x0d)
+            ax_right = float(ax_x1d)
+            ax_top   = float(ph - ax_y1d)
+            ax_bot   = float(ph - ax_y0d)
+
+            def fmt_val(v):
+                if v == int(v):
+                    return str(int(v))
+                return f"{v:.1f}"
+
+            self._canvas.set_overlay({
+                'transform':      m2p,
+                'xlim':           xlim,
+                'ylim':           ylim,
+                'overscan_rects': overscan_rects,
+                'border_rect':    border_rect,
+                'origin':         (0.0, 0.0),
+                'grid_xs':        list(xticks),
+                'grid_ys':        list(yticks),
+                'yticks':         [(v, fmt_val(v)) for v in yticks],
+                'xticks':         [(v, fmt_val(v)) for v in xticks],
+                'ax_left':        ax_left,
+                'ax_right':       ax_right,
+                'ax_top':         ax_top,
+                'ax_bot':         ax_bot,
+                'direction':      direction,
+            })
+
+        self._canvas._after_draw_cb = _build_overlay
 
         est_min = geom.get("est_min", 0.0)
         ts = int(est_min * 60)
