@@ -25,6 +25,7 @@ class MainWindowQt(QMainWindow):
         # 1. PROTECTION RADICALE (Imports déjà faits en haut du fichier)
         self.setBackgroundRole(QPalette.ColorRole.Window)
         self.setAutoFillBackground(True)
+        self.all_translations = TRANSLATIONS
         
         # On définit la couleur de la palette immédiatement
         pal = self.palette()
@@ -46,7 +47,6 @@ class MainWindowQt(QMainWindow):
 
         # 2. CHARGEMENT DES TEXTES
         lang = self.config_manager.get_item("machine_settings", "language", "English")
-        from core.translations import TRANSLATIONS
         self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
 
         # 3. Configuration fenêtre (Géométrie uniquement, PAS DE SHOW)

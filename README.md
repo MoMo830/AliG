@@ -59,6 +59,15 @@ If you just want to use the software without installing Python, follow these ste
 5.  Note that the last configuration used is automatically saved via `alig_config.json` in the same folder of the exe file.
 
 ## Last version change 
+### (08/03/2026) **v0.99b** :
+- **PyQt6 Framework Migration**: Complete transition of the entire UI from CustomTkinter to PyQt6. Significant performance gains and improved memory management.
+- **Interactive Workspace Navigation**: Added real-time **Zoom** and **Pan (Drag-to-move)** capabilities.
+- **Full Internationalization (i18n)**: English, Français, Deutsch.
+
+<details>
+<summary><b> Click to view full version history</b></summary>
+
+
 ### (24/02/2026) **v0.981b** :
 - **Vertical Rastering Mode**: Introduced full support for vertical scanning trajectories. Users can now choose between Horizontal and Vertical engraving directions.
 - **Dynamic Histogram Engine**: Replaced heavy Matplotlib dependencies with a custom, high-performance histogram. Features real-time percentage-based distribution, integer-rounded axis scaling, and a dedicated "OFF" zone visualizer for better power range analysis.
@@ -66,10 +75,6 @@ If you just want to use the software without installing Python, follow these ste
   * Added **Preferred Format** setting to define a default file extension (e.g., .gcode, .nc, .txt).
   * Introduced **"Export As..."** option to allow manual naming and location selection.
 - **FreezeFix:** Resolved a critical UI freeze occurring when returning to the dashboard.
-
-<details>
-<summary><b> Click to view full version history</b></summary>
-
 ### (22/02/2026) **v0.98b** :
 - **Advanced Latency Calibration Engine**: Implemented a robust G-Code generator for latency testing, allowing users to fine-tune laser timing (ms) with real-time offset calculation in millimeters.
 - **Predictive Latency Simulation**: Upgraded the G-Code parser to factor in machine latency, providing a high-fidelity visual preview of how timing offsets will affect the final physical engraving.
@@ -113,14 +118,10 @@ If you just want to use the software without installing Python, follow these ste
 ## Roadmap & Known Issues
 
 ### Phase 1: Core Stability & UX (Towards v1.0)
-* **Comprehensive Raster Toolkit:** Finalizing the entire user interface to provide a rock-solid, streamlined environment dedicated to high-performance rastering.
+* **Calibration tools:** Integrated utilities to fine-tune line interval, overscan compensation, and power-scaling profiles.
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
 * **UI Enhancement & Custom Branding:** Replace emojis with custom icons (Theme-aware).
 * **Onboarding Experience:** First-run setup wizard for essential machine configuration.
-* **Async Streamed Parsing:** Implement a buffered G-code processing system to allow real-time simulation rendering while the generation is still in progress (eliminating UI freezing on large files).
-* ~~**Full Internationalization (i18n):** Completion of multi-language support for the entire interface.~~ _(Pending next release)_
-* ~~**Framework Migration (Qt transition):** Transitioning the entire UI from CustomTkinter to PyQt/PySide.~~_(Pending next release)_
-* ~~**Interactive Workspace Navigation:** Enhanced visualization tools including Real-time Zoom and Pan (drag-to-move) to inspect high-resolution G-code paths.~~_(Pending next release)_
 
 ---
 ##  Milestone: Version 1.0 (Official Stable Release)
@@ -128,6 +129,7 @@ If you just want to use the software without installing Python, follow these ste
 ---
 
 ### Phase 2: Advanced Features & Post-1.0
+* **Async Streamed Parsing:** Implement a buffered G-code processing system to allow real-time simulation rendering while the generation is still in progress (eliminating UI freezing on large files).
 * **Universal 2D G-code Parser & Preview:** Full implementation of the G-code parser with a built-in trajectory visualizer to support and clean any standard 2D G-code file.
 * **Smart Calibration Analysis:** Implementation of a computer vision module to analyze user-uploaded photos of calibration tests. The system will automatically suggest parameter corrections (latency) based on visual results.
 * **Dynamic Latency Profiling (Spline Calibration):** Multi-speed latency test generator and spline-based interpolation engine. Automatically predicts and compensates for mechanical/buffer lag across the entire feedrate range instead of using a single fixed value.

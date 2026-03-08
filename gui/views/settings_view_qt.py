@@ -142,7 +142,13 @@ class SettingsViewQt(QWidget):
         
         # Thème et Langue
         self.create_dropdown(sec_app, "label_theme", ["Dark", "Light", "System"], "theme")
-        self.create_dropdown(sec_app, "label_lang", ["Français", "English"], "language")
+        if hasattr(self.controller, 'all_translations'):
+            available_languages = sorted(list(self.controller.all_translations.keys()))
+        else:
+            # Fallback de sécurité si le controller n'est pas encore prêt
+            available_languages = ["English", "Français", "Deutsch"]
+        
+        self.create_dropdown(sec_app, "label_lang", available_languages, "language")
         
         # Switch Vignettes
         self.create_switch(sec_app, "enable_thumbnails", "enable_thumbnails")

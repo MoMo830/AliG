@@ -411,7 +411,7 @@ TRANSLATIONS = {
             "reset_all_parameters_confirm": "Alles zurücksetzen?",
             "reset_all_parameters_done": "Konfiguration zurückgesetzt!",
             "reset_all_parameters_error": "Fehler beim Zurücksetzen",
-            "export_extension": "Export-Dateiendung:"
+            "label_extension": "Export-Dateiendung:"
         },
         "dashboard": {
             "raster_title": "BILD-RASTERUNG",
@@ -441,12 +441,20 @@ TRANSLATIONS = {
             "latency_title": "LASER-LATENZ-TEST",
             "latency_short": "Strahlausrichtung & interne Verzögerungen testen.",
             "latency_long": "Dieser Test kalibriert interne Systemverzögerungen, indem eine zentrale vertikale Referenzlinie und abwechselnde horizontale Linien auf beiden Seiten gezeichnet werden.\n\nZiel:\nWenn die horizontalen Linien exakt an der vertikalen Linie stoppen, ist Ihre Latenzeinstellung perfekt.\n\nAnweisungen:\n1. Der Test nutzt einen 30x10mm Bereich mit dem Ursprung (G54) in der Mitte.\n2. Vorschub wählen. Starten Sie bei 0 für die erste Kalibrierung.\n3. Verbindungspunkte beobachten:\n   - Lücke (zu kurz): Zu negativerem Wert gehen (z.B. -10 zu -15).\n   - Überlappung (zu lang): Richtung Null gehen (z.B. -10 zu -5).\n4. Wiederholen, bis die horizontalen Striche die vertikale Referenz perfekt berühren.",
+            "latency_calculator": "Latenz-Rechner:",
+            "feedrate_calc": "Vorschub (mm/min):",
+            "latency_calc": "Latenz (ms):",
+            "power_pct": "Leistung (%):",
+            "measured_offset": "Gemessener Versatz (mm):",
+            "latency_results": "Ergebnis:",
+            "apply_save": "Anwenden & Speichern",
             "linestep_title": "(!WIP!) ZEILENSCHRITT-TEST", 
             "linestep_short": "Ideale Zeilenabstand-Einstellung prüfen, um weiße Streifen oder Verbrennungen zu vermeiden",
             "linestep_long": "Optimiert die Scandichte (DPI/Zeilenintervall). Ist das Intervall zu groß, entstehen Lücken (weiße Streifen). Ist es zu klein, führt Überlappung zu Verbrennungen und Detailverlust.",
             "power_title": "LEISTUNGSSKALA-GITTER (!! IN ARBEIT !! )",
             "power_short": "Intensitätsrampe von 0% bis 100%.",
-            "power_long": "Erzeugt 10 Quadrate mit variierenden Graustufen.\n\nZiel:\n- Reaktion des Materials auf verschiedene Leistungsprozentsätze beobachten.\n- Schwellenwert für Materialmarkierung identifizieren.\n- Maximalen effektiven Schwarzpegel bestimmen."
+            "power_long": "Erzeugt 10 Quadrate mit variierenden Graustufen.\n\nZiel:\n- Reaktion des Materials auf verschiedene Leistungsprozentsätze beobachten.\n- Schwellenwert für Materialmarkierung identifizieren.\n- Maximalen effektiven Schwarzpegel bestimmen.",
+            "btn_generate": "G-Code generieren..."
         },
         "topbar": {
             "support": "☕ Projekt unterstützen",
@@ -517,7 +525,8 @@ TRANSLATIONS = {
             "global_machine_params": "⚠️ GLOBALE MASCHINENPARAMETER",
             "no_global_header": "(Kein globaler Header)",
             "no_global_footer": "(Kein globaler Footer)",
-            "Distribution_label": "Verteilung (%)"
+            "Distribution_label": "Verteilung (%)",
+            "reset_view": "⊞ Ansicht zurücksetzen"
         },
         "origin_options": {
             "Lower-Left": "Unten-Links",
@@ -533,7 +542,10 @@ TRANSLATIONS = {
             "file_size": "DATEIGRÖSSE",
             "matrix_size": "MATRIXGRÖSSE",
             "scan_step": "SCAN-SCHRITT",
-            "line_step": "ZEILENSCHRITT"
+            "line_step": "ZEILENSCHRITT",
+            "power_distribution": "Leistungsverteilung",
+            "power_value": "Leistung (%)",
+            "pixel_count": "Pixel (%)"
         }, 
         "simulation": {
             "path_sim": "PFAD-SIMULATION",
@@ -549,7 +561,12 @@ TRANSLATIONS = {
             "progress": "Fortschritt:",
             "time" : "Zeit:",
             "pointing_opt": "PUNKTIEREN",
-            "framing_opt": "FRAMING"
+            "framing_opt": "FRAMING",
+            "simulate_latency": "LATENZ SIMULIEREN",
+            "save_success" : "G-Code gespeichert:",
+            "save_failed": "Speichern fehlgeschlagen:",
+            "no_gcode": "Kein G-Code zum Speichern.",
+            "generating": "G-Code & Trajektorie werden generiert..."
         }
     }
 }
