@@ -119,7 +119,8 @@ If you just want to use the software without installing Python, follow these ste
 * ~~**Full Internationalization (i18n):** Completion of multi-language support for the entire interface.~~ _(Pending next release)_
 * **Onboarding Experience:** First-run setup wizard for essential machine configuration.
 * **Async Streamed Parsing:** Implement a buffered G-code processing system to allow real-time simulation rendering while the generation is still in progress (eliminating UI freezing on large files).
-* **Framework Migration (Qt transition):** Transitioning the entire UI from CustomTkinter to PyQt/PySide to deliver a high-performance, hardware-accelerated experience and eliminate latency during intensive operations.
+* ~~**Framework Migration (Qt transition):** Transitioning the entire UI from CustomTkinter to PyQt/PySide.~~_(Pending next release)_
+* ~~**Interactive Workspace Navigation:** Enhanced visualization tools including Real-time Zoom and Pan (drag-to-move) to inspect high-resolution G-code paths.~~_(Pending next release)_
 
 ---
 ##  Milestone: Version 1.0 (Official Stable Release)
@@ -131,7 +132,7 @@ If you just want to use the software without installing Python, follow these ste
 * **Smart Calibration Analysis:** Implementation of a computer vision module to analyze user-uploaded photos of calibration tests. The system will automatically suggest parameter corrections (latency) based on visual results.
 * **Dynamic Latency Profiling (Spline Calibration):** Multi-speed latency test generator and spline-based interpolation engine. Automatically predicts and compensates for mechanical/buffer lag across the entire feedrate range instead of using a single fixed value.
 * **Adaptive Raster Optimization (Scanline Trimming):** Smart trajectory logic that detects non-blank boundaries per line to eliminate 'dead air' travel, significantly reducing engraving time by only scanning active areas.
-* **Interactive Workspace Navigation:** Enhanced visualization tools including Real-time Zoom and Pan (drag-to-move) to inspect high-resolution G-code paths.
+
 * **Project-Based Sessions & Dashboard Persistency:** Transform dashboard thumbnails into interactive project shortcuts. Clicking a thumbnail will restore the full environment, including the original image matrix and all associated parameters (feedrate, power, raster mode, etc.).
 * **Large File Management:** Option to split massive G-code files for better buffer management.
 * **[Likely] Dithering Implementation:** Integration of the Floyd-Steinberg algorithm for superior grayscale rendering.
