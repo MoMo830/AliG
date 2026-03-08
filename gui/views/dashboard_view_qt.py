@@ -28,10 +28,21 @@ class DashboardViewQt(QWidget):
         # 1. Layout Global VERTICAL
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(30, 20, 30, 20)
-        self.main_layout.setSpacing(20)
+        self.main_layout.setSpacing(5)
 
         # 2. LOGO en haut (Pleine largeur)
         self.setup_logo_header()
+
+        # --- ligne de séparation ---
+        line = QFrame()
+        line.setFixedHeight(5) 
+        line.setStyleSheet(f"""
+            background-color: #444; 
+            margin-left: 50px; 
+            margin-right: 50px;
+        """)
+
+        self.main_layout.addWidget(line)
 
         # 3. Conteneur HORIZONTAL pour le reste
         self.content_layout = QHBoxLayout()
@@ -53,7 +64,7 @@ class DashboardViewQt(QWidget):
         
         # Effet de lueur (Glow)
         glow = QGraphicsDropShadowEffect()
-        glow.setBlurRadius(100)
+        glow.setBlurRadius(40)
         glow.setColor(QColor(31, 106, 165, 200)) 
         glow.setOffset(0)
         self.logo_label.setGraphicsEffect(glow)
@@ -95,7 +106,7 @@ class DashboardViewQt(QWidget):
             (self.texts["raster_title"], self.texts["raster_desc"], self.controller.show_raster_mode, SVG_ICONS["RASTER"], "normal"),
             (self.texts["dithering_title"], self.texts["dithering_desc"], None, SVG_ICONS["DITHER"], "disabled"),
             (self.texts["infill_title"], self.texts["infill_desc"], None, "📐", "disabled"),
-            (self.texts["parser_title"], self.texts["parser_desc"], None, "📐", "disabled"),
+            (self.texts["parser_title"], self.texts["parser_desc"], None, SVG_ICONS["GCODE"], "disabled"),
             (self.texts["calibration_title"], self.texts["calibration_desc"], self.controller.show_calibration_mode, SVG_ICONS["LATENCY"], "normal"),
             # Utilisation de l'icône Home ou Settings (ici Home pour l'exemple)
             (self.texts["settings_title"], self.texts["settings_desc"], self.controller.show_settings_mode,SVG_ICONS["GEAR"] , "normal"), #"⚙️"

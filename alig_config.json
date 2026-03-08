@@ -6,7 +6,7 @@
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
         "m67_e_num": "0.0",
-        "ctrl_max": "1000.0",
+        "ctrl_max": "100.0",
         "gcode_extension": ".nc",
         "laser_latency": -11.5,
         "premove": 10.0,
@@ -14,10 +14,10 @@
         "custom_footer": "M334"
     },
     "stats": {
-        "total_lines": 16526,
-        "total_gcodes": 1,
-        "total_time_seconds": 307.77886962890625,
-        "last_project_time": 307.77886962890625
+        "total_lines": 33063,
+        "total_gcodes": 2,
+        "total_time_seconds": 615.5578002929688,
+        "last_project_time": 307.7789306640625
     },
     "window_settings": {
         "is_maximized": true,

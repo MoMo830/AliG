@@ -45,6 +45,7 @@ SVG_ICONS = {
     "HOME": os.path.join(ASSETS_DIR, "home.svg"),
     "RASTER": os.path.join(ASSETS_DIR, "raster.svg"),
     "DITHER": os.path.join(ASSETS_DIR, "dither.svg"),
+    "GCODE": os.path.join(ASSETS_DIR, "loupe.svg"),
     "LATENCY": os.path.join(ASSETS_DIR, "latency_calibration.svg"),
     "LINESTEP": os.path.join(ASSETS_DIR, "linestep_calibration.svg"),
     "POWER": os.path.join(ASSETS_DIR, "power_calibration.svg"),
