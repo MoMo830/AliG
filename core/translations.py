@@ -74,7 +74,8 @@ TRANSLATIONS = {
             "linestep_long": "This test is designed to optimize your scanning density (DPI/Line Interval). If the interval is too large, gaps will appear between engraving lines (white stripes). If it is too small, excessive overlap will occur, causing overburning, loss of fine detail, and unnecessary material stress. Find the value where lines perfectly touch without overlapping.",
             "power_title": "(!WIP!) POWER SCALE GRID",
             "power_short": "Intensity ramp from 0% to 100%.",
-            "power_long": "Generates 10 squares with varying gray levels.\n\nGoal:\n- Observe how your material reacts to different power percentages.\n- Identify the threshold where the material starts to mark.\n- Determine the maximum effective black level."
+            "power_long": "Generates 10 squares with varying gray levels.\n\nGoal:\n- Observe how your material reacts to different power percentages.\n- Identify the threshold where the material starts to mark.\n- Determine the maximum effective black level.",
+            "btn_generate": "Generate G-Code..."
         },
         "topbar": {
             "support": "☕ Support the project",
@@ -139,7 +140,7 @@ TRANSLATIONS = {
             "force_width": "Force Exact Width",
             "select_image": "SELECT IMAGE",
             "select_output": "SELECT OUTPUT DIRECTORY",
-            "laser_power_level": "Laser Power Level (%)",
+            "laser_power_level": "Power Level (%)",
             "power_distribution": "POWER DISTRIBUTION",
             "power_value": "Power Value (%)",
             "power_pct": "Power Value (%)",
@@ -188,7 +189,8 @@ TRANSLATIONS = {
             "simulate_latency": "SIMULATE LATENCY",
             "save_success" : "G-Code saved:",
             "save_failed": "Save failed:",
-            "no_gcode": "No G-Code to save."
+            "no_gcode": "No G-Code to save.",
+            "generating": "Generating G-Code & Trajectory…"
 
         }
     },
@@ -264,7 +266,8 @@ TRANSLATIONS = {
             "linestep_long": "Ce test permet d'optimiser la densité du balayage (DPI). Un intervalle trop grand laissera apparaître des lignes vides (bandes blanches), tandis qu'un intervalle trop petit entraînera un chevauchement excessif, brûlant inutilement la matière et perdant les détails.",
             "power_title": "GRILLE D'ÉCHELLE DE PUISSANCE (!! TRAVAIL EN COURS !!)",
             "power_short": "Rampe d'intensité de 0% à 100%.",
-            "power_long": "Génère 10 carrés avec des niveaux de gris variables.\n\nObjectif :\n- Observer comment votre matériau réagit aux différents pourcentages de puissance.\n- Identifier le seuil où le matériau commence à être marqué.\n- Déterminer le niveau de noir maximal effectif."
+            "power_long": "Génère 10 carrés avec des niveaux de gris variables.\n\nObjectif :\n- Observer comment votre matériau réagit aux différents pourcentages de puissance.\n- Identifier le seuil où le matériau commence à être marqué.\n- Déterminer le niveau de noir maximal effectif.",
+            "btn_generate": "Générer le G-code..."
         },
         "topbar": {
             "support": "☕ Soutenir le projet",
@@ -329,7 +332,7 @@ TRANSLATIONS = {
             "force_width": "Forcer largeur exacte",
             "select_image": "SELECTIONNER UNE IMAGE",
             "select_output": "SELECTIONNER UN DOSSIER DE SORTIE",
-            "laser_power_level": "Niveau de puissance LASER (%)",
+            "laser_power_level": "puissance (%)",
             "power_distribution": "REPARTITION DE PUISSANCE",
             "power_value": "Puissance (%)",
             "global_machine_params": "⚠️ PARAMETRES GLOBAUX",
@@ -375,7 +378,8 @@ TRANSLATIONS = {
             "simulate_latency": "SIMULATER LA LATENCE",
             "save_success" : "G-Code sauvegardé :",
             "save_failed": "Problème durant la sauvegarde :",
-            "no_gcode": "G-code vide."
+            "no_gcode": "G-code vide.",
+            "generating": "Génération du G-code et du rendu…"
         }
     },
     "Deutsch": {

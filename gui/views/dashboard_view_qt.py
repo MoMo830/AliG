@@ -25,18 +25,51 @@ class DashboardViewQt(QWidget):
         self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"])["dashboard"]
         self.text = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
 
-        # Layout Principal (Horizontal : Gauche = Modes, Droite = Histoire/Stats)
-        self.main_layout = QHBoxLayout(self)
+        # 1. Layout Global VERTICAL
+        self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(30, 20, 30, 20)
-        self.main_layout.setSpacing(30)
+        self.main_layout.setSpacing(20)
 
-        self.setup_left_column()
-        self.setup_right_column()
+        # 2. LOGO en haut (Pleine largeur)
+        self.setup_logo_header()
+
+        # 3. Conteneur HORIZONTAL pour le reste
+        self.content_layout = QHBoxLayout()
+        self.content_layout.setSpacing(30)
+        self.main_layout.addLayout(self.content_layout)
+
+        # 4. Appels des fonctions de création
+        self.setup_left_column()   # Ira dans content_layout (à gauche)
+        self.setup_right_column()  # Ira dans content_layout (à droite)
 
         # --- THUMBNAILS ---
         self.load_thumbnails()
         QTimer.singleShot(0, self.render_grid)
 
+    def setup_logo_header(self):
+        """Crée le bandeau titre ALIG en haut de la vue"""
+        self.logo_label = QLabel("ALIG")
+        self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Effet de lueur (Glow)
+        glow = QGraphicsDropShadowEffect()
+        glow.setBlurRadius(100)
+        glow.setColor(QColor(31, 106, 165, 200)) 
+        glow.setOffset(0)
+        self.logo_label.setGraphicsEffect(glow)
+
+        # Style agrandi pour le mode plein écran
+        self.logo_label.setStyleSheet("""
+            font-size: 70px; 
+            font-weight: 900; 
+            color: #ADE1FF; 
+            letter-spacing: 15px; 
+            margin-bottom: 10px;
+            background: transparent;
+        """)
+        
+        # On l'ajoute au layout VERTICAL principal
+        self.main_layout.addWidget(self.logo_label)
 
     def setup_left_column(self):
         left_container = QFrame()
@@ -82,7 +115,7 @@ class DashboardViewQt(QWidget):
         credits_label.setStyleSheet("color: #444444; font-size: 12px; border: none; background: transparent;")
         layout.addWidget(credits_label)
 
-        self.main_layout.addWidget(left_container)
+        self.content_layout.addWidget(left_container)
 
         
 
@@ -174,24 +207,26 @@ class DashboardViewQt(QWidget):
             child.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         return card
+    
+
 
     def setup_right_column(self):
         right_container = QWidget()
         layout = QVBoxLayout(right_container)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Titre A.L.I.G.
-        title = QLabel("ALIG")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        glow = QGraphicsDropShadowEffect()
-        glow.setBlurRadius(100)
-        glow.setColor(QColor(31, 106, 165, 200)) # Bleu ALIG
-        glow.setOffset(0)
-        title.setGraphicsEffect(glow)
+        # # Titre A.L.I.G.
+        # title = QLabel("ALIG")
+        # title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # glow = QGraphicsDropShadowEffect()
+        # glow.setBlurRadius(100)
+        # glow.setColor(QColor(31, 106, 165, 200)) # Bleu ALIG
+        # glow.setOffset(0)
+        # title.setGraphicsEffect(glow)
 
-        title.setStyleSheet("font-size: 60px; font-weight: 900; color: #ADE1FF; letter-spacing: 10px;")
+        # title.setStyleSheet("font-size: 60px; font-weight: 900; color: #ADE1FF; letter-spacing: 10px;")
         
-        layout.addWidget(title)
+        # layout.addWidget(title)
 
         # Zone Historique (Simplifiée pour l'instant)
         history_label = QLabel(self.texts.get("history", "History"))
@@ -237,7 +272,7 @@ class DashboardViewQt(QWidget):
         # Statistiques
         self.setup_stats(layout)
 
-        self.main_layout.addWidget(right_container)
+        self.content_layout.addWidget(right_container)
 
     def load_thumbnails(self):
         thumb_dir = THUMBNAILS_DIR

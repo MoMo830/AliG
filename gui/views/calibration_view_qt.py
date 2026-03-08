@@ -299,7 +299,7 @@ class CalibrationView(QWidget):
         # --- CONFIGURATION DU BOUTON SELON LE TEST ---
         if self.current_test_id == "latency":
             self.setup_latency_params()
-            self.action_btn.setText(self.texts.get("btn_generate", "Generate G-Code"))
+            self.action_btn.setText(self.texts.get("btn_generate", "Generate G-Code..."))
             self.action_btn.clicked.connect(self.validate_and_generate)
             
         elif self.current_test_id == "linestep":
