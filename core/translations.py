@@ -146,7 +146,8 @@ TRANSLATIONS = {
             "global_machine_params": "⚠️ GLOBAL MACHINE PARAMETERS",
             "no_global_header": "(No Global Header)",
             "no_global_footer": "(No Global Footer)",
-            "Distribution_label": "Distribution (%)"
+            "Distribution_label": "Distribution (%)",
+            "reset_view": "⊞  Reset View"
         }, 
         "origin_options": {
             "Lower-Left": "Lower-Left",
@@ -162,7 +163,12 @@ TRANSLATIONS = {
             "file_size": "FILE SIZE",
             "matrix_size": "MATRIX SIZE",
             "scan_step": "SCAN STEP",
-            "line_step": "LINE STEP"
+            "line_step": "LINE STEP",
+            "power_distribution": "Power Distribution",
+            "power_value": "Power (%)",
+            "pixel_count": "Pixels (%)"
+
+
         }, 
         "simulation": {
             "path_sim": "PATH SIMULATION",
@@ -329,7 +335,8 @@ TRANSLATIONS = {
             "global_machine_params": "⚠️ PARAMETRES GLOBAUX",
             "no_global_header": "(Pas d'entête global)",
             "no_global_footer": "(Pas de pied de page global)",
-            "Distribution_label": "Répartition (%)"
+            "Distribution_label": "Répartition (%)",
+            "reset_view": "⊞  Réinitialiser la vue"
         },
         "origin_options": {
             "Lower-Left": "Bas-Gauche",
@@ -345,7 +352,10 @@ TRANSLATIONS = {
             "file_size": "TAILLE DU FICHIER",
             "matrix_size": "MATRICE",
             "scan_step": "PAS DE SCAN",
-            "line_step": "PAS DE LIGNE"
+            "line_step": "PAS DE LIGNE",
+            "power_distribution": "Distribution de puissance",
+            "power_value": "Puissance (%)",
+            "pixel_count": "Pixels (%)"
         },    
         "simulation": {
             "path_sim": "SIMULATION",

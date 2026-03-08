@@ -44,6 +44,7 @@ LOGO_ALIG = os.path.join(ASSETS_DIR, "logo_alig.ico")
 SVG_ICONS = {
     "HOME": os.path.join(ASSETS_DIR, "home.svg"),
     "RASTER": os.path.join(ASSETS_DIR, "raster.svg"),
+    "DITHER": os.path.join(ASSETS_DIR, "dither.svg"),
     "LATENCY": os.path.join(ASSETS_DIR, "latency_calibration.svg"),
     "LINESTEP": os.path.join(ASSETS_DIR, "linestep_calibration.svg"),
     "POWER": os.path.join(ASSETS_DIR, "power_calibration.svg"),

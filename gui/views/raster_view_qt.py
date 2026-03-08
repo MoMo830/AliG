@@ -1041,7 +1041,8 @@ class RasterViewQt(QWidget):
         lo.addLayout(canvas_row, stretch=5)
 
         # Bouton Reset View — wrapper transparent pour éviter ligne noire
-        self.btn_reset_view = QPushButton("⊞  Reset View", self._canvas)
+        label_reset_view = self.t.get("reset_view", "⊞  Reset View")
+        self.btn_reset_view = QPushButton(label_reset_view, self._canvas)
         self.btn_reset_view.setFixedSize(110, 24)
         self.btn_reset_view.setStyleSheet(
             "QPushButton{background:#2c2c2c;color:#aaa;border:none;"

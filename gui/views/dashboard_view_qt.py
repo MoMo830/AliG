@@ -60,7 +60,7 @@ class DashboardViewQt(QWidget):
         modes = [
             # (Titre, Description, Callback, Icône (Path ou Emoji), État)
             (self.texts["raster_title"], self.texts["raster_desc"], self.controller.show_raster_mode, SVG_ICONS["RASTER"], "normal"),
-            (self.texts["dithering_title"], self.texts["dithering_desc"], None, "🏁", "disabled"),
+            (self.texts["dithering_title"], self.texts["dithering_desc"], None, SVG_ICONS["DITHER"], "disabled"),
             (self.texts["infill_title"], self.texts["infill_desc"], None, "📐", "disabled"),
             (self.texts["parser_title"], self.texts["parser_desc"], None, "📐", "disabled"),
             (self.texts["calibration_title"], self.texts["calibration_desc"], self.controller.show_calibration_mode, SVG_ICONS["LATENCY"], "normal"),

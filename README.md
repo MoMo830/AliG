@@ -142,10 +142,7 @@ If you just want to use the software without installing Python, follow these ste
 * **[In discussion] 3D Relief Engraving Mode:** Implementation of multi-pass logic with Z-axis decrement for deep carving. *Currently seeking user feedback/interest due to hardware power constraints.*
 
 ### Known Issues: 
-* Simulation is not yet pixel-perfect.
-* Framing during simulation not rendering correctly.
 * Translations not yet finished.
-* Path simulation not adapting when window resizing.
 
 
 ---
