@@ -51,6 +51,12 @@ SVG_ICONS = {
     "ARROW_DOWN": os.path.join(ASSETS_DIR, "arrow_down.svg"),
     "CIRCLE": os.path.join(ASSETS_DIR, "circle.svg"),
     "GEAR": os.path.join(ASSETS_DIR, "gear.svg"),
+    "PLAY": os.path.join(ASSETS_DIR, "play.svg"),
+    "REWIND": os.path.join(ASSETS_DIR, "rewind.svg"),
+    "SKIPTOEND": os.path.join(ASSETS_DIR, "skiptoend.svg"),
+    "PAUSE": os.path.join(ASSETS_DIR, "pause.svg"),
+    "RERUN": os.path.join(ASSETS_DIR, "rerun.svg"),
+    "FIT": os.path.join(ASSETS_DIR, "fit.svg"),
 }
 
 # --- PNG (Images d'explications / Previews) ---

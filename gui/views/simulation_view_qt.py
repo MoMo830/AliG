@@ -23,16 +23,18 @@ from PyQt6.QtWidgets import (
     QProgressBar, QSizePolicy, QFileDialog, QMessageBox, QPlainTextEdit,
 )
 from PyQt6.QtCore import (
-    Qt, QTimer, QThread, pyqtSignal, QRect, QRectF, QPointF, QLineF,
+    Qt, QTimer, QThread, pyqtSignal, QRect, QRectF, QPointF, QLineF, QSize
 )
 from PyQt6.QtGui import (
     QPainter, QColor, QPen, QBrush, QImage, QPixmap, QFont,
-    QLinearGradient, QPainterPath, QPolygonF, QTransform,
+    QLinearGradient, QPainterPath, QPolygonF, QTransform, QIcon
 )
 
 from engine.gcode_parser import GCodeParser
 from core.utils import save_dashboard_data, truncate_path
 from core.translations import TRANSLATIONS
+from utils.paths import SVG_ICONS
+from gui.utils_qt import get_svg_pixmap
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -932,27 +934,37 @@ class SimulationViewQt(QWidget):
         tr = QHBoxLayout()
         tr.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.btn_rew  = QPushButton('⏮')
+        self.btn_rew  = QPushButton() # '⏮'
+        rewind_pixmap = get_svg_pixmap(SVG_ICONS["REWIND"], QSize(24, 24), "#ffffff")
+        self.btn_rew.setIcon(QIcon(rewind_pixmap))
         self.btn_rew.setFixedSize(60, 40)
         self.btn_rew.setFont(QFont('Arial', 16))
         self.btn_rew.setStyleSheet(self._gbtn('#444', '#555'))
         self.btn_rew.clicked.connect(self.rewind_sim)
 
-        self.btn_play = QPushButton('▶')
+        self.btn_play = QPushButton() # '▶'
+        self.play_pixmap = get_svg_pixmap(SVG_ICONS["PLAY"], QSize(24, 24), "#ffffff")
+        self.pause_pixmap = get_svg_pixmap(SVG_ICONS["PAUSE"], QSize(24, 24), "#ffffff")
+        self.rerun_pixmap = get_svg_pixmap(SVG_ICONS["RERUN"], QSize(24, 24), "#ffffff")
+        self.btn_play.setIcon(QIcon(self.play_pixmap))
         self.btn_play.setFixedSize(100, 40)
-        self.btn_play.setFont(QFont('Arial', 16))
+        # self.btn_play.setFont(QFont('Arial', 16))
         self.btn_play.setStyleSheet(self._gbtn('#27ae60', '#1e8449'))
         self.btn_play.clicked.connect(self.toggle_pause)
 
-        btn_end = QPushButton('⏭')
+        btn_end = QPushButton() # '⏭'
+        skiptoend_pixmap = get_svg_pixmap(SVG_ICONS["SKIPTOEND"], QSize(24, 24), "#ffffff")
+        btn_end.setIcon(QIcon(skiptoend_pixmap))
         btn_end.setFixedSize(60, 40)
-        btn_end.setFont(QFont('Arial', 16))
+        # btn_end.setFont(QFont('Arial', 16))
         btn_end.setStyleSheet(self._gbtn('#444', '#555'))
         btn_end.clicked.connect(self.skip_to_end)
 
-        btn_fit = QPushButton('⊞')
+        btn_fit = QPushButton() # '⊞'
+        fit_pixmap = get_svg_pixmap(SVG_ICONS["FIT"], QSize(50, 50), "#ffffff")
+        btn_fit.setIcon(QIcon(fit_pixmap))
         btn_fit.setFixedSize(40, 40)
-        btn_fit.setFont(QFont('Arial', 16))
+        # btn_fit.setFont(QFont('Arial', 20))
         btn_fit.setToolTip(self.t.get('reset_zoom', 'Reset zoom / pan'))
         btn_fit.setStyleSheet(self._gbtn('#333', '#444'))
         btn_fit.clicked.connect(self.canvas.reset_view)
@@ -1453,7 +1465,7 @@ class SimulationViewQt(QWidget):
     def toggle_pause(self):
         if self.points_list is None or self.points_list.size == 0:
             return
-        if self.btn_play.text() == '🔄':
+        if self.current_idx >= self.points_list.shape[0] - 1:   # fin atteinte → replay
             self.rewind_sim(); self._start_play(); return
         if self.sim_running:
             self._stop_play()
@@ -1463,20 +1475,22 @@ class SimulationViewQt(QWidget):
     def _start_play(self):
         self.sim_running     = True
         self.last_frame_time = time.perf_counter()
-        self.btn_play.setText('⏸')
+        self.btn_play.setIcon(QIcon(self.pause_pixmap))
+        # self.btn_play.setText('⏸')
         self.btn_play.setStyleSheet(self._gbtn('#e67e22', '#ca6f1e'))
         self._anim_timer.start()
 
     def _stop_play(self):
         self.sim_running = False
         self._anim_timer.stop()
-        self.btn_play.setText('▶')
+        self.btn_play.setIcon(QIcon(self.play_pixmap))
         self.btn_play.setStyleSheet(self._gbtn('#27ae60', '#1e8449'))
 
     def _finish_anim(self):
         self.sim_running = False
-        self._anim_timer.stop()
-        self.btn_play.setText('🔄')
+        self._anim_timer.stop() 
+        self.btn_play.setIcon(QIcon(self.rerun_pixmap ))
+        # self.btn_play.setText('🔄')
         self.btn_play.setStyleSheet(self._gbtn('#2980b9', '#1a6090'))
         self._update_ui(len(self.points_list) - 1)
 
@@ -1491,7 +1505,7 @@ class SimulationViewQt(QWidget):
             self.canvas.notify_dirty()
         self.prog_bar.setValue(0)
         self.lbl_time.setText(f'00:00:00 / {self._fmt(self.total_sec)}')
-        self.btn_play.setText('▶')
+        self.btn_play.setIcon(QIcon(self.play_pixmap))
         self.btn_play.setStyleSheet(self._gbtn('#27ae60', '#1e8449'))
         self._highlight_gcode(0)
         if self.points_list is not None and self.points_list.size > 0:

@@ -1,7 +1,7 @@
 {
     "machine_settings": {
         "theme": "Dark",
-        "language": "Fran\u00e7ais",
+        "language": "English",
         "enable_thumbnails": true,
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",

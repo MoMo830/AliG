@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QSize, QPointF, QRectF
 from PyQt6.QtGui import (
     QPainter, QColor, QPen, QBrush, QFont, QLinearGradient,
-    QTransform, QPixmap, QImage,
+    QTransform, QPixmap, QImage, QIcon,
 )
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -44,6 +44,7 @@ from core.translations import TRANSLATIONS
 from engine.gcode_engine import GCodeEngine
 from core.config_manager import save_json_file, load_json_file
 from core.utils import get_app_paths
+from gui.utils_qt import get_svg_pixmap
 
 try:
     from utils.paths import SVG_ICONS
@@ -1041,9 +1042,12 @@ class RasterViewQt(QWidget):
         lo.addLayout(canvas_row, stretch=5)
 
         # Bouton Reset View — wrapper transparent pour éviter ligne noire
-        label_reset_view = self.t.get("reset_view", "⊞  Reset View")
-        self.btn_reset_view = QPushButton(label_reset_view, self._canvas)
-        self.btn_reset_view.setFixedSize(110, 24)
+        # label_reset_view = self.t.get("reset_view", "⊞  Reset View")
+        fit_pixmap = get_svg_pixmap(SVG_ICONS["FIT"], QSize(24, 24), "#ffffff")
+        # self.btn_reset_view = QPushButton(label_reset_view, self._canvas)
+        self.btn_reset_view = QPushButton(self._canvas)
+        self.btn_reset_view.setIcon(QIcon(fit_pixmap))
+        self.btn_reset_view.setFixedSize(30, 30)
         self.btn_reset_view.setStyleSheet(
             "QPushButton{background:#2c2c2c;color:#aaa;border:none;"
             "border-radius:4px;font-size:10px;}"
