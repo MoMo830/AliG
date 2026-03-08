@@ -4,9 +4,9 @@ import subprocess
 import shutil
 
 # --- CONFIGURATION ---
-VERSION = "0.981b"
+VERSION = "0.99b"
 EXE_NAME = f"ALIG_v{VERSION}"
-MAIN_SCRIPT = "main.py"
+MAIN_SCRIPT = "main_qt.py"
 
 # Use absolute paths to prevent "File Not Found" errors
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

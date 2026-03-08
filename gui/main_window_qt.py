@@ -42,7 +42,7 @@ class MainWindowQt(QMainWindow):
 
         self.controller = controller 
         self.config_manager = controller
-        self.version = "0.99b (Qt)"
+        self.version = "0.99b"
 
         # 2. CHARGEMENT DES TEXTES
         lang = self.config_manager.get_item("machine_settings", "language", "English")
