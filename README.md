@@ -116,9 +116,9 @@ If you just want to use the software without installing Python, follow these ste
 * **Comprehensive Raster Toolkit:** Finalizing the entire user interface to provide a rock-solid, streamlined environment dedicated to high-performance rastering.
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
 * **UI Enhancement & Custom Branding:** Replace emojis with custom icons (Theme-aware).
-* ~~**Full Internationalization (i18n):** Completion of multi-language support for the entire interface.~~ _(Pending next release)_
 * **Onboarding Experience:** First-run setup wizard for essential machine configuration.
 * **Async Streamed Parsing:** Implement a buffered G-code processing system to allow real-time simulation rendering while the generation is still in progress (eliminating UI freezing on large files).
+* ~~**Full Internationalization (i18n):** Completion of multi-language support for the entire interface.~~ _(Pending next release)_
 * ~~**Framework Migration (Qt transition):** Transitioning the entire UI from CustomTkinter to PyQt/PySide.~~_(Pending next release)_
 * ~~**Interactive Workspace Navigation:** Enhanced visualization tools including Real-time Zoom and Pan (drag-to-move) to inspect high-resolution G-code paths.~~_(Pending next release)_
 
