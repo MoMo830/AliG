@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QFrame,
                              QLabel, QScrollArea, QStackedWidget, QPushButton, 
                              QLineEdit, QGridLayout, QButtonGroup, QFileDialog,
                              QMessageBox)
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QIcon, QPixmap
 
 from utils.paths import SVG_ICONS, EXPLAIN_PNG
@@ -11,7 +11,6 @@ from gui.switch import Switch
 from core.translations import TRANSLATIONS
 from gui.utils_qt import get_svg_pixmap
 from engine.calibrate_engine import CalibrateEngine
-
 
 
 
@@ -300,11 +299,12 @@ class CalibrationView(QWidget):
         if self.current_test_id == "latency":
             self.setup_latency_params()
             self.action_btn.setText(self.texts.get("btn_generate", "Generate G-Code..."))
-            self.action_btn.clicked.connect(self.validate_and_generate)
+            self.action_btn.clicked.connect(self.validate_and_generate_latency)
             
         elif self.current_test_id == "linestep":
-            self.action_btn.setText(self.texts.get("btn_prepare", "Prepare"))
-            # self.action_btn.clicked.connect(self.prepare_linestep) # Exemple si besoin
+            self.setup_linestep_params()
+            self.action_btn.setText(self.texts.get("btn_generate", "Generate G-Code..."))
+            self.action_btn.clicked.connect(self.validate_and_generate_linestep)
             
         elif self.current_test_id == "power":
             self.action_btn.setText(self.texts.get("btn_prepare", "Prepare"))
@@ -469,6 +469,230 @@ class CalibrationView(QWidget):
         self.dynamic_layout.addStretch()
         self.update_mm_display()
 
+    def setup_linestep_params(self):
+        """Construit les champs pour le test de résolution (LineStep)"""
+        self.clear_dynamic_layout()
+
+        # ── Conteneur paramètres ─────────────────────────────────────
+        container = QFrame()
+        container.setObjectName("ParamsContainer")
+        container.setStyleSheet("""
+            QFrame#ParamsContainer {
+                background-color: #2b2b2b;
+                border-radius: 10px;
+                padding: 15px;
+            }
+            QLabel { color: #DCE4EE; font-size: 13px; }
+            QLineEdit, QComboBox {
+                background-color: #3d3d3d;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                color: white;
+                padding: 5px;
+            }
+        """)
+        grid = QGridLayout(container)
+        grid.setSpacing(12)
+
+        # Ligne 0 : Pas Minimum & Multiplicateur
+        grid.addWidget(QLabel(self.texts.get("min_step", "Min. Machine Step (mm):")), 0, 0)
+        self.min_step_entry = QLineEdit()
+        self.min_step_entry.setPlaceholderText("ex: 0.05")
+        current_step = self.controller.get_item("machine_settings", "min_step", "0.05")
+        self.min_step_entry.setText(str(current_step))
+        grid.addWidget(self.min_step_entry, 0, 1)
+
+        grid.addWidget(QLabel(self.texts.get("multiplier", "Multiplier:")), 0, 2)
+        self.multiplier_entry = QLineEdit()
+        self.multiplier_entry.setText("2")
+        grid.addWidget(self.multiplier_entry, 0, 3)
+
+        # Ligne 1 : Mode de balayage & Feedrate
+        grid.addWidget(QLabel(self.texts.get("scan_mode", "Scan Mode:")), 1, 0)
+        from PyQt6.QtWidgets import QComboBox
+        self.scan_mode_combo = QComboBox()
+        self.scan_mode_combo.addItems(["Horizontal", "Vertical", "Crossed (Both)"])
+        grid.addWidget(self.scan_mode_combo, 1, 1)
+
+        grid.addWidget(QLabel(self.texts.get("feedrate", "Feedrate (mm/min):")), 1, 2)
+        self.speed_entry = QLineEdit()
+        current_speed = self.controller.get_item("machine_settings", "feedrate", "1000")
+        self.speed_entry.setText(str(current_speed))
+        grid.addWidget(self.speed_entry, 1, 3)
+
+        # Ligne 2 : PUISSANCE (%) et LATENCE (ms)
+        grid.addWidget(QLabel(self.texts.get("power_pct", "Power (%):")), 2, 0)
+        self.power_entry = QLineEdit()
+        self.power_entry.setText("10")
+        grid.addWidget(self.power_entry, 2, 1)
+
+        grid.addWidget(QLabel(self.texts.get("latency_calc", "Latency (ms):")), 2, 2)
+        self.latency_entry = QLineEdit()
+        # Récupération de la latence sauvegardée dans les paramètres machine
+        current_lat = self.controller.get_item("machine_settings", "laser_latency", "0")
+        self.latency_entry.setText(str(current_lat))
+        grid.addWidget(self.latency_entry, 2, 3)
+
+
+        # Ligne 3 : Info Résolution calculée (sur toute la largeur)
+        self.res_info_label = QLabel("Calculated Resolution: 0.100 mm")
+        self.res_info_label.setStyleSheet("color: #e67e22; font-weight: bold; border: none; margin-top: 5px;")
+        grid.addWidget(self.res_info_label, 3, 0, 1, 4)
+
+        self.dynamic_layout.addWidget(container)
+
+        # ── Bindings pour calcul en temps réel ───────────────────────
+        self.min_step_entry.textChanged.connect(self.update_linestep_info)
+        self.multiplier_entry.textChanged.connect(self.update_linestep_info)
+
+        self.dynamic_layout.addStretch()
+        self.update_linestep_info()
+        # ── Zone de sélection du résultat — 5 boutons visuels ──────────
+        select_frame = QFrame()
+        select_frame.setObjectName("SelectContainer")
+        select_frame.setStyleSheet(
+            "QFrame#SelectContainer { background-color: #1a1a1a; "
+            "border-radius: 10px; padding: 12px; margin-top: 8px; }"
+        )
+        select_layout = QVBoxLayout(select_frame)
+        select_layout.setSpacing(8)
+
+        title_select = QLabel("Select the sharpest block and save:")
+        title_select.setStyleSheet("font-weight: bold; color: #3498db; font-size: 12px;")
+        select_layout.addWidget(title_select)
+
+        # Rangée de 5 boutons visuels (un par bloc généré)
+        self._step_btn_row = QHBoxLayout()
+        self._step_btn_row.setSpacing(6)
+        self._step_buttons = []   # liste pour pouvoir les recréer
+        select_layout.addLayout(self._step_btn_row)
+
+        self.multiplier_entry.textChanged.connect(self.update_step_buttons)
+        self.min_step_entry.textChanged.connect(self.update_step_buttons)
+        self.scan_mode_combo.currentIndexChanged.connect(self.update_step_buttons)
+        self.update_step_buttons()   # premier rendu
+
+        self.dynamic_layout.addWidget(select_frame)
+
+    def update_step_buttons(self):
+        """Recrée les 5 boutons visuels de sélection de line_step."""
+        try:
+            center = float(self.multiplier_entry.text().replace(',', '.'))
+            min_s  = float(self.min_step_entry.text().replace(',', '.'))
+        except ValueError:
+            return
+
+        mode = self.scan_mode_combo.currentText()
+        is_vertical = "Vertical" in mode
+
+        # Supprimer les anciens boutons
+        for btn in self._step_buttons:
+            self._step_btn_row.removeWidget(btn)
+            btn.deleteLater()
+        self._step_buttons.clear()
+
+        for i in range(-2, 3):
+            m    = max(0.01, center + i * 0.5)
+            step = round(m * min_s, 4)
+            block_num = i + 3   # 1 à 5
+
+            btn = QPushButton()
+            btn.setFixedSize(56, 72)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+            # Représentation visuelle : 3 lignes horiz ou 3 colonnes vert
+            # dessinées dans l'icône via un QPixmap inline
+            pix = self._make_step_icon(step, is_vertical)
+            btn.setIcon(QIcon(pix))
+            btn.setIconSize(QSize(44, 38))
+
+            lbl_val = f"{step:.4f} mm"
+            lbl_blk = f"{'Col' if is_vertical else 'Blk'} {block_num}"
+            btn.setToolTip(f"{lbl_blk}  —  {lbl_val}")
+            btn.setText(f"\n{lbl_val}")
+            btn.setStyleSheet(
+                "QPushButton { background:#252525; color:#ccc; font-size:9px; "
+                "border:1px solid #444; border-radius:6px; "
+                "padding-top:2px; text-align:center; }"
+                "QPushButton:hover { background:#1f538d; border-color:#3a8fd4; color:white; }"
+            )
+
+            # Closure correcte
+            def make_save(s):
+                def _save():
+                    self._save_linestep(s)
+                return _save
+
+            btn.clicked.connect(make_save(step))
+            self._step_btn_row.addWidget(btn)
+            self._step_buttons.append(btn)
+
+    def _make_step_icon(self, step_mm, is_vertical):
+        """Génère une icône miniature représentant les lignes du bloc."""
+        from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
+        from PyQt6.QtCore import Qt
+        w, h = 44, 38
+        pix = QPixmap(w, h)
+        pix.fill(QColor("#1a1a1a"))
+        qp = QPainter(pix)
+        qp.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Couleur selon densité : vert si step > 0.08, orange si moyen, rouge si très fin
+        if step_mm >= 0.08:
+            col = QColor("#27ae60")
+        elif step_mm >= 0.04:
+            col = QColor("#e67e22")
+        else:
+            col = QColor("#e74c3c")
+
+        pen = QPen(col, 1)
+        qp.setPen(pen)
+
+        # Dessiner 5 lignes avec l'espacement relatif
+        n_lines = 5
+        margin = 4
+        if is_vertical:
+            total = w - 2 * margin
+            for k in range(n_lines):
+                x = margin + int(k * total / (n_lines - 1))
+                qp.drawLine(x, margin, x, h - margin)
+        else:
+            total = h - 2 * margin
+            for k in range(n_lines):
+                y = margin + int(k * total / (n_lines - 1))
+                qp.drawLine(margin, y, w - margin, y)
+
+        qp.end()
+        return pix
+
+    def _save_linestep(self, step_mm):
+        """Sauvegarde la valeur line_step choisie dans la config."""
+        try:
+            self.controller.config_manager.set_item(
+                "raster_settings", "line_step", round(step_mm, 4))
+            self.controller.config_manager.save()
+
+            QMessageBox.information(
+                self, "Saved",
+                f"Line step saved: {step_mm:.4f} mm"
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Save failed:\n{e}")
+
+    def update_linestep_info(self):
+        """Met à jour le texte de l'info de résolution"""
+        try:
+            m_step = float(self.min_step_entry.text().replace(',', '.'))
+            mult   = float(self.multiplier_entry.text().replace(',', '.'))
+            res    = m_step * mult
+            if hasattr(self, 'res_info_label'):
+                self.res_info_label.setText(f"Calculated Resolution: {res:.3f} mm")
+        except Exception:
+            if hasattr(self, 'res_info_label'):
+                self.res_info_label.setText("Invalid parameters")
+
+
+
     def update_mm_display(self):
         """Calcule et affiche le décalage en mm depuis speed + latency."""
         try:
@@ -533,7 +757,7 @@ class CalibrationView(QWidget):
             except Exception as e:
                 print(f"[calibration] save laser_latency failed: {e}")
 
-    def validate_and_generate(self):
+    def validate_and_generate_latency(self):
         """Valide les champs, génère le G-Code de test de latence et propose l'enregistrement."""
         power_raw = self.power_entry.text().strip() if hasattr(self, 'power_entry') else ""
         if not power_raw:
@@ -573,7 +797,7 @@ class CalibrationView(QWidget):
                 self.action_btn.setText("✅ G-Code Saved!")
                 self.action_btn.setStyleSheet(
                     "background-color: #27AE60; font-weight: bold; border-radius: 10px;")
-                from PyQt6.QtCore import QTimer
+                
                 QTimer.singleShot(2000, lambda: (
                     self.action_btn.setText(orig_text),
                     self.action_btn.setStyleSheet(orig_style)
@@ -581,6 +805,56 @@ class CalibrationView(QWidget):
 
         except ValueError:
             QMessageBox.warning(self, "Invalid input", "⚠️ Please enter valid numbers in all fields.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Generation failed:\n{e}")
+
+    def validate_and_generate_linestep(self):
+        """Valide les champs pour le LineStep et génère le G-Code multi-blocs."""
+        if not self.power_entry.text().strip() or not self.min_step_entry.text().strip():
+            QMessageBox.warning(self, "Missing field", "⚠️ Please enter Power and Minimum Step values.")
+            return
+
+        try:
+            cfg = self.controller.config_manager if hasattr(self.controller, 'config_manager') else None
+            cmd_mode = cfg.get_item("machine_settings", "cmd_mode", "") if cfg else ""
+            use_s_mode = "S (" in cmd_mode
+
+            # 2. Préparation des settings complets
+            settings = {
+                "power":        float(self.power_entry.text().strip()),
+                "max_value":    float(cfg.get_item("machine_settings", "ctrl_max", 1000)) if cfg else 1000,
+                "feedrate":     float(self.speed_entry.text().strip()),
+                "min_step":     float(self.min_step_entry.text().strip().replace(',', '.')),
+                "multiplier":   float(self.multiplier_entry.text().strip().replace(',', '.')),
+                "latency":      float(self.latency_entry.text().strip().replace(',', '.') or 0),
+                "scan_mode":    self.scan_mode_combo.currentText(),
+                "e_num":        int(cfg.get_item("machine_settings", "m67_e_num", 0)) if cfg else 0,
+                "use_s_mode":   use_s_mode,
+                "firing_mode":  cfg.get_item("machine_settings", "firing_mode", "M3/M5") if cfg else "M3/M5",
+            }
+
+            # 3. Appel du moteur (Version GRID/Multi-blocs)
+            gcode_content = self.calibrate_engine.generate_linestep_calibration(settings)
+
+            # 4. Dialogue de sauvegarde
+            mode_name = settings["scan_mode"].split()[0].lower()
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "Save LineStep Test", f"linestep_grid_{mode_name}.nc", "G-Code (*.nc *.gcode)"
+            )
+
+            if file_path:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(gcode_content)
+                
+                # Feedback visuel
+                orig_text = self.action_btn.text()
+                orig_style = self.action_btn.styleSheet()
+                self.action_btn.setText("Grid Test Saved!")
+                self.action_btn.setStyleSheet("background-color: #27AE60; font-weight: bold; border-radius: 10px; color: white;")
+                QTimer.singleShot(2000, lambda: (self.action_btn.setText(orig_text), self.action_btn.setStyleSheet(orig_style)))
+
+        except ValueError:
+            QMessageBox.warning(self, "Invalid input", "⚠️ Please enter valid numbers.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Generation failed:\n{e}")
 
@@ -651,7 +925,7 @@ class CalibrationView(QWidget):
             if self.current_test_id == "latency":
                 self.setup_latency_params()
             elif self.current_test_id == "linestep":
-                # self.setup_linestep_params()
+                self.setup_linestep_params()
                 pass
             elif self.current_test_id == "power":
                 # self.setup_power_params()

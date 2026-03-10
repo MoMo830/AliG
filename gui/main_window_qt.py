@@ -394,6 +394,26 @@ class MainWindowQt(QMainWindow):
         # 3. Basculement sur la vue
         self.content_area.setCurrentWidget(self.calibration_view)
 
+    def show_checker_mode(self, gcode_path=None):
+        """Affiche la vue Checker (lecteur / visualiseur de G-Code existant).
+        Crée une nouvelle instance à chaque appel, comme show_simulation.
+        Optionnellement, ouvre directement un fichier si gcode_path est fourni."""
+        self.view_title.setText("G-CODE CHECKER")
+
+        from gui.views.checker_view_qt import CheckerViewQt
+        checker_view = CheckerViewQt(
+            parent=self,
+            controller=self,
+            return_view='dashboard'
+        )
+        self.content_area.addWidget(checker_view)
+        self.content_area.setCurrentWidget(checker_view)
+        self.current_view = checker_view
+
+        # Ouverture directe si un chemin est passé (ex: depuis l'historique)
+        if gcode_path and os.path.isfile(gcode_path):
+            checker_view._load_file(gcode_path)
+
     def get_theme_colors(self):
         theme = self.config_manager.get_item("machine_settings", "theme", "Dark")
         if theme == "Light":

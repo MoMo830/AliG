@@ -118,27 +118,25 @@ If you just want to use the software without installing Python, follow these ste
 ## Roadmap & Known Issues
 
 ### Phase 1: Core Stability & UX (Towards v1.0)
+**Goal:** Providing a rock-solid, theme-responsive tool for high-quality rastering and universal 2D G-code processing with advanced visual feedback.
 * **Calibration tools:** Integrated utilities to fine-tune line interval, overscan compensation, and power-scaling profiles.
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
 * **UI Enhancement & Custom Branding:** Replace emojis with custom icons (Theme-aware).
 * **Onboarding Experience:** First-run setup wizard for essential machine configuration.
+* ~~**2D G-code Parser & Preview:** Implementation of the G-code parser with a built-in trajectory visualizer.~~_(pending next release)_
 
----
-##  Milestone: Version 1.0 (Official Stable Release)
-**Goal:** Providing a rock-solid, theme-responsive tool for high-quality rastering and universal 2D G-code processing with advanced visual feedback.
 ---
 
 ### Phase 2: Advanced Features & Post-1.0
 * **Async Streamed Parsing:** Implement a buffered G-code processing system to allow real-time simulation rendering while the generation is still in progress (eliminating UI freezing on large files).
-* **Universal 2D G-code Parser & Preview:** Full implementation of the G-code parser with a built-in trajectory visualizer to support and clean any standard 2D G-code file.
+* **Universal G-code checker and editor:** Improvement of the G-code parser with a built-in trajectory visualizer to support and clean any standard 2D G-code file.
 * **Smart Calibration Analysis:** Implementation of a computer vision module to analyze user-uploaded photos of calibration tests. The system will automatically suggest parameter corrections (latency) based on visual results.
 * **Dynamic Latency Profiling (Spline Calibration):** Multi-speed latency test generator and spline-based interpolation engine. Automatically predicts and compensates for mechanical/buffer lag across the entire feedrate range instead of using a single fixed value.
 * **Adaptive Raster Optimization (Scanline Trimming):** Smart trajectory logic that detects non-blank boundaries per line to eliminate 'dead air' travel, significantly reducing engraving time by only scanning active areas.
-
 * **Project-Based Sessions & Dashboard Persistency:** Transform dashboard thumbnails into interactive project shortcuts. Clicking a thumbnail will restore the full environment, including the original image matrix and all associated parameters (feedrate, power, raster mode, etc.).
 * **Large File Management:** Option to split massive G-code files for better buffer management.
-* **[Likely] Dithering Implementation:** Integration of the Floyd-Steinberg algorithm for superior grayscale rendering.
-* **[Under consideration] Auto-Contour Detection & Trace:** Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
+* **Dithering Implementation:** Integration of the Floyd-Steinberg algorithm for superior grayscale rendering.
+* **Auto-Contour Detection & Trace:** Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
 * **[Under consideration] Diagonal Rastering (45°):** Advanced trajectory logic to engrave at 45-degree angles.
 * **[Theoretical] Hybrid Engine:** Implementation of SVG path parsing to allow hybrid projects (Raster engraving + Vector cutting) in a single G-code file.
 * **[In discussion] 3D Relief Engraving Mode:** Implementation of multi-pass logic with Z-axis decrement for deep carving. *Currently seeking user feedback/interest due to hardware power constraints.*

@@ -105,8 +105,8 @@ class DashboardViewQt(QWidget):
             # (Titre, Description, Callback, Icône (Path ou Emoji), État)
             (self.texts["raster_title"], self.texts["raster_desc"], self.controller.show_raster_mode, SVG_ICONS["RASTER"], "normal"),
             (self.texts["dithering_title"], self.texts["dithering_desc"], None, SVG_ICONS["DITHER"], "disabled"),
-            (self.texts["infill_title"], self.texts["infill_desc"], None, "📐", "disabled"),
-            (self.texts["parser_title"], self.texts["parser_desc"], None, SVG_ICONS["GCODE"], "disabled"),
+            (self.texts["infill_title"], self.texts["infill_desc"], None, SVG_ICONS["INFILL"], "disabled"),
+            (self.texts["parser_title"], self.texts["parser_desc"], self.controller.show_checker_mode, SVG_ICONS["GCODE"], "normal"),
             (self.texts["calibration_title"], self.texts["calibration_desc"], self.controller.show_calibration_mode, SVG_ICONS["LATENCY"], "normal"),
             # Utilisation de l'icône Home ou Settings (ici Home pour l'exemple)
             (self.texts["settings_title"], self.texts["settings_desc"], self.controller.show_settings_mode,SVG_ICONS["GEAR"] , "normal"), #"⚙️"

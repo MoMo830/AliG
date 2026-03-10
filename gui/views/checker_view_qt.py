@@ -1,17 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-A.L.I.G. - SimulationViewQt
-Migration PyQt6 — v2 optimisée
-
-Améliorations vs CTk original :
-  • Rendu batch vectorisé :
-    - Tous les polygones du frame sont pré-calculés en NumPy
-    - Une seule passe QPainter sur le QImage (zéro boucle Python dans le hot path)
-    - Rasterisation directe dans le buffer uint8 via QPainter (pas de cv2 ni PIL)
-  • Zoom molette (centré sur la souris) + pan clic gauche
-  • Loupe supprimée
-  • Génération G-Code dans un QThread (UI non bloquante)
-  • QTimer fixe 16 ms (~60 fps) au lieu de after(16) Tkinter
+A.L.I.G. - CheckerViewQt
+Lecteur / visualiseur de G-Code existant.
+Ouvre un fichier .nc/.gcode, le parse et lance la simulation de trajectoire.
+Aucune génération d'image — uniquement lecture + rendu.
 """
 
 import os
@@ -31,7 +23,7 @@ from PyQt6.QtGui import (
 )
 
 from engine.gcode_parser import GCodeParser
-from core.utils import save_dashboard_data, truncate_path
+from core.utils import truncate_path
 from core.translations import TRANSLATIONS
 from utils.paths import SVG_ICONS
 from gui.utils_qt import get_svg_pixmap
@@ -40,106 +32,6 @@ from gui.utils_qt import get_svg_pixmap
 # ══════════════════════════════════════════════════════════════════════════════
 #  WORKER : génération G-Code hors thread UI
 # ══════════════════════════════════════════════════════════════════════════════
-
-class _GenWorker(QThread):
-    done  = pyqtSignal(dict)
-    error = pyqtSignal(str)
-
-    def __init__(self, engine, payload, parser):
-        super().__init__()
-        self.engine  = engine
-        self.payload = payload
-        self.parser  = parser
-
-    def run(self):
-        try:
-            p            = self.payload['params']
-            raster_mode  = p.get('raster_mode', 'horizontal')
-            est_size_str = self.payload.get('estimated_size', 'N/A')
-
-            # A — Framing
-            framing_gcode = self.engine.prepare_framing(
-                self.payload['framing'],
-                (self.payload['metadata']['real_w'],
-                 self.payload['metadata']['real_h']),
-                self.payload['offsets'],
-            )
-
-            # B — Métadonnées enrichies
-            meta = self.payload['metadata'].copy()
-            meta.update({
-                'framing_code': framing_gcode,
-                'gray_steps':   p.get('gray_steps'),
-                'use_s_mode':   p.get('use_s_mode'),
-                'raster_mode':  raster_mode,
-                'scan_axis':    'X' if raster_mode == 'horizontal' else 'Y',
-            })
-
-            # C — G-Code final
-            final_gcode, latence_mm = self.engine.build_final_gcode(
-                self.payload['matrix'],
-                self.payload['dims'],
-                self.payload['offsets'],
-                p,
-                self.payload['text_blocks'],
-                meta,
-            )
-            latence_mm = float(latence_mm)
-
-            # D — Parsing
-            f_pts, f_dur, f_lim = self.parser.parse(framing_gcode)
-            framing_end = len(f_pts) if f_pts is not None else 0
-            pts, _, lim  = self.parser.parse(final_gcode)
-
-            valid = [l for l in [f_lim, lim]
-                     if l is not None and not all(abs(v) < 1e-9 for v in l)]
-            if valid:
-                bx0 = min(l[0] for l in valid)
-                bx1 = max(l[1] for l in valid)
-                by0 = min(l[2] for l in valid)
-                by1 = max(l[3] for l in valid)
-            else:
-                bx0 = bx1 = by0 = by1 = 0.0
-
-            # E — Timestamps cumulés
-            dur = 0.0
-            if pts is not None and len(pts) > 1:
-                deltas    = np.diff(pts[:, :2], axis=0)
-                distances = np.hypot(deltas[:, 0], deltas[:, 1])
-                rates     = pts[1:, 4] / 60.0
-                times     = np.divide(distances, rates,
-                                      out=np.zeros_like(distances),
-                                      where=rates > 0)
-                pts[0, 4]  = 0.0
-                pts[1:, 4] = np.cumsum(times)
-
-                m      = self.payload.get('metadata', {})
-                dims   = self.payload.get('dims', (0, 0, 0, 0))
-                h_px, w_px = dims[0], dims[1]
-                if raster_mode == 'vertical':
-                    nb = float(w_px);  dist = float(m.get('real_h', 0))
-                else:
-                    nb = float(h_px);  dist = float(m.get('real_w', 0))
-                feedrate = float(p.get('feedrate', 3000))
-                overscan = float(p.get('premove', 2.0))
-                lstep    = float(p.get('line_step', p.get('l_step', 0.1)))
-                theo     = (nb * (dist + 2*overscan) + (nb-1)*lstep) / (feedrate/60)
-                dur      = max(pts[-1, 4], theo)
-
-            self.done.emit({
-                'pts':           pts,
-                'framing_end':   framing_end,
-                'total_dur':     dur,
-                'meta':          meta,
-                'latence_mm':    latence_mm,
-                'est_size':      est_size_str,
-                'bounds':        (bx0, bx1, by0, by1),
-                'final_gcode':   final_gcode,
-                'framing_gcode': framing_gcode,
-            })
-        except Exception as e:
-            import traceback; traceback.print_exc()
-            self.error.emit(str(e))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -621,20 +513,69 @@ class _SimCanvas(QWidget):
 #  VUE PRINCIPALE
 # ══════════════════════════════════════════════════════════════════════════════
 
-class SimulationViewQt(QWidget):
 
-    def __init__(self, parent, controller, engine, payload,
-                 return_view='dashboard'):
+# ══════════════════════════════════════════════════════════════════════════════
+#  WORKER : parsing G-Code hors thread UI
+# ══════════════════════════════════════════════════════════════════════════════
+
+class _ParseWorker(QThread):
+    done  = pyqtSignal(dict)
+    error = pyqtSignal(str)
+
+    def __init__(self, gcode: str):
+        super().__init__()
+        self.gcode = gcode
+
+    def run(self):
+        try:
+            parser = GCodeParser({})
+            pts, dur, lim = parser.parse(self.gcode)
+
+            if lim is not None and not all(abs(v) < 1e-9 for v in lim):
+                bx0, bx1, by0, by1 = lim
+            else:
+                if pts is not None and len(pts):
+                    bx0, bx1 = float(pts[:,0].min()), float(pts[:,0].max())
+                    by0, by1 = float(pts[:,1].min()), float(pts[:,1].max())
+                else:
+                    bx0 = bx1 = by0 = by1 = 0.0
+
+            # Timestamps cumulés
+            if pts is not None and len(pts) > 1:
+                deltas    = np.diff(pts[:, :2], axis=0)
+                distances = np.hypot(deltas[:, 0], deltas[:, 1])
+                rates     = pts[1:, 4] / 60.0
+                times     = np.divide(distances, rates,
+                                      out=np.zeros_like(distances),
+                                      where=rates > 0)
+                pts[0, 4]  = 0.0
+                pts[1:, 4] = np.cumsum(times)
+                total_dur  = float(pts[-1, 4])
+            else:
+                total_dur = 0.0
+
+            self.done.emit({
+                'gcode':     self.gcode,
+                'pts':       pts,
+                'total_dur': total_dur,
+                'bounds':    (bx0, bx1, by0, by1),
+            })
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            self.error.emit(str(e))
+
+
+class CheckerViewQt(QWidget):
+
+    def __init__(self, parent, controller, return_view='dashboard'):
         super().__init__(parent)
         self.controller  = controller
-        self.engine      = engine
-        self.payload     = payload
         self.return_view = return_view
 
         lang = controller.config_manager.get_item('machine_settings', 'language')
         if not lang or lang not in TRANSLATIONS:
             lang = 'English'
-        self.t = TRANSLATIONS[lang]['simulation']
+        self.t = TRANSLATIONS[lang].get('simulation', {})
 
         # ── état ──────────────────────────────────────────────────
         self.final_gcode     = ''
@@ -645,7 +586,7 @@ class SimulationViewQt(QWidget):
         self.total_sec       = 0.0
         self.latence_mm      = 0.0
         self.latence_enabled = False
-        self.ctrl_max        = float(payload.get('params', {}).get('ctrl_max', 255))
+        self._loaded_path    = ''
 
         # ── animation ─────────────────────────────────────────────
         self.sim_running      = False
@@ -669,8 +610,6 @@ class SimulationViewQt(QWidget):
 
         self.setStyleSheet('background:#2b2b2b; color:white;')
         self._build_ui()
-        self._show_loading()
-        QTimer.singleShot(80, self._start_gen)
 
     # ══════════════════════════════════════════════════════════════
     #  CONSTRUCTION UI
@@ -687,7 +626,6 @@ class SimulationViewQt(QWidget):
 
     def _make_left_panel(self):
         self.left = QFrame()
-        # Largeur réduite de 20% (420 → 336)
         self.left.setFixedWidth(336)
         self.left.setStyleSheet(
             'QFrame{background:#1e1e1e; border-right:1px solid #333;}')
@@ -695,9 +633,7 @@ class SimulationViewQt(QWidget):
         lo.setContentsMargins(8, 8, 8, 8)
         lo.setSpacing(6)
 
-        # Titre supprimé — la topbar l'écrit déjà
-
-        lo.addWidget(self._make_stats_widget())
+        lo.addWidget(self._make_file_widget())
 
         gl = QLabel(self.t.get('live_gcode', 'Live G-Code'))
         gl.setStyleSheet('color:white;font-weight:bold;font-size:11px;border:none;')
@@ -710,148 +646,47 @@ class SimulationViewQt(QWidget):
             'font-family:Consolas;'
             'border:1px solid #333;border-radius:3px;}')
         self._update_gcode_font()
-        # Click sur une ligne G-Code → seek à ce point
         self.gcode_view.mousePressEvent = self._on_gcode_click
-        # Flèches clavier → navigation par ligne / par 20 lignes
         self.gcode_view.keyPressEvent   = self._on_gcode_key
         lo.addWidget(self.gcode_view, stretch=1)
 
-        lo.addWidget(self._make_options_widget())
         lo.addWidget(self._make_action_buttons())
         return self.left
 
-    def _make_stats_widget(self):
-        dims = self.payload.get('dims', (0, 0, 0, 0))
-        h_px, w_px, sy, sx = dims
-        w_mm = (w_px-1)*sx;  h_mm = (h_px-1)*sy
-        meta = self.payload.get('metadata', {})
-        path = os.path.join(
-            meta.get('output_dir', ''),
-            f'{meta.get("file_name","export")}{meta.get("file_extension",".nc")}'
-        ).replace('\\', '/')
-        self.quick_export_path = path
-        self.full_export_path  = path
-
+    def _make_file_widget(self):
+        """Bouton d'ouverture de fichier + infos du fichier chargé."""
         f = QFrame()
         f.setStyleSheet('QFrame{background:#252525;border-radius:6px;'
                         'border:1px solid #333;}')
         lo = QVBoxLayout(f)
-        lo.setContentsMargins(8, 6, 8, 6)
-        lo.setSpacing(4)
+        lo.setContentsMargins(8, 8, 8, 8)
+        lo.setSpacing(6)
 
-        def add_row(lbl_txt, val_txt, color='#ecf0f1'):
-            r = QHBoxLayout()
-            l = QLabel(lbl_txt)
-            l.setStyleSheet('color:gray;font-size:10px;font-weight:bold;border:none;')
-            v = QLabel(val_txt)
-            v.setStyleSheet(f'color:{color};font-family:Consolas;'
-                            f'font-size:11px;border:none;')
-            v.setAlignment(Qt.AlignmentFlag.AlignRight)
-            r.addWidget(l); r.addWidget(v)
-            lo.addLayout(r)
+        self.btn_open = QPushButton('📂  ' + self.t.get('open_file', 'Open G-Code file…'))
+        self.btn_open.setFixedHeight(38)
+        self.btn_open.setStyleSheet(self._gbtn('#1f538d', '#2a6dbd'))
+        self.btn_open.clicked.connect(self._on_open_file)
+        lo.addWidget(self.btn_open)
 
-        add_row(self.t.get('final_size', 'Size'), f'{w_mm:.2f} x {h_mm:.2f} mm')
-        add_row(self.t.get('output_file', 'Output'),
-                truncate_path(path, 38), color='#2ecc71')
+        self.lbl_file = QLabel(self.t.get('no_file', 'No file loaded'))
+        self.lbl_file.setStyleSheet('color:#888;font-size:10px;border:none;')
+        self.lbl_file.setWordWrap(True)
+        lo.addWidget(self.lbl_file)
 
-        lo.addWidget(self._make_power_bar())
+        row = QHBoxLayout()
+        self.lbl_size = QLabel('')
+        self.lbl_size.setStyleSheet('color:#2ecc71;font-size:10px;'
+                                    'font-family:Consolas;border:none;')
+        self.lbl_dur = QLabel('')
+        self.lbl_dur.setStyleSheet('color:#f39c12;font-size:10px;'
+                                   'font-family:Consolas;border:none;')
+        self.lbl_dur.setAlignment(Qt.AlignmentFlag.AlignRight)
+        row.addWidget(self.lbl_size)
+        row.addWidget(self.lbl_dur)
+        lo.addLayout(row)
+
         return f
 
-    def _make_power_bar(self):
-        p     = self.payload.get('params', {})
-        p_min = float(p.get('min_power', 0))
-        p_max = float(p.get('max_power', 100))
-
-        class _PBar(QWidget):
-            def __init__(s, mn, mx):
-                super().__init__()
-                s._mn = mn;  s._mx = mx
-                s.setFixedHeight(55)
-
-            def paintEvent(s, _):
-                qp = QPainter(s)
-                qp.setRenderHint(QPainter.RenderHint.Antialiasing)
-                w, h = s.width(), s.height()
-                qp.fillRect(0, 0, w, h, QColor('#252525'))
-                m, by, bh = 20, 25, 10
-                bw = w - 2*m
-
-                # --- Gradient qui reflète exactement l'échelle de rendu ---
-                # 0%→min_power : blanc pur
-                # min_power→max_power : gris 200 → noir 0
-                # on dessine deux segments
-                x_min = int(m + s._mn / 100.0 * bw)
-                x_max = int(m + s._mx / 100.0 * bw)
-
-                # Segment 0% → min_power : blanc uni
-                if x_min > m:
-                    qp.fillRect(m, by, x_min - m, bh, QColor(255, 255, 255))
-
-                # Segment min_power → max_power : gris 200 → noir
-                if x_max > x_min:
-                    g = QLinearGradient(x_min, 0, x_max, 0)
-                    g.setColorAt(0, QColor(200, 200, 200))
-                    g.setColorAt(1, QColor(0, 0, 0))
-                    qp.fillRect(x_min, by, x_max - x_min, bh, QBrush(g))
-
-                # Segment max_power → 100% : noir uni
-                if x_max < m + bw:
-                    qp.fillRect(x_max, by, m + bw - x_max, bh, QColor(0, 0, 0))
-
-                qp.setPen(QPen(QColor('#555'), 1))
-                qp.drawRect(m, by, bw, bh)
-                qp.setPen(QColor('#777'))
-                qp.setFont(QFont('Arial', 8))
-                qp.drawText(m, by+bh+12, '0%')
-                qp.drawText(m+bw-22, by+bh+12, '100%')
-
-                for val, lbl in [(s._mn, f'Min:{int(s._mn)}%'),
-                                 (s._mx, f'Max:{int(s._mx)}%')]:
-                    x = int(m + val/100*bw)
-                    tri = QPolygonF([QPointF(x, by-1),
-                                     QPointF(x-5, by-9),
-                                     QPointF(x+5, by-9)])
-                    qp.setBrush(QBrush(QColor('#ff9f43')))
-                    qp.setPen(Qt.PenStyle.NoPen)
-                    qp.drawPolygon(tri)
-                    qp.setPen(QColor('#ff9f43'))
-                    qp.setFont(QFont('Arial', 8, QFont.Weight.Bold))
-                    qp.drawText(x-20, by-10, lbl)
-                qp.end()
-
-        return _PBar(p_min, p_max)
-
-
-    def _make_options_widget(self):
-        f = QFrame()
-        f.setStyleSheet('QFrame{background:#222;border:1px solid #444;'
-                        'border-radius:6px;}')
-        lo = QVBoxLayout(f)
-        lo.setContentsMargins(8, 6, 8, 6)
-        lo.setSpacing(4)
-
-        lbl = QLabel(self.t.get('active_options', 'Active Options'))
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet('color:white;font-weight:bold;font-size:11px;border:none;')
-        lo.addWidget(lbl)
-
-        br = QHBoxLayout()
-        for key, txt in [('is_pointing', self.t.get('pointing_opt', 'POINTING')),
-                         ('is_framing',  self.t.get('framing_opt',  'FRAMING'))]:
-            active = self.payload.get('framing', {}).get(key, False)
-            col = '#ff9f43' if active else '#555'
-            bg  = '#3d2b1f' if active else '#282828'
-            b   = QLabel(txt)
-            b.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            b.setStyleSheet(f'color:{col};background:{bg};border-radius:5px;'
-                            f'font-size:9px;font-weight:bold;'
-                            f'padding:3px 6px;border:none;')
-            br.addWidget(b)
-        lo.addLayout(br)
-
-        # lat_btn retiré d'ici — déplacé dans _make_action_buttons
-        self.lat_btn = None
-        return f
 
     def _make_action_buttons(self):
         f = QFrame()
@@ -860,42 +695,15 @@ class SimulationViewQt(QWidget):
         lo.setContentsMargins(0, 0, 0, 0)
         lo.setSpacing(4)
 
-        # Bouton Simulate Latency — sorti du panneau Active Options
         self.lat_btn = None
-        lat_val = float(self.payload.get('params', {}).get('laser_latency', 0))
-        if lat_val != 0:
-            self.lat_btn = QPushButton(
-                self.t.get('simulate_latency', 'SIMULATE LATENCY') + '  ○')
-            self.lat_btn.setCheckable(True)
-            self.lat_btn.setStyleSheet(
-                'QPushButton{background:#333;color:#888;border:1px solid #555;'
-                'border-radius:4px;padding:4px 10px;font-size:10px;font-weight:bold;}'
-                'QPushButton:checked{background:#1a4a2a;color:#2ecc71;'
-                'border-color:#2ecc71;}')
-            self.lat_btn.toggled.connect(self._on_lat_toggle)
-            lo.addWidget(self.lat_btn)
 
-        er = QHBoxLayout()
-        self.btn_export = QPushButton(self.t.get('quick_export', 'Quick Export'))
-        self.btn_export.setFixedHeight(40)
-        self.btn_export.setStyleSheet(self._gbtn('#2ecc71', '#27ae60'))
-        self.btn_export.clicked.connect(self.on_export)
-
-        self.btn_export_as = QPushButton(self.t.get('export_as', 'Export As…'))
-        self.btn_export_as.setFixedSize(110, 40)
-        self.btn_export_as.setStyleSheet(self._gbtn('#7ac99b', '#27ae60'))
-        self.btn_export_as.clicked.connect(self.on_export_as)
-
-        er.addWidget(self.btn_export)
-        er.addWidget(self.btn_export_as)
-        lo.addLayout(er)
-
-        self.btn_cancel = QPushButton(self.t.get('cancel', 'Cancel'))
+        self.btn_cancel = QPushButton(self.t.get('cancel', 'Close'))
         self.btn_cancel.setFixedHeight(30)
         self.btn_cancel.setStyleSheet(self._gbtn('#333', '#444'))
         self.btn_cancel.clicked.connect(self.on_cancel)
         lo.addWidget(self.btn_cancel)
         return f
+
 
     # ─── Panneau droit ───────────────────────────────────────────
 
@@ -1065,7 +873,7 @@ class SimulationViewQt(QWidget):
         bl.setContentsMargins(30, 20, 30, 25)
         bl.setSpacing(12)
 
-        lbl = QLabel(self.t.get('generating', 'Generating G-Code & Trajectory…'))
+        lbl = QLabel(self.t.get('parsing', 'Parsing G-Code…'))
         lbl.setStyleSheet('color:white;font-size:14px;font-weight:bold;border:none;')
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         bl.addWidget(lbl)
@@ -1146,50 +954,81 @@ class SimulationViewQt(QWidget):
     #  GÉNÉRATION (QThread)
     # ══════════════════════════════════════════════════════════════
 
-    def _start_gen(self):
-        self._parser = GCodeParser(self.payload)
-        self._worker = _GenWorker(self.engine, self.payload, self._parser)
-        self._worker.done.connect(self._on_done)
-        self._worker.error.connect(self._on_error)
-        self._worker.start()
+    # ══════════════════════════════════════════════════════════════
+    #  CHARGEMENT FICHIER G-CODE
+    # ══════════════════════════════════════════════════════════════
 
-    def _on_error(self, msg):
-        self._hide_loading()
-        QMessageBox.critical(self, 'Engine Error',
-                             f'Failed to generate G-code:\n{msg}')
+    def _on_open_file(self):
+        """Ouvre un QFileDialog et charge le fichier sélectionné."""
+        stds = 'G-Code (*.nc *.gcode *.gc *.tap *.txt);;All files (*.*)'
+        path, _ = QFileDialog.getOpenFileName(
+            self, self.t.get('open_file', 'Open G-Code file'), '', stds)
+        if path:
+            self._load_file(path)
 
-    def _on_done(self, d):
+    def _load_file(self, path):
+        """Parse le fichier G-Code et lance la simulation."""
+        self._stop_all()
+        self._loaded_path = path
+        self.lbl_file.setText(truncate_path(path, 38))
+        self.lbl_size.setText('')
+        self.lbl_dur.setText('')
+
+        self._show_loading()
+
+        # Lecture
+        try:
+            with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                gcode = f.read()
+        except Exception as e:
+            self._hide_loading()
+            QMessageBox.critical(self, 'Error', f'Cannot read file:\n{e}')
+            return
+
+        # Parsing dans un thread pour ne pas bloquer l'UI
+        self._parse_worker = _ParseWorker(gcode)
+        self._parse_worker.done.connect(self._on_parse_done)
+        self._parse_worker.error.connect(self._on_parse_error)
+        self._parse_worker.start()
+
+    def _on_parse_error(self, msg):
         self._hide_loading()
+        QMessageBox.critical(self, 'Parse Error', msg)
+
+    def _on_parse_done(self, d):
+        self._hide_loading()
+
+        self.final_gcode   = d['gcode']
         self.points_list   = d['pts']
         self.total_sec     = d.get('total_dur', 0.0)
-        self.latence_mm    = d.get('latence_mm', 0.0)
-        self.final_gcode   = d.get('final_gcode', '')
-        self.framing_gcode = d.get('framing_gcode', '')
-        self.full_metadata = d.get('meta', {})
-        self.framing_end   = d.get('framing_end', 0)
-        
+        self.framing_end   = 0
+        self.latence_mm    = 0.0
         self._last_drawn_idx = -1
-        bx0, bx1, by0, by1 = d.get('bounds', (0, 0, 0, 0))
-        self._mnx, self._mxx = bx0, bx1
-        self._mny, self._mxy = by0, by1
 
-        if self.lat_btn:
-            self.lat_btn.setVisible(abs(self.latence_mm) > 1e-6)
+        # Bounds = tous les points parsés (G0 + G1 Q=0 + G1 Q>0)
+        # On veut voir l'intégralité des déplacements, overscan inclus
+        pts = self.points_list
+        if pts is not None and len(pts):
+            self._mnx = float(pts[:, 0].min())
+            self._mxx = float(pts[:, 0].max())
+            self._mny = float(pts[:, 1].min())
+            self._mxy = float(pts[:, 1].max())
+        else:
+            self._mnx = self._mxx = self._mny = self._mxy = 0.0
+
+        # Infos affichées
+        nb_lines = self.final_gcode.count('\n')
+        self.lbl_size.setText(f'{nb_lines} lines')
+        self.lbl_dur.setText(self._fmt(self.total_sec))
 
         if self.final_gcode:
             self.gcode_view.setPlainText(self.final_gcode)
             self._update_gcode_font()
 
-        # 1. Mise à jour du texte
         self.lbl_time.setText(f'00:00:00 / {self._fmt(self.total_sec)}')
-        
-        # 2. FIX : Forcer le calcul des géométries AVANT le rendu du canvas
-        # On s'assure que le panneau droit a bien pris sa place finale
         self._right_widget.updateGeometry()
-        
-        # 3. On appelle _init_canvas qui contient déjà self.resizeEvent(None)
-        # QTimer.singleShot(60, self._init_canvas)
         self._init_canvas()
+
 
     # ══════════════════════════════════════════════════════════════
     #  INITIALISATION CANVAS
@@ -1206,48 +1045,51 @@ class SimulationViewQt(QWidget):
         if self.points_list is None or len(self.points_list) == 0:
             return
 
-        # 1. On récupère le l_step immédiatement pour calibrer l'échelle
-        dims = self.payload.get('dims', (0, 0, 0.1, 0.1))
-        raster_mode = self.payload.get('params', {}).get('raster_mode', 'horizontal')
-        if len(dims) >= 4:
-            l_step = float(dims[2]) if raster_mode == 'horizontal' else float(dims[3])
-        else:
+        # 1. ctrl_max : lu depuis la config
+        self.ctrl_max = float(
+            self.controller.config_manager.get_item('machine_settings', 'ctrl_max', 255) or 255
+        )
+
+        pts = self.points_list
+
+        # 2. line_step : lu depuis la config raster_settings (mm)
+        #    Définit à la fois la largeur du tracé ET le snap de position.
+        #    Fallback : 0.1 mm si absent ou invalide.
+        try:
+            l_step = float(
+                self.controller.config_manager.get_item('raster_settings', 'line_step', 0.1) or 0.1
+            )
+            if l_step <= 0:
+                l_step = 0.1
+        except Exception:
             l_step = 0.1
+
+        # lw_px : converti en pixels selon l'échelle courante (calculée après sc)
+        # On calcule sc d'abord, puis lw_px = max(1, round(l_step * sc))
 
         # ─────────────────────────────
         # Dimensions réelles pièce (mm)
         # ─────────────────────────────
-        # On agrandit tw/th d'une ligne pour le calcul du buffer uniquement.
-        # self._mnx/y restent inchangés : le renderer et le canvas utilisent
-        # les vraies coordonnées pour le mapping mm→pixel.
-        # Sans cette marge, un fichier de N lignes produit un buffer de
-        # (N-1)*lw_px px → la dernière ligne tombe hors buffer (fy_center < 0).
-        margin = l_step
-        tw = max(0.1, self._mxx - self._mnx) + margin
-        th = max(0.1, self._mxy - self._mny) + margin
+        tw = max(0.1, self._mxx - self._mnx)
+        th = max(0.1, self._mxy - self._mny)
 
-        # Espace utile : réserver la zone des contrôles flottants (hauteur réelle mémorisée)
+        # Espace utile
         overlay_h = getattr(self, '_overlay_h', 150)
         ch_usable = max(ch - overlay_h, int(ch * 0.5))
 
-        # Scale écran théorique (pour tenir dans la vue)
+        # Scale pour tenir dans la vue
         sc = min((cw * 0.80) / tw, (ch_usable * 0.80) / th)
 
-        # --- CORRECTION ARRONDI : Snapping de l'échelle ---
-        # On force l'échelle pour que l_step mm correspondent à un nombre ENTIER de pixels.
-        if l_step > 0:
-            lw_px = max(1.0, np.round(l_step * sc))
-            sc = lw_px / l_step  # On recalcule l'échelle exacte basée sur cet entier
-        else:
-            lw_px = 1.0
+        # lw_px : largeur du tracé laser en pixels, déduite du line_step config
+        lw_px = max(1, int(round(l_step * sc)))
 
-        # Dimensions projetées écran (maintenant parfaitement alignées sur le pas)
+        # Dimensions projetées écran
         pw = tw * sc
         ph = th * sc
 
-        # Dimensions buffer image (entiers)
-        rw = max(1, int(round(pw)))
-        rh = max(1, int(round(ph)))
+        # Dimensions buffer image — marge d'une ligne pour la première et dernière
+        rw = max(1, int(round(pw)) + lw_px * 2)
+        rh = max(1, int(round(ph)) + lw_px * 2)
 
         # Position : centré horizontalement, calé en haut de la zone utile
         x0 = (cw - pw) / 2.0
@@ -1256,13 +1098,19 @@ class SimulationViewQt(QWidget):
         # ─────────────────────────────
         # Initialisation renderer
         # ─────────────────────────────
-        p_params  = self.payload.get('params', {})
-        p_min_pct = float(p_params.get('min_power', 0))
-        p_max_pct = float(p_params.get('max_power', 100))
-        pwr_min_s = self.ctrl_max * p_min_pct / 100.0
-        pwr_max_s = self.ctrl_max * p_max_pct / 100.0
+        # pwr_min_s = 0 toujours : si on utilisait le min des valeurs actives
+        # (ex: 40), laser_threshold = max(40, ctrl_max*0.001) = 40, et la
+        # condition pwr > threshold serait False pour Q=40 → rien dessiné.
+        # pwr_max_s = valeur max trouvée dans le fichier (ou ctrl_max par défaut).
+        pwr_col = pts[:, 2]
+        pwr_active = pwr_col[pwr_col > 0]
+        if len(pwr_active):
+            pwr_min_s = 0.0
+            pwr_max_s = float(pwr_active.max())
+        else:
+            pwr_min_s = 0.0
+            pwr_max_s = float(self.ctrl_max)
 
-        # Note : On passe lw_px (l'entier) pour garantir la largeur constante
         self._renderer = _Renderer(
             rw,
             rh,
@@ -1270,11 +1118,11 @@ class SimulationViewQt(QWidget):
             rh,
             self._mnx,
             self._mny,
-            int(lw_px), 
+            int(lw_px),
             self.ctrl_max,
             pwr_min=pwr_min_s,
             pwr_max=pwr_max_s,
-            l_step_mm=l_step
+            l_step_mm=l_step if l_step > 0 else None
         )
 
         # Stockage géométrie
@@ -1301,7 +1149,7 @@ class SimulationViewQt(QWidget):
             x0, y0, pw, ph, sc,
             self._mnx, self._mxx,
             self._mny, self._mxy,
-            l_step  # <--- Passage du paramètre pour le zoom cranté
+            l_step if l_step > 0 else 1.0
         )
 
         self.canvas.set_laser(lx, ly)
@@ -1699,73 +1547,8 @@ class SimulationViewQt(QWidget):
     #  EXPORT
     # ══════════════════════════════════════════════════════════════
 
-    def on_export(self):
-        self._stop_all()
-        meta = self.payload.get('metadata', {})
-        ext  = self.controller.config_manager.get_item(
-            'machine_settings', 'gcode_extension', '.nc')
-        name = os.path.splitext(
-            os.path.basename(str(meta.get('file_name', 'output'))))[0]
-        self._save(os.path.join(meta.get('output_dir', ''), f'{name}{ext}')
-                   .replace('\\', '/'))
-
-    def on_export_as(self):
-        self._stop_all()
-        meta = self.payload.get('metadata', {})
-        ext  = meta.get('file_extension', '.nc').lower()
-        if not ext.startswith('.'): ext = f'.{ext}'
-        name = os.path.splitext(
-            os.path.basename(str(meta.get('file_name', 'output'))))[0]
-        stds = [('.nc', 'NC'), ('.gcode', 'G-Code'), ('.gc', 'GC'),
-                ('.tap', 'Tap'), ('.txt', 'Text')]
-        parts = [f'{l} (Default) (*{e})' if e == ext else f'{l} (*{e})'
-                 for e, l in stds]
-        parts.append('All files (*.*)')
-        path, _ = QFileDialog.getSaveFileName(
-            self, self.t.get('export_as', 'Export G-Code As…'),
-            os.path.join(meta.get('output_dir', ''), f'{name}{ext}'),
-            ';;'.join(parts))
-        if path: self._save(path.replace('\\', '/'))
-
-    def _save(self, path):
-        """Sauvegarde le G-Code physiquement et met à jour les statistiques du dashboard."""
-        try:
-            if not hasattr(self, 'final_gcode') or not self.final_gcode:
-                QMessageBox.critical(self, 'Error',
-                                     self.t.get('no_gcode', 'No G-Code to save.'))
-                return
-
-            with open(path, 'w') as f:
-                f.write(self.final_gcode)
-
-            matrix = self.payload.get('matrix')
-            if matrix is not None:
-                from core.utils import save_dashboard_data
-                estimated_time = getattr(self, 'total_sec', 0)
-                save_dashboard_data(
-                    config_manager=self.controller.config_manager,
-                    matrix=matrix,
-                    gcode_content=self.final_gcode,
-                    estimated_time=estimated_time
-                )
-                print(estimated_time)
-
-            QMessageBox.information(self, 'Success',
-                                    f'{self.t.get("save_success", "G-Code saved successfully:")}\n{path}')
-            self._navigate_back()
-
-        except Exception as e:
-            QMessageBox.critical(self, 'Error',
-                                 f'{self.t.get("save_failed", "Save failed:")}\n{str(e)}')
-
-    # ══════════════════════════════════════════════════════════════
-    #  NAVIGATION / FERMETURE
-    # ══════════════════════════════════════════════════════════════
-
     def on_cancel(self):
-        self._stop_all(); self._navigate_back()
-
-    def _navigate_back(self):
+        self._stop_all()
         if   self.return_view == 'raster': self.controller.show_raster_mode()
         elif self.return_view == 'infill': self.controller.show_infill_mode()
         else:                              self.controller.show_dashboard()

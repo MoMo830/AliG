@@ -1,29 +1,60 @@
 import numpy as np
 import gc
 
+
 class GCodeParser:
     def __init__(self, stats):
-        self.stats = stats
-        self.offX = stats.get("offX", 0)
-        self.offY = stats.get("offY", 0)
+        self.stats   = stats
+        self.offX    = stats.get("offX", 0)
+        self.offY    = stats.get("offY", 0)
         self.min_pwr = stats.get("min_power", 0)
-        self.rect_h = stats.get("rect_h", 0)
+        self.rect_h  = stats.get("rect_h", 0)
+
+    @staticmethod
+    def _extract(line, char):
+        """Extrait la valeur numérique qui suit `char`. Retourne (valeur, True) ou (None, False)."""
+        pos = line.find(char)
+        if pos == -1:
+            return None, False
+        s = e = pos + 1
+        while e < len(line) and (line[e].isdigit() or line[e] in '.-+'):
+            e += 1
+        if e > s:
+            try:
+                return float(line[s:e]), True
+            except ValueError:
+                pass
+        return None, False
+
+    @staticmethod
+    def _is_g0(line):
+        """True si la ligne contient un G0 (déplacement rapide, pas G0.x)."""
+        idx = line.find('G0')
+        if idx == -1:
+            return False
+        after = line[idx + 2] if idx + 2 < len(line) else ' '
+        return after in (' ', '\t', '') or (after.isdigit() and after != '.')
 
     def parse(self, gcode_text):
+        """Parse principal — retourne (points_array, 0.0, limits).
+
+        Corrections vs version précédente :
+          - G0 : position mémorisée, puissance forcée à 0, EXCLUS des bounds.
+            Les overscan (ex: X=-2) ne gonflent plus le cadre de rendu.
+          - parseScmd en double supprimé.
+          - parseQcmd ajouté (alias propre).
+        """
         if not gcode_text:
             return None, 0.0, (0.0, 0.0, 0.0, 0.0)
 
-        lines = gcode_text.splitlines()
+        lines   = gcode_text.splitlines()
         n_lines = len(lines)
         if n_lines == 0:
             return None, 0.0, (0.0, 0.0, 0.0, 0.0)
 
-        # Désactive le GC temporairement pour optimiser la boucle
         gc_was_enabled = gc.isenabled()
         gc.disable()
 
-        # Pré-allocation (X, Y, Power, LineIndex, Feedrate)
-        # On alloue un peu plus pour gérer les changements de puissance sans mouvement
         points_array = np.zeros((n_lines * 2, 5), dtype=np.float32)
         idx_point = 0
 
@@ -31,87 +62,63 @@ class GCodeParser:
         curr_f = 1000.0
         curr_pwr = 0.0
 
-        # Initialisation des limites
         min_x = min_y = float('inf')
         max_x = max_y = float('-inf')
 
-        for line_idx, line in enumerate(lines, start=1):
-            line = line.strip().upper()
+        for line_idx, raw_line in enumerate(lines, start=1):
+            line = raw_line.strip().upper()
             if not line or line.startswith(('(', ';')):
                 continue
 
-            changed = False
+            is_rapid      = self._is_g0(line)
+            changed       = False
             power_changed = False
 
-            # --- Extraction puissance (S ou Q) ---
+            # ── puissance (Q prioritaire sur S) ───────────────────────────
             for char_p in ('Q', 'S'):
-                pos = line.find(char_p)
-                if pos != -1:
-                    p_start = pos + 1
-                    p_end = p_start
-                    while p_end < len(line) and (line[p_end].isdigit() or line[p_end] in '.-+'):
-                        p_end += 1
-                    if p_end > p_start:
-                        try:
-                            val = float(line[p_start:p_end])
-                            if val != curr_pwr:
-                                curr_pwr = val
-                                power_changed = True
-                            break
-                        except: pass
+                val, found = self._extract(line, char_p)
+                if found:
+                    # G0 : on force la puissance à 0 même si Q/S est présent
+                    effective = 0.0 if is_rapid else val
+                    if effective != curr_pwr:
+                        curr_pwr      = effective
+                        power_changed = True
+                    break
 
-            # --- Extraction feedrate (F) ---
-            pos_f = line.find('F')
-            if pos_f != -1:
-                f_start = pos_f + 1
-                f_end = f_start
-                while f_end < len(line) and (line[f_end].isdigit() or line[f_end] in '.-+'):
-                    f_end += 1
-                if f_end > f_start:
-                    try: curr_f = float(line[f_start:f_end])
-                    except: pass
+            # ── feedrate ──────────────────────────────────────────────────
+            val_f, found_f = self._extract(line, 'F')
+            if found_f:
+                curr_f = val_f
 
-            # --- Extraction X ---
-            pos_x = line.find('X')
-            if pos_x != -1:
-                x_start = pos_x + 1
-                x_end = x_start
-                while x_end < len(line) and (line[x_end].isdigit() or line[x_end] in '.-+'):
-                    x_end += 1
-                if x_end > x_start:
-                    try:
-                        curr_x = float(line[x_start:x_end])
-                        changed = True
-                    except: pass
+            # ── coordonnées ───────────────────────────────────────────────
+            val_x, found_x = self._extract(line, 'X')
+            if found_x:
+                curr_x  = val_x
+                changed = True
 
-            # --- Extraction Y ---
-            pos_y = line.find('Y')
-            if pos_y != -1:
-                y_start = pos_y + 1
-                y_end = y_start
-                while y_end < len(line) and (line[y_end].isdigit() or line[y_end] in '.-+'):
-                    y_end += 1
-                if y_end > y_start:
-                    try:
-                        curr_y = float(line[y_start:y_end])
-                        changed = True
-                    except: pass
+            val_y, found_y = self._extract(line, 'Y')
+            if found_y:
+                curr_y  = val_y
+                changed = True
 
-            # --- Enregistrement du point ---
-            # On enregistre si mouvement OU si changement de puissance
+            # ── enregistrement ────────────────────────────────────────────
             if changed or power_changed:
-                if changed:
+                pwr_to_store = curr_pwr if curr_pwr > self.min_pwr else 0.0
+
+                # Bounds : tous les mouvements G1 (pas les G0 d'overscan)
+                # On inclut les Q=0 de début/fin de ligne car ils définissent
+                # la vraie largeur du passage laser (nécessaire pour le buffer renderer)
+                if changed and not is_rapid:
                     if curr_x < min_x: min_x = curr_x
                     if curr_x > max_x: max_x = curr_x
                     if curr_y < min_y: min_y = curr_y
                     if curr_y > max_y: max_y = curr_y
-
-                pwr_to_store = curr_pwr if curr_pwr > self.min_pwr else 0.0
                 px = curr_x - self.offX
                 py = curr_y - self.offY
 
                 if idx_point < points_array.shape[0]:
-                    points_array[idx_point, :] = (px, py, pwr_to_store, float(line_idx), curr_f)
+                    points_array[idx_point, :] = (px, py, pwr_to_store,
+                                                   float(line_idx), curr_f)
                     idx_point += 1
 
         if gc_was_enabled:
@@ -120,188 +127,75 @@ class GCodeParser:
         if idx_point == 0:
             return None, 0.0, (0.0, 0.0, 0.0, 0.0)
 
-        limits = (min_x, max_x, min_y, max_y)
-        return points_array[:idx_point], 0.0, limits
+        # Fallback si aucun G1 trouvé (gcode sans laser)
+        if min_x == float('inf'):
+            pts  = points_array[:idx_point]
+            min_x, max_x = float(pts[:, 0].min()), float(pts[:, 0].max())
+            min_y, max_y = float(pts[:, 1].min()), float(pts[:, 1].max())
 
+        return points_array[:idx_point], 0.0, (min_x, max_x, min_y, max_y)
+
+    # ──────────────────────────────────────────────────────────────────────────
 
     def parseScmd(self, gcode_text):
-        """
-        Parser pour mode S
-        """
-        lines = gcode_text.splitlines()
-        n_lines = len(lines)
+        """Parser mode S — repère image (Y inversé via rect_h)."""
+        lines        = gcode_text.splitlines()
+        n_lines      = len(lines)
         points_array = np.zeros((n_lines, 5), dtype=np.float32)
-        idx_point = 0
+        idx_point    = 0
 
         curr_x = curr_y = 0.0
         curr_f = 1000.0
         curr_pwr = 0.0
 
-        for line_idx, line in enumerate(lines, start=1):
-            line = line.strip().upper()
+        for line_idx, raw_line in enumerate(lines, start=1):
+            line = raw_line.strip().upper()
             if not line or line.startswith(('(', ';')):
                 continue
 
-            changed = False
+            is_rapid = self._is_g0(line)
+            changed  = False
 
-            # S uniquement, mais on garde Q pour sécurité
             for char_p in ('S', 'Q'):
-                pos = line.find(char_p)
-                if pos != -1:
-                    start = pos + 1
-                    end = start
-                    while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                        end += 1
-                    try:
-                        curr_pwr = float(line[start:end])
-                        break
-                    except: pass
+                val, found = self._extract(line, char_p)
+                if found:
+                    curr_pwr = 0.0 if is_rapid else val
+                    break
 
-            # Feedrate
-            pos_f = line.find('F')
-            if pos_f != -1:
-                start = pos_f + 1
-                end = start
-                while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                    end += 1
-                try: curr_f = float(line[start:end])
-                except: pass
+            val_f, found_f = self._extract(line, 'F')
+            if found_f:
+                curr_f = val_f
 
-            # Coordonnées
-            pos_x = line.find('X')
-            if pos_x != -1:
-                start = pos_x + 1
-                end = start
-                while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                    end += 1
-                try:
-                    curr_x = float(line[start:end])
-                    changed = True
-                except: pass
+            val_x, found_x = self._extract(line, 'X')
+            if found_x:
+                curr_x  = val_x
+                changed = True
 
-            pos_y = line.find('Y')
-            if pos_y != -1:
-                start = pos_y + 1
-                end = start
-                while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                    end += 1
-                try:
-                    curr_y = float(line[start:end])
-                    changed = True
-                except: pass
+            val_y, found_y = self._extract(line, 'Y')
+            if found_y:
+                curr_y  = val_y
+                changed = True
 
-            if changed:
+            if changed and not is_rapid:
                 pwr_to_store = curr_pwr if curr_pwr > self.min_pwr else 0.0
                 px = curr_x - self.offX
                 py = self.rect_h - (curr_y - self.offY)
-                points_array[idx_point] = (px, py, pwr_to_store, float(line_idx), curr_f)
+                points_array[idx_point] = (px, py, pwr_to_store,
+                                            float(line_idx), curr_f)
                 idx_point += 1
 
         if idx_point == 0:
             return None, 0.0
-
         return points_array[:idx_point], 0.0
-    
-    def parseScmd(self, gcode_text):
-        """
-        Parser pour mode S
-        """
-        lines = gcode_text.splitlines()
-        n_lines = len(lines)
-        points_array = np.zeros((n_lines, 5), dtype=np.float32)
-        idx_point = 0
 
-        curr_x = curr_y = 0.0
-        curr_f = 1000.0
-        curr_pwr = 0.0
-
-        for line_idx, line in enumerate(lines, start=1):
-            line = line.strip().upper()
-            if not line or line.startswith(('(', ';')):
-                continue
-
-            changed = False
-
-            # S ou Q pour sécurité
-            for char_p in ('S', 'Q'):
-                pos = line.find(char_p)
-                if pos != -1:
-                    start = pos + 1
-                    end = start
-                    while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                        end += 1
-                    try:
-                        curr_pwr = float(line[start:end])
-                        break
-                    except: pass
-
-            # Feedrate
-            pos_f = line.find('F')
-            if pos_f != -1:
-                start = pos_f + 1
-                end = start
-                while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                    end += 1
-                try: curr_f = float(line[start:end])
-                except: pass
-
-            # Coordonnées
-            pos_x = line.find('X')
-            if pos_x != -1:
-                start = pos_x + 1
-                end = start
-                while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                    end += 1
-                try:
-                    curr_x = float(line[start:end])
-                    changed = True
-                except: pass
-
-            pos_y = line.find('Y')
-            if pos_y != -1:
-                start = pos_y + 1
-                end = start
-                while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                    end += 1
-                try:
-                    curr_y = float(line[start:end])
-                    changed = True
-                except: pass
-
-            if changed:
-                # Mode Q: on ignore les S, on ne prend que la valeur Q
-                if 'Q' in line:
-                    pos_q = line.find('Q')
-                    start = pos_q + 1
-                    end = start
-                    while end < len(line) and (line[end].isdigit() or line[end] in '.-+'):
-                        end += 1
-                    try:
-                        curr_pwr = float(line[start:end])
-                    except: pass
-                else:
-                    curr_pwr = 0.0
-
-                pwr_to_store = curr_pwr if curr_pwr > self.min_pwr else 0.0
-                px = curr_x - self.offX
-                py = self.rect_h - (curr_y - self.offY)
-                points_array[idx_point] = (px, py, pwr_to_store, float(line_idx), curr_f)
-                idx_point += 1
-
-        if idx_point == 0:
-            return None, 0.0
-
-        return points_array[:idx_point], 0.0
-    
+    def parseQcmd(self, gcode_text):
+        """Parser mode Q — alias propre de parseScmd (Q déjà géré dedans)."""
+        return self.parseScmd(gcode_text)
 
     def parse_auto(self, gcode_text, mode='S'):
-        """
-        Wrapper: détecte le mode et appelle le parser spécialisé.
-        mode: 'S' ou 'Q'
-        """
+        """Wrapper de détection automatique. mode: 'S' ou 'Q'."""
         if not gcode_text:
             return None, 0.0
-        if mode.upper() == 'S':
-            return self.parseScmd(gcode_text)
-        else:
+        if mode.upper() == 'Q':
             return self.parseQcmd(gcode_text)
+        return self.parseScmd(gcode_text)
