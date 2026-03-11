@@ -17,6 +17,8 @@ TRANSLATIONS = {
             "sec_hardware": "HARDWARE BEHAVIOR",
             "label_latency": "Laser Latency (ms):",
             "label_overscan": "Default Overscan (mm):",
+            "hor_linestep": "Horizontal linestep (mm):",
+            "ver_linestep": "Vertical linestep (mm):",
             "sec_scripts": "SYSTEM SCRIPTS",
             "label_header": "Global Header G-Code",
             "label_footer": "Global Footer G-Code",

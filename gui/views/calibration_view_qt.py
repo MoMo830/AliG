@@ -1,5 +1,5 @@
 import os
-from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QFrame, 
+from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QBoxLayout, QFrame, 
                              QLabel, QScrollArea, QStackedWidget, QPushButton, 
                              QLineEdit, QGridLayout, QButtonGroup, QFileDialog,
                              QMessageBox)
@@ -511,7 +511,7 @@ class CalibrationView(QWidget):
         grid.addWidget(QLabel(self.texts.get("scan_mode", "Scan Mode:")), 1, 0)
         from PyQt6.QtWidgets import QComboBox
         self.scan_mode_combo = QComboBox()
-        self.scan_mode_combo.addItems(["Horizontal", "Vertical", "Crossed (Both)"])
+        self.scan_mode_combo.addItems(["Horizontal", "Vertical"])
         grid.addWidget(self.scan_mode_combo, 1, 1)
 
         grid.addWidget(QLabel(self.texts.get("feedrate", "Feedrate (mm/min):")), 1, 2)
@@ -534,19 +534,10 @@ class CalibrationView(QWidget):
         grid.addWidget(self.latency_entry, 2, 3)
 
 
-        # Ligne 3 : Info Résolution calculée (sur toute la largeur)
-        self.res_info_label = QLabel("Calculated Resolution: 0.100 mm")
-        self.res_info_label.setStyleSheet("color: #e67e22; font-weight: bold; border: none; margin-top: 5px;")
-        grid.addWidget(self.res_info_label, 3, 0, 1, 4)
-
         self.dynamic_layout.addWidget(container)
 
-        # ── Bindings pour calcul en temps réel ───────────────────────
-        self.min_step_entry.textChanged.connect(self.update_linestep_info)
-        self.multiplier_entry.textChanged.connect(self.update_linestep_info)
-
         self.dynamic_layout.addStretch()
-        self.update_linestep_info()
+
         # ── Zone de sélection du résultat — 5 boutons visuels ──────────
         select_frame = QFrame()
         select_frame.setObjectName("SelectContainer")
@@ -585,112 +576,165 @@ class CalibrationView(QWidget):
         mode = self.scan_mode_combo.currentText()
         is_vertical = "Vertical" in mode
 
-        # Supprimer les anciens boutons
+        # 1. Nettoyage
         for btn in self._step_buttons:
             self._step_btn_row.removeWidget(btn)
             btn.deleteLater()
         self._step_buttons.clear()
 
-        for i in range(-2, 3):
-            m    = max(0.01, center + i * 0.5)
+        # 2. Logique de direction et d'ordre
+        if not is_vertical:
+            # Mode Horizontal : boutons l'un au dessus de l'autre
+            self._step_btn_row.setDirection(QBoxLayout.Direction.TopToBottom)
+            range_iterator = range(2, -3, -1) # Plus grand en haut, plus petit en bas
+        else:
+            # Mode Vertical : boutons côte à côte
+            self._step_btn_row.setDirection(QBoxLayout.Direction.LeftToRight)
+            range_iterator = range(-2, 3)
+
+        for i in range_iterator:
+            m = max(0.01, center + i * 0.5)
             step = round(m * min_s, 4)
-            block_num = i + 3   # 1 à 5
-
+            block_num = i + 3 
+            
             btn = QPushButton()
-            btn.setFixedSize(56, 72)
+            pix = self._make_step_icon(step, is_vertical, color="#3a8fd4")
+            
+            if not is_vertical:
+                # --- MODE HORIZONTAL (Boutons empilés, Icône à gauche du texte) ---
+                btn.setFixedSize(110, 40)
+                btn.setIcon(QIcon(pix))
+                btn.setIconSize(QSize(30, 30))
+                btn.setText(f" {step:.4f} mm")
+                btn.setStyleSheet(self._get_btn_style("left", padding_top="0px"))
+            else:
+                # --- MODE VERTICAL (Icône EN HAUT, Texte EN BAS) ---
+                btn.setFixedSize(75, 90)
+                
+                # On crée un layout interne au bouton pour forcer l'empilement
+                layout = QVBoxLayout(btn)
+                layout.setContentsMargins(2, 8, 2, 8)
+                layout.setSpacing(4) # Espace entre le carré et le texte
+                
+                # 1. Label pour le carré (icône)
+                icon_lbl = QLabel()
+                icon_lbl.setPixmap(pix)
+                icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                # Important : pour que le clic passe à travers le label vers le bouton
+                icon_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+                
+                # 2. Label pour la valeur numérique
+                text_lbl = QLabel(f"{step:.4f} mm")
+                text_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                text_lbl.setStyleSheet("""
+                    color: #ccc; 
+                    font-size: 10px; 
+                    border: none; 
+                    background: transparent;
+                """)
+                text_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+                
+                layout.addWidget(icon_lbl)
+                layout.addWidget(text_lbl)
+                
+                # On applique le style au bouton vide
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background: #252525;
+                        border: 1px solid #444;
+                        border-radius: 6px;
+                    }
+                    QPushButton:hover {
+                        background: #1f538d;
+                        border-color: #3a8fd4;
+                    }
+                """)
+                
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setToolTip(f"{'Col' if is_vertical else 'Blk'} {block_num} — {step:.4f} mm")
 
-            # Représentation visuelle : 3 lignes horiz ou 3 colonnes vert
-            # dessinées dans l'icône via un QPixmap inline
-            pix = self._make_step_icon(step, is_vertical)
-            btn.setIcon(QIcon(pix))
-            btn.setIconSize(QSize(44, 38))
-
-            lbl_val = f"{step:.4f} mm"
-            lbl_blk = f"{'Col' if is_vertical else 'Blk'} {block_num}"
-            btn.setToolTip(f"{lbl_blk}  —  {lbl_val}")
-            btn.setText(f"\n{lbl_val}")
-            btn.setStyleSheet(
-                "QPushButton { background:#252525; color:#ccc; font-size:9px; "
-                "border:1px solid #444; border-radius:6px; "
-                "padding-top:2px; text-align:center; }"
-                "QPushButton:hover { background:#1f538d; border-color:#3a8fd4; color:white; }"
-            )
-
-            # Closure correcte
             def make_save(s):
-                def _save():
-                    self._save_linestep(s)
-                return _save
+                return lambda: self._save_linestep(s, is_vertical)
 
             btn.clicked.connect(make_save(step))
             self._step_btn_row.addWidget(btn)
             self._step_buttons.append(btn)
 
-    def _make_step_icon(self, step_mm, is_vertical):
-        """Génère une icône miniature représentant les lignes du bloc."""
+    def _get_btn_style(self, align, padding_top="2px"):
+        """Génère le style CSS des boutons avec alignement et padding variables."""
+        return f"""
+            QPushButton {{ 
+                background: #252525; 
+                color: #ccc; 
+                font-size: 10px; 
+                border: 1px solid #444; 
+                border-radius: 6px; 
+                text-align: {align}; 
+                padding-top: {padding_top};
+                padding-bottom: 5px;
+            }}
+            QPushButton:hover {{ 
+                background: #1f538d; 
+                border-color: #3a8fd4; 
+                color: white; 
+            }}
+        """
+
+    def _make_step_icon(self, step_mm, is_vertical, color="#3a8fd4"):
+        """Génère une icône miniature représentant les lignes avec une couleur unique."""
         from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
         from PyQt6.QtCore import Qt
+        
         w, h = 44, 38
         pix = QPixmap(w, h)
-        pix.fill(QColor("#1a1a1a"))
+        # On peut mettre transparent ou garder le fond sombre
+        pix.fill(QColor("#1a1a1a")) 
+        
         qp = QPainter(pix)
         qp.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Couleur selon densité : vert si step > 0.08, orange si moyen, rouge si très fin
-        if step_mm >= 0.08:
-            col = QColor("#27ae60")
-        elif step_mm >= 0.04:
-            col = QColor("#e67e22")
-        else:
-            col = QColor("#e74c3c")
-
-        pen = QPen(col, 1)
+        # On utilise la couleur passée en argument (ou celle par défaut)
+        # L'épaisseur 2 rend les traits plus lisibles
+        pen = QPen(QColor(color), 2)
         qp.setPen(pen)
 
         # Dessiner 5 lignes avec l'espacement relatif
         n_lines = 5
-        margin = 4
+        margin = 6
+        
         if is_vertical:
-            total = w - 2 * margin
+            total_w = w - 2 * margin
             for k in range(n_lines):
-                x = margin + int(k * total / (n_lines - 1))
+                x = margin + int(k * total_w / (n_lines - 1))
                 qp.drawLine(x, margin, x, h - margin)
         else:
-            total = h - 2 * margin
+            total_h = h - 2 * margin
             for k in range(n_lines):
-                y = margin + int(k * total / (n_lines - 1))
+                y = margin + int(k * total_h / (n_lines - 1))
                 qp.drawLine(margin, y, w - margin, y)
 
         qp.end()
         return pix
 
-    def _save_linestep(self, step_mm):
-        """Sauvegarde la valeur line_step choisie dans la config."""
+    def _save_linestep(self, step_mm, is_vertical):
+        """Sauvegarde la valeur dans hor_linestep ou ver_linestep."""
         try:
-            self.controller.config_manager.set_item(
-                "raster_settings", "line_step", round(step_mm, 4))
-            self.controller.config_manager.save()
+            # Détermination de la clé en fonction du mode
+            key = "ver_linestep" if is_vertical else "hor_linestep"
+            
+            # Sauvegarde dans "machine_settings" comme demandé
+            self.controller.set_item(
+                "machine_settings", key, round(step_mm, 4)
+            )
+            self.controller.save()
 
+            mode_str = "Vertical" if is_vertical else "Horizontal"
             QMessageBox.information(
-                self, "Saved",
-                f"Line step saved: {step_mm:.4f} mm"
+                self, "Sauvegarde",
+                f"Pas {mode_str} enregistré : {step_mm:.4f} mm\n(Clé: {key})"
             )
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Save failed:\n{e}")
-
-    def update_linestep_info(self):
-        """Met à jour le texte de l'info de résolution"""
-        try:
-            m_step = float(self.min_step_entry.text().replace(',', '.'))
-            mult   = float(self.multiplier_entry.text().replace(',', '.'))
-            res    = m_step * mult
-            if hasattr(self, 'res_info_label'):
-                self.res_info_label.setText(f"Calculated Resolution: {res:.3f} mm")
-        except Exception:
-            if hasattr(self, 'res_info_label'):
-                self.res_info_label.setText("Invalid parameters")
-
+            QMessageBox.critical(self, "Erreur", f"Échec de sauvegarde :\n{e}")
 
 
     def update_mm_display(self):

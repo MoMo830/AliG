@@ -5,10 +5,10 @@
         "enable_thumbnails": true,
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
-        "m67_e_num": 0.0,
-        "ctrl_max": 100.0,
+        "m67_e_num": "0.0",
+        "ctrl_max": "100.0",
         "gcode_extension": ".nc",
-        "laser_latency": -11.5,
+        "laser_latency": -11.4,
         "premove": 10.0,
         "custom_header": "",
         "custom_footer": "M334"
@@ -21,12 +21,12 @@
     },
     "window_settings": {
         "is_maximized": true,
-        "geometry": "1440x890+0+-6"
+        "geometry": "1440x891+0+-6"
     },
     "raster_settings": {
         "width": 30.0,
         "line_step": 0.1307,
-        "dpi": 254.0,
+        "dpi": 158.0,
         "origin_mode": "Lower-Left",
         "custom_x": 0.0,
         "custom_y": 0.0,

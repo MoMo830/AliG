@@ -128,6 +128,8 @@ class SettingsViewQt(QWidget):
         # Sliders
         self.create_slider_input(sec_hw, "label_latency", -20, 20, 0, "laser_latency")
         self.create_slider_input(sec_hw, "label_overscan", 0, 50, 10, "premove")
+        self.create_slider_input(sec_hw, "hor_linestep", 0.01, 0.5, 0.1, "hor_linestep", decimals=4)
+        self.create_slider_input(sec_hw, "ver_linestep", 0.01, 0.5, 0.1, "ver_linestep", decimals=4)
 
         # --- SECTION SCRIPTS ---
         sec_scripts = self.create_section(self.left_col, "sec_scripts")
@@ -382,15 +384,16 @@ class SettingsViewQt(QWidget):
         self.set_button_style("idle")
         self.btn_save.setText(self.texts["btn_save"])
 
-    def create_slider_input(self, layout, label_text, min_v, max_v, default, key):
-        """Crée une rangée avec Label + Slider + Entry via create_input_row (Solution 2)"""
+    def create_slider_input(self, layout, label_text, min_v, max_v, default, key, decimals=2):
+        """
+        Crée une rangée avec Label + Slider + Entry.
+        decimals : nombre de chiffres après la virgule (0 pour des entiers).
+        """
+        # 1. Calcul du facteur d'échelle pour le slider
+        # 10^decimals (ex: 0 -> 1, 1 -> 10, 2 -> 100)
+        multiplier = 10 ** decimals
         
-        # 1. Création du container pour les widgets de droite (Slider + Entry)
         right_side_widget = QWidget()
-        
-        # --- SOLUTION 2 : LARGEUR FIXE DU BLOC DE DROITE ---
-        # On fixe la largeur totale du bloc pour qu'il soit identique partout.
-        # 120 (slider) + 10 (spacing) + 50 (entry) = 180px
         right_side_widget.setFixedWidth(180) 
         
         right_side_layout = QHBoxLayout(right_side_widget)
@@ -399,13 +402,15 @@ class SettingsViewQt(QWidget):
 
         # 2. Le Slider
         slider = QSlider(Qt.Orientation.Horizontal)
-        slider.setRange(int(min_v * 100), int(max_v * 100))
-        slider.setValue(int(default * 100))
-        slider.setFixedWidth(120) # Taille fixe pour le slider
+        slider.setRange(int(min_v * multiplier), int(max_v * multiplier))
+        slider.setValue(int(default * multiplier))
+        slider.setFixedWidth(120)
         
         # 3. Le champ de saisie (Entry)
-        entry = QLineEdit(str(default))
-        entry.setFixedWidth(50) # Taille fixe pour l'entrée
+        # Formatage initial selon decimals
+        initial_val = int(default) if decimals == 0 else default
+        entry = QLineEdit(str(initial_val))
+        entry.setFixedWidth(50)
         entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
         entry.setStyleSheet("""
             QLineEdit { 
@@ -416,23 +421,36 @@ class SettingsViewQt(QWidget):
             }
         """)
 
-        # Connexions (Slider <-> Entry)
-        slider.valueChanged.connect(lambda v: [entry.setText(f"{v/100:.2f}"), self.mark_as_changed()])
-        entry.editingFinished.connect(lambda: [
-            slider.setValue(int(float(entry.text().replace(',', '.') or 0) * 100)), 
+        # --- GESTION DES CONNEXIONS ---
+        
+        def on_slider_moved(v):
+            val = v / multiplier
+            # Formatage dynamique : entier si 0, sinon float
+            text = str(int(val)) if decimals == 0 else f"{val:.{decimals}f}"
+            entry.setText(text)
             self.mark_as_changed()
-        ])
 
-        # Ajout des widgets au layout interne du bloc de droite
+        def on_entry_finished():
+            try:
+                raw_text = entry.text().replace(',', '.')
+                val = float(raw_text) if raw_text else 0.0
+                slider.setValue(int(val * multiplier))
+                self.mark_as_changed()
+            except ValueError:
+                # Optionnel : remettre la valeur du slider si la saisie est invalide
+                on_slider_moved(slider.value())
+
+        slider.valueChanged.connect(on_slider_moved)
+        entry.editingFinished.connect(on_entry_finished)
+
         right_side_layout.addWidget(slider)
         right_side_layout.addWidget(entry)
 
-        # 4. --- UTILISATION DE LA MÉTHODE COMMUNE ---
-        # Le label sera à gauche, le 'right_side_widget' sera poussé à droite
+        # 4. Intégration dans la ligne
         self.create_input_row(layout, label_text, right_side_widget, key=key)
         
-        # Stockage pour la sauvegarde
-        self.controls[key] = {"slider": slider, "entry": entry}
+        # Stockage
+        self.controls[key] = {"slider": slider, "entry": entry, "decimals": decimals}
 
     def create_script_box(self, layout, label_key, key):
         """Crée un bloc de texte multi-lignes pour les scripts G-Code avec traduction"""
@@ -577,8 +595,8 @@ class SettingsViewQt(QWidget):
             if key in self.controls:
                 self.controls[key]["entry"].setText(str(data.get(key, "")))
 
-        # 3. Sliders (LÀ OÙ ÇA PLANTAIT)
-        for key in ["laser_latency", "premove"]:
+        # 3. Sliders 
+        for key in ["laser_latency", "premove", "hor_linestep", "ver_linestep"]:
             if key in self.controls:
                 # On force une valeur de secours (0.0) si le manager renvoie None
                 raw_val = data.get(key)

@@ -135,8 +135,9 @@ If you just want to use the software without installing Python, follow these ste
 * **Adaptive Raster Optimization (Scanline Trimming):** Smart trajectory logic that detects non-blank boundaries per line to eliminate 'dead air' travel, significantly reducing engraving time by only scanning active areas.
 * **Project-Based Sessions & Dashboard Persistency:** Transform dashboard thumbnails into interactive project shortcuts. Clicking a thumbnail will restore the full environment, including the original image matrix and all associated parameters (feedrate, power, raster mode, etc.).
 * **Large File Management:** Option to split massive G-code files for better buffer management.
-* **Dithering Implementation:** Integration of the Floyd-Steinberg algorithm for superior grayscale rendering.
+* **Dithering Implementation:** Dithering algorithms integration.
 * **Auto-Contour Detection & Trace:** Automatic edge tracing to generate vector-like boundaries with support for hatch filling.
+* **Material Profiles:** Preset configurations that adjust power, feedrate, and thermal correction parameters based on the selected material.
 * **[Under consideration] Diagonal Rastering (45°):** Advanced trajectory logic to engrave at 45-degree angles.
 * **[Theoretical] Hybrid Engine:** Implementation of SVG path parsing to allow hybrid projects (Raster engraving + Vector cutting) in a single G-code file.
 * **[In discussion] 3D Relief Engraving Mode:** Implementation of multi-pass logic with Z-axis decrement for deep carving. *Currently seeking user feedback/interest due to hardware power constraints.*
