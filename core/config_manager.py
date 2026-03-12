@@ -37,6 +37,8 @@ class ConfigManager:
             "gcode_extension": ".nc",
             "laser_latency": 0.0,
             "premove": 10.0,
+            "hor_linestep": 0.1,
+            "ver_linestep": 0.1,
             "enable_thumbnails": True,
             "custom_header": "",
             "custom_footer": ""

@@ -325,6 +325,8 @@ class SettingsViewQt(QWidget):
                 "gcode_extension": self.controls["gcode_extension"]["entry"].text(),
                 "laser_latency": get_float("laser_latency"),
                 "premove": get_float("premove"),
+                "hor_linestep": get_float("hor_linestep"),
+                "ver_linestep": get_float("ver_linestep"),
                 "custom_header": self.controls["custom_header"]["text"].toPlainText(),
                 "custom_footer": self.controls["custom_footer"]["text"].toPlainText()
             }
@@ -542,7 +544,7 @@ class SettingsViewQt(QWidget):
         """Crée une ligne avec un Label et un Switch"""
         check = Switch()
         
-        check.toggled.connect(lambda v: print(f"Switch {key}:", v))
+        #check.toggled.connect(lambda v: print(f"Switch {key}:", v))
         check.stateChanged.connect(self.mark_as_changed)
         self.create_input_row(layout, label_key, check, key=key)
         
@@ -596,7 +598,7 @@ class SettingsViewQt(QWidget):
                 self.controls[key]["entry"].setText(str(data.get(key, "")))
 
         # 3. Sliders 
-        for key in ["laser_latency", "premove", "hor_linestep", "ver_linestep"]:
+        for key in ["laser_latency", "premove"]:
             if key in self.controls:
                 # On force une valeur de secours (0.0) si le manager renvoie None
                 raw_val = data.get(key)
@@ -604,6 +606,15 @@ class SettingsViewQt(QWidget):
                 
                 self.controls[key]["slider"].setValue(int(val * 100))
                 self.controls[key]["entry"].setText(f"{val:.2f}")
+
+        for key in ["hor_linestep", "ver_linestep"]:
+            if key in self.controls:
+
+                raw_val = data.get(key)
+                val = float(raw_val) if raw_val is not None else 0.1
+
+                self.controls[key]["slider"].setValue(int(val * 10000))
+                self.controls[key]["entry"].setText(f"{val:.4f}")
 
         # 4. Scripts & Switches
         if "custom_header" in self.controls:
