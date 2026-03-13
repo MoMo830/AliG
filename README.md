@@ -122,7 +122,7 @@ If you just want to use the software without installing Python, follow these ste
 * **Calibration tools:** Integrated utilities to fine-tune line interval, overscan compensation, and power-scaling profiles.
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
 * **Onboarding Experience:** First-run setup wizard for essential machine configuration.
-* ~~**2D G-code Parser & Preview:** Implementation of the G-code parser with a built-in trajectory visualizer.~~_(pending next release)_
+* ~~**2D G-code Parser & Preview:** **2D G-code Parser & Preview:** Implementation of a dedicated G-code checker using the parser to visualize any ALIG's G-code.~~_(pending next release)_
 
 ---
 
@@ -143,7 +143,7 @@ If you just want to use the software without installing Python, follow these ste
 
 ### Known Issues: 
 - **Real-time Translation**: UI components do not update instantly when the language is changed; a manual restart is required.
-- **Incomplete Light Theme**: Styling is currently optimized for Dark Mode; Light Theme may exhibit contrast issues.
+- ~~**Incomplete Light Theme**: Styling is currently optimized for Dark Mode; Light Theme may exhibit contrast issues.~~_(pending next release)_
 
 
 ---

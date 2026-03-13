@@ -2,7 +2,7 @@ import os
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QBoxLayout, QFrame, 
                              QLabel, QScrollArea, QStackedWidget, QPushButton, 
                              QLineEdit, QGridLayout, QButtonGroup, QFileDialog,
-                             QMessageBox)
+                             QMessageBox, QComboBox)
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QIcon, QPixmap
 
@@ -23,6 +23,12 @@ class CalibrationView(QWidget):
         self.current_test_id = None
         self.calibrate_engine = CalibrateEngine()
         self._last_calc_ms   = None
+
+        # Couleurs thème — dark par défaut, mis à jour par apply_theme
+        self._theme_colors = {
+            'text': '#DCE4EE', 'text_secondary': '#aaaaaa',
+            'bg_card': '#2b2b2b', 'border': '#3d3d3d', 'suffix': '_DARK',
+        }
         
         # 1. Chargement initial des textes
         self.load_texts()
@@ -53,6 +59,154 @@ class CalibrationView(QWidget):
         self.action_btn.setStyleSheet("background-color: #e67e22; font-weight: bold; border-radius: 10px;")
         self.action_btn.hide()   # caché jusqu'à ce qu'un test soit sélectionné
         self.right_layout.addWidget(self.action_btn)
+
+    # ══════════════════════════════════════════════════════════════
+    #  THEME
+    # ══════════════════════════════════════════════════════════════
+
+    def _c(self, dark_val, light_val):
+        return dark_val if self._theme_colors.get('suffix', '_DARK') == '_DARK' else light_val
+
+    def _container_style(self):
+        bg        = self._c('#2b2b2b', '#f0f0f0')
+        col       = self._theme_colors.get('text', '#DCE4EE')
+        entry_bg  = self._c('#3d3d3d', '#ffffff')
+        entry_brd = self._c('#555555', '#bbbbbb')
+        entry_col = self._c('white',   '#111111')
+        return (
+            f"QFrame#ParamsContainer{{background-color:{bg};border-radius:10px;padding:15px;}}"
+            f"QLabel{{color:{col};font-size:13px;}}"
+            f"QLineEdit,QComboBox{{background-color:{entry_bg};border:1px solid {entry_brd};"
+            f"border-radius:4px;color:{entry_col};padding:5px;}}"
+        )
+
+    def _calc_style(self):
+        bg        = self._c('#2b2b2b', '#f0f0f0')
+        col       = self._theme_colors.get('text', '#DCE4EE')
+        entry_bg  = self._c('#3d3d3d', '#ffffff')
+        entry_brd = self._c('#555555', '#bbbbbb')
+        entry_col = self._c('white',   '#111111')
+        return (
+            f"QFrame#CalcContainer{{background-color:{bg};border-radius:10px;padding:15px;}}"
+            f"QLabel{{color:{col};font-size:13px;}}"
+            f"QLineEdit{{background-color:{entry_bg};border:1px solid {entry_brd};"
+            f"border-radius:4px;color:{entry_col};padding:5px;}}"
+        )
+
+    def _select_style(self):
+        bg = self._c('#1a1a1a', '#e8e8e8')
+        return (
+            f"QFrame#SelectContainer{{background-color:{bg};"
+            f"border-radius:10px;padding:12px;margin-top:8px;}}"
+        )
+
+    def _btn_style_step(self):
+        bg  = self._c('#252525', '#e0e0e0')
+        col = self._c('#cccccc', '#333333')
+        brd = self._c('#444444', '#bbbbbb')
+        return (
+            f"QPushButton{{background:{bg};color:{col};font-size:10px;"
+            f"border:1px solid {brd};border-radius:6px;text-align:left;"
+            f"padding-top:2px;padding-bottom:5px;}}"
+            f"QPushButton:hover{{background:#1f538d;border-color:#3a8fd4;color:white;}}"
+        )
+
+    def apply_theme(self, colors: dict):
+        self._theme_colors = colors
+        is_dark  = colors.get('suffix', '_DARK') == '_DARK'
+        text     = colors.get('text', '#DCE4EE' if is_dark else '#111111')
+        text_sec = colors.get('text_secondary', '#aaaaaa' if is_dark else '#555555')
+        bg_right = '#202020' if is_dark else '#f5f5f5'
+        card_bg  = '#2b2b2b' if is_dark else '#e8e8e8'
+        card_brd = '#3d3d3d' if is_dark else '#cccccc'
+        card_hov = '#353535' if is_dark else '#d8d8d8'
+
+        # ── Colonne droite ────────────────────────────────────────
+        if hasattr(self, 'right_column'):
+            self.right_column.setStyleSheet(
+                f"QFrame#RightColumn{{background-color:{bg_right};border-radius:15px;}}")
+
+        # ── Titre sidebar ─────────────────────────────────────────
+        if hasattr(self, 'sidebar_title_label'):
+            self.sidebar_title_label.setStyleSheet(
+                "font-size:18px;font-weight:bold;color:#e67e22;")
+
+        # ── Cartes test ───────────────────────────────────────────
+        for card in self.test_cards:
+            card._bg_normal = card_bg
+            card._bg_hover  = card_hov
+            card._bd_normal = card_brd
+            card._bd_hover  = '#e67e22'
+            checked_bg = '#3d3d3d' if is_dark else '#e0e0e0'
+            card.setStyleSheet(
+                f"QPushButton{{background-color:{card_bg};border:1px solid {card_brd};"
+                f"border-radius:8px;text-align:left;padding:10px;}}"
+                f"QPushButton:checked{{background-color:{checked_bg};border:2px solid #e67e22;}}"
+            )
+            title_lbl = card.findChild(QLabel, "card_title")
+            desc_lbl  = card.findChild(QLabel, "card_desc")
+            if title_lbl:
+                title_lbl.setStyleSheet(
+                    f"font-weight:bold;font-size:13px;color:{text};"
+                    "border:none;background:transparent;")
+            if desc_lbl:
+                desc_lbl.setStyleSheet(
+                    f"font-size:11px;color:{text_sec};"
+                    "border:none;background:transparent;")
+
+        # ── Titre et description détail ───────────────────────────
+        if hasattr(self, 'detail_title'):
+            self.detail_title.setStyleSheet(
+                "font-size:20px;font-weight:bold;color:#e67e22;")
+        if hasattr(self, 'detail_desc'):
+            self.detail_desc.setStyleSheet(f"font-size:13px;color:{text};line-height:1.4;")
+
+        # ── Bouton action ─────────────────────────────────────────
+        if hasattr(self, 'action_btn'):
+            self.action_btn.setStyleSheet(
+                "background-color:#e67e22;font-weight:bold;border-radius:10px;color:white;")
+
+        # ── Widgets dynamiques (si déjà créés) ────────────────────
+        self._restyle_dynamic()
+
+    def _restyle_dynamic(self):
+        """Restyles les containers dynamiques s'ils existent."""
+        for w in self.findChildren(QFrame):
+            if w.objectName() == "ParamsContainer":
+                w.setStyleSheet(self._container_style())
+            elif w.objectName() == "CalcContainer":
+                w.setStyleSheet(self._calc_style())
+            elif w.objectName() == "SelectContainer":
+                w.setStyleSheet(self._select_style())
+
+        entry_bg  = self._c('#3d3d3d', '#ffffff')
+        entry_brd = self._c('#555555', '#bbbbbb')
+        entry_col = self._c('white',   '#111111')
+        entry_s = (f"QLineEdit{{background:{entry_bg};border:1px solid {entry_brd};"
+                   f"border-radius:4px;color:{entry_col};padding:5px;}}")
+        for w in self.dynamic_params_widget.findChildren(QLineEdit):
+            w.setStyleSheet(entry_s)
+
+        combo_bg  = self._c('#3d3d3d', '#ffffff')
+        combo_col = self._c('white',   '#111111')
+        combo_brd = self._c('#555555', '#bbbbbb')
+        sel       = self._c('#555555', '#d0e4f7')
+        combo_s = (f"QComboBox{{background:{combo_bg};border:1px solid {combo_brd};"
+                   f"border-radius:4px;color:{combo_col};padding:5px;}}"
+                   f"QComboBox QAbstractItemView{{background:{combo_bg};color:{combo_col};"
+                   f"selection-background-color:{sel};}}")
+        for w in self.dynamic_params_widget.findChildren(QComboBox):
+            w.setStyleSheet(combo_s)
+
+        step_s = self._btn_style_step()
+        for btn in getattr(self, '_step_buttons', []):
+            btn.setStyleSheet(step_s)
+            for lbl in btn.findChildren(QLabel):
+                col = self._c('#cccccc', '#333333')
+                lbl.setStyleSheet(
+                    f"color:{col};font-size:10px;border:none;background:transparent;")
+
+    # ══════════════════════════════════════════════════════════════
 
     def load_texts(self):
         """Met à jour les dictionnaires de textes depuis le controller"""
@@ -360,21 +514,7 @@ class CalibrationView(QWidget):
         # ── Conteneur paramètres ─────────────────────────────────────
         container = QFrame()
         container.setObjectName("ParamsContainer")
-        container.setStyleSheet("""
-            QFrame#ParamsContainer {
-                background-color: #2b2b2b;
-                border-radius: 10px;
-                padding: 15px;
-            }
-            QLabel { color: #DCE4EE; font-size: 13px; }
-            QLineEdit {
-                background-color: #3d3d3d;
-                border: 1px solid #555555;
-                border-radius: 4px;
-                color: white;
-                padding: 5px;
-            }
-        """)
+        container.setStyleSheet(self._container_style())
         grid = QGridLayout(container)
         grid.setSpacing(12)
 
@@ -410,21 +550,7 @@ class CalibrationView(QWidget):
         # ── Calculatrice ──────────────────────────────────────────────
         calc_frame = QFrame()
         calc_frame.setObjectName("CalcContainer")
-        calc_frame.setStyleSheet("""
-            QFrame#CalcContainer {
-                background-color: #2b2b2b;
-                border-radius: 10px;
-                padding: 15px;
-            }
-            QLabel { color: #DCE4EE; font-size: 13px; }
-            QLineEdit {
-                background-color: #3d3d3d;
-                border: 1px solid #555555;
-                border-radius: 4px;
-                color: white;
-                padding: 5px;
-            }
-        """)
+        calc_frame.setStyleSheet(self._calc_style())
         calc_vbox = QVBoxLayout(calc_frame)
         calc_vbox.setSpacing(8)
 
@@ -476,21 +602,7 @@ class CalibrationView(QWidget):
         # ── Conteneur paramètres ─────────────────────────────────────
         container = QFrame()
         container.setObjectName("ParamsContainer")
-        container.setStyleSheet("""
-            QFrame#ParamsContainer {
-                background-color: #2b2b2b;
-                border-radius: 10px;
-                padding: 15px;
-            }
-            QLabel { color: #DCE4EE; font-size: 13px; }
-            QLineEdit, QComboBox {
-                background-color: #3d3d3d;
-                border: 1px solid #555555;
-                border-radius: 4px;
-                color: white;
-                padding: 5px;
-            }
-        """)
+        container.setStyleSheet(self._container_style())
         grid = QGridLayout(container)
         grid.setSpacing(12)
 
@@ -509,7 +621,6 @@ class CalibrationView(QWidget):
 
         # Ligne 1 : Mode de balayage & Feedrate
         grid.addWidget(QLabel(self.texts.get("scan_mode", "Scan Mode:")), 1, 0)
-        from PyQt6.QtWidgets import QComboBox
         self.scan_mode_combo = QComboBox()
         self.scan_mode_combo.addItems(["Horizontal", "Vertical"])
         grid.addWidget(self.scan_mode_combo, 1, 1)
@@ -541,10 +652,7 @@ class CalibrationView(QWidget):
         # ── Zone de sélection du résultat — 5 boutons visuels ──────────
         select_frame = QFrame()
         select_frame.setObjectName("SelectContainer")
-        select_frame.setStyleSheet(
-            "QFrame#SelectContainer { background-color: #1a1a1a; "
-            "border-radius: 10px; padding: 12px; margin-top: 8px; }"
-        )
+        select_frame.setStyleSheet(self._select_style())
         select_layout = QVBoxLayout(select_frame)
         select_layout.setSpacing(8)
 
@@ -626,12 +734,10 @@ class CalibrationView(QWidget):
                 # 2. Label pour la valeur numérique
                 text_lbl = QLabel(f"{step:.4f} mm")
                 text_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                text_lbl.setStyleSheet("""
-                    color: #ccc; 
-                    font-size: 10px; 
-                    border: none; 
-                    background: transparent;
-                """)
+                text_lbl_col = self._c('#cccccc', '#333333')
+                text_lbl.setStyleSheet(
+                    f"color:{text_lbl_col};font-size:10px;"
+                    "border:none;background:transparent;")
                 text_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
                 
                 layout.addWidget(icon_lbl)
@@ -662,23 +768,15 @@ class CalibrationView(QWidget):
 
     def _get_btn_style(self, align, padding_top="2px"):
         """Génère le style CSS des boutons avec alignement et padding variables."""
-        return f"""
-            QPushButton {{ 
-                background: #252525; 
-                color: #ccc; 
-                font-size: 10px; 
-                border: 1px solid #444; 
-                border-radius: 6px; 
-                text-align: {align}; 
-                padding-top: {padding_top};
-                padding-bottom: 5px;
-            }}
-            QPushButton:hover {{ 
-                background: #1f538d; 
-                border-color: #3a8fd4; 
-                color: white; 
-            }}
-        """
+        bg  = self._c('#252525', '#e0e0e0')
+        col = self._c('#cccccc', '#333333')
+        brd = self._c('#444444', '#bbbbbb')
+        return (
+            f"QPushButton{{background:{bg};color:{col};font-size:10px;"
+            f"border:1px solid {brd};border-radius:6px;text-align:{align};"
+            f"padding-top:{padding_top};padding-bottom:5px;}}"
+            f"QPushButton:hover{{background:#1f538d;border-color:#3a8fd4;color:white;}}"
+        )
 
     def _make_step_icon(self, step_mm, is_vertical, color="#3a8fd4"):
         """Génère une icône miniature représentant les lignes avec une couleur unique."""
@@ -688,7 +786,7 @@ class CalibrationView(QWidget):
         w, h = 44, 38
         pix = QPixmap(w, h)
         # On peut mettre transparent ou garder le fond sombre
-        pix.fill(QColor("#1a1a1a")) 
+        pix.fill(QColor(self._c('#1a1a1a', '#e8e8e8')))
         
         qp = QPainter(pix)
         qp.setRenderHint(QPainter.RenderHint.Antialiasing)

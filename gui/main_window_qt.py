@@ -399,10 +399,9 @@ class MainWindowQt(QMainWindow):
 
         # 2. Gestion de l'instance de la vue (Lazy Loading)
         if not hasattr(self, 'calibration_view'):
-            # On crée l'instance une seule fois
-            # On passe self.controller (ton config_manager) à la vue
             self.calibration_view = CalibrationView(parent=self, controller=self.controller)
             self.content_area.addWidget(self.calibration_view)
+            self.calibration_view.apply_theme(self.get_theme_colors())
         else:
             # Optionnel : Rafraîchir les textes si la langue a changé
             if hasattr(self.calibration_view, 'update_ui_language'):
