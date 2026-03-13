@@ -312,7 +312,8 @@ class _SimCanvas(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
-        self.setStyleSheet('background:#050505;')
+        self._bg_color = '#050505'
+        self.setStyleSheet(f'background:{self._bg_color};')
         self.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Expanding)
         self.setMouseTracking(True)
@@ -331,6 +332,11 @@ class _SimCanvas(QWidget):
         self._p0     = None
         self._p0_pan = None
         self._mouse_mm = None
+
+    def set_theme(self, bg: str):
+        self._bg_color = bg
+        self.setStyleSheet(f'background:{bg};')
+        self.update()
 
     # ─── API ─────────────────────────────
 
@@ -379,10 +385,11 @@ class _SimCanvas(QWidget):
         qp = QPainter(self)
         qp.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         w, h = self.width(), self.height()
-        qp.fillRect(0, 0, w, h, QColor('#050505'))
+        qp.fillRect(0, 0, w, h, QColor(self._bg_color))
 
         if self._img_buf is None:
-            qp.setPen(QColor('#444'))
+            ph_col = '#888888' if self._bg_color[1:3].lower() >= '44' else '#444444'
+            qp.setPen(QColor(ph_col))
             qp.setFont(QFont('Arial', 13))
             qp.drawText(QRect(0, 0, w, h),
                         Qt.AlignmentFlag.AlignCenter, 'Generating…')
@@ -610,6 +617,8 @@ class CheckerViewQt(QWidget):
 
         self.setStyleSheet('background:#2b2b2b; color:white;')
         self._build_ui()
+        # Stocker les widgets thémables créés dans _make_playback_bar
+        self._spd_frame: QFrame | None = None
 
     # ══════════════════════════════════════════════════════════════
     #  CONSTRUCTION UI
@@ -626,9 +635,10 @@ class CheckerViewQt(QWidget):
 
     def _make_left_panel(self):
         self.left = QFrame()
+        self.left.setObjectName('checkerLeft')
         self.left.setFixedWidth(336)
         self.left.setStyleSheet(
-            'QFrame{background:#1e1e1e; border-right:1px solid #333;}')
+            'QFrame#checkerLeft{background:#1e1e1e; border-right:1px solid #333;}')
         lo = QVBoxLayout(self.left)
         lo.setContentsMargins(8, 8, 8, 8)
         lo.setSpacing(6)
@@ -656,6 +666,7 @@ class CheckerViewQt(QWidget):
     def _make_file_widget(self):
         """Bouton d'ouverture de fichier + infos du fichier chargé."""
         f = QFrame()
+        self._file_frame = f
         f.setStyleSheet('QFrame{background:#252525;border-radius:6px;'
                         'border:1px solid #333;}')
         lo = QVBoxLayout(f)
@@ -783,6 +794,7 @@ class CheckerViewQt(QWidget):
 
         # Sélecteur vitesse
         sf = QFrame()
+        self._spd_frame = sf
         sf.setStyleSheet('QFrame{background:#222;border:1px solid #444;'
                          'border-radius:5px;}')
         sr = QHBoxLayout(sf)
@@ -1542,6 +1554,95 @@ class CheckerViewQt(QWidget):
                 self.gcode_view.setTextCursor(cur)
                 self.gcode_view.ensureCursorVisible()
         except Exception: pass
+
+    # ══════════════════════════════════════════════════════════════
+    #  THÈME
+    # ══════════════════════════════════════════════════════════════
+
+    def apply_theme(self, colors: dict):
+        is_dark    = colors.get('suffix', '_DARK') == '_DARK'
+        text       = colors.get('text',       '#ffffff' if is_dark else '#000000')
+        text_sec   = colors.get('text_secondary', '#aaaaaa' if is_dark else '#555555')
+        bg_main    = '#1e1e1e' if is_dark else '#f0f0f0'
+        bg_card    = '#252525' if is_dark else '#e0e0e0'
+        bg_right   = '#111111' if is_dark else '#d8d8d8'
+        bg_entry   = '#1a1a1a' if is_dark else '#ffffff'
+        bg_spd     = '#222222' if is_dark else '#e8e8e8'
+        border     = '#333333' if is_dark else '#cccccc'
+        border_spd = '#444444' if is_dark else '#bbbbbb'
+        gcode_col  = '#00ff00' if is_dark else '#006600'
+        btn_dark_bg  = '#444444' if is_dark else '#cccccc'
+        btn_dark_hov = '#555555' if is_dark else '#b8b8b8'
+
+        # ── Widget racine ─────────────────────────────────────────
+        self.setStyleSheet(f'background:{bg_main}; color:{text};')
+
+        # ── Panneau gauche ────────────────────────────────────────
+        if hasattr(self, 'left'):
+            self.left.setStyleSheet(
+                f'QFrame#checkerLeft{{background:{bg_main};border-right:1px solid {border};}}'
+            )
+
+        # ── Cadre fichier ─────────────────────────────────────────
+        if hasattr(self, '_file_frame'):
+            self._file_frame.setStyleSheet(
+                f'QFrame{{background:{bg_card};border-radius:6px;border:1px solid {border};}}'
+            )
+
+        # ── Labels ────────────────────────────────────────────────
+        if hasattr(self, 'lbl_file'):
+            self.lbl_file.setStyleSheet(f'color:{text_sec};font-size:10px;border:none;')
+        if hasattr(self, 'lbl_time'):
+            self.lbl_time.setStyleSheet(
+                f'color:{text};font-size:9px;font-weight:bold;background:transparent;border:none;'
+            )
+
+        # ── G-Code view ───────────────────────────────────────────
+        if hasattr(self, 'gcode_view'):
+            self.gcode_view.setStyleSheet(
+                f'QPlainTextEdit{{background:{bg_entry};color:{gcode_col};'
+                f'font-family:Consolas;border:1px solid {border};border-radius:3px;}}'
+            )
+
+        # ── Boutons ───────────────────────────────────────────────
+        if hasattr(self, 'btn_cancel'):
+            btn_cancel_bg  = '#333333' if is_dark else '#d0d0d0'
+            btn_cancel_hov = '#444444' if is_dark else '#bcbcbc'
+            self.btn_cancel.setStyleSheet(self._gbtn(btn_cancel_bg, btn_cancel_hov))
+        if hasattr(self, 'btn_rew'):
+            self.btn_rew.setStyleSheet(self._gbtn(btn_dark_bg, btn_dark_hov))
+
+        # ── Barre de vitesse ──────────────────────────────────────
+        if hasattr(self, '_spd_frame') and self._spd_frame:
+            self._spd_frame.setStyleSheet(
+                f'QFrame{{background:{bg_spd};border:1px solid {border_spd};border-radius:5px;}}'
+            )
+            for lbl in self._spd_frame.findChildren(QLabel):
+                lbl.setStyleSheet(f'color:{text};font-weight:bold;font-size:9px;border:none;')
+        if hasattr(self, '_spd_btns'):
+            spd_style = (
+                f'QPushButton{{background:{bg_card};color:{text_sec};'
+                f'border:1px solid {border_spd};border-radius:3px;'
+                f'padding:0px 4px;font-size:8px;min-width:18px;max-width:30px;}}'
+                f'QPushButton:checked{{background:#1f538d;color:white;border-color:#2a6dbd;}}'
+                f'QPushButton:hover:!checked{{background:{btn_dark_bg};color:{text};}}'
+            )
+            for b in self._spd_btns.values():
+                b.setStyleSheet(spd_style)
+
+        # ── Barre de progression ──────────────────────────────────
+        if hasattr(self, 'prog_bar'):
+            pb_bg = '#333333' if is_dark else '#cccccc'
+            self.prog_bar.setStyleSheet(
+                f'QProgressBar{{background:{pb_bg};border-radius:7px;border:none;}}'
+                f'QProgressBar::chunk{{background:#27ae60;border-radius:7px;}}'
+            )
+
+        # ── Panneau droit + canvas ────────────────────────────────
+        if hasattr(self, '_right_widget'):
+            self._right_widget.setStyleSheet(f'background:{bg_right};')
+        if hasattr(self, 'canvas'):
+            self.canvas.set_theme(bg_right)
 
     # ══════════════════════════════════════════════════════════════
     #  EXPORT

@@ -70,7 +70,14 @@ class _HistogramWidget(QWidget):
         self._label_power = "Power"
         self._label_count = "Pixel count"
         self._label_title = "Power Distribution"
+        self._bg_color    = "#202020"
+        self._fg_color    = "#888888"
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+    def set_theme(self, bg: str, fg: str):
+        self._bg_color = bg
+        self._fg_color = fg
+        self.update()
 
     def update_data(self, matrix, v_min, v_max,
                     label_title="Power Distribution",
@@ -101,10 +108,10 @@ class _HistogramWidget(QWidget):
         qp = QPainter(self)
         qp.setRenderHint(QPainter.RenderHint.Antialiasing)
         W, H = self.width(), self.height()
-        qp.fillRect(0, 0, W, H, QColor("#202020"))
+        qp.fillRect(0, 0, W, H, QColor(self._bg_color))
 
         if self._matrix is None:
-            qp.setPen(QColor("#555"))
+            qp.setPen(QColor(self._fg_color))
             qp.setFont(QFont("Arial", 10))
             qp.drawText(0, 0, W, H, Qt.AlignmentFlag.AlignCenter, "—")
             qp.end()
@@ -275,11 +282,18 @@ class _ColorbarWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._v_min  = 0.0
-        self._v_max  = 255.0
-        self._label  = "Laser Power"
+        self._v_min   = 0.0
+        self._v_max   = 255.0
+        self._label   = "Laser Power"
+        self._bg_color = "#1e1e1e"
+        self._fg_color = "#888888"
         self.setFixedWidth(52)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+
+    def set_theme(self, bg: str, fg: str):
+        self._bg_color = bg
+        self._fg_color = fg
+        self.update()
 
     def set_range(self, v_min, v_max, label="Laser Power"):
         self._v_min = float(v_min)
@@ -290,7 +304,7 @@ class _ColorbarWidget(QWidget):
     def paintEvent(self, _):
         qp = QPainter(self)
         W, H = self.width(), self.height()
-        qp.fillRect(0, 0, W, H, QColor("#1e1e1e"))
+        qp.fillRect(0, 0, W, H, QColor(self._bg_color))
 
         tm, bm = 12, 12
         bar_x  = 20
@@ -306,7 +320,7 @@ class _ColorbarWidget(QWidget):
         grad.setColorAt(1.0, QColor("#ffffff"))
         qp.fillRect(bar_x, tm, bar_w, bar_h, QBrush(grad))
 
-        qp.setPen(QPen(QColor("#555"), 1))
+        qp.setPen(QPen(QColor(self._fg_color), 1))
         qp.drawRect(bar_x, tm, bar_w - 1, bar_h - 1)
 
         # Ticks
@@ -314,7 +328,7 @@ class _ColorbarWidget(QWidget):
         ticks = [(0.0, self._v_max), (0.5, (self._v_max + self._v_min) / 2), (1.0, self._v_min)]
         for ratio, val in ticks:
             py = int(tm + ratio * bar_h)
-            qp.setPen(QPen(QColor("#888"), 1))
+            qp.setPen(QPen(QColor(self._fg_color), 1))
             qp.drawLine(bar_x - 3, py, bar_x, py)
             s = f"{int(val)}" if val == int(val) else f"{val:.1f}"
             qp.drawText(0, py - 7, bar_x - 4, 14,
@@ -324,7 +338,7 @@ class _ColorbarWidget(QWidget):
         qp.save()
         qp.translate(W - 4, tm + bar_h // 2)
         qp.rotate(-90)
-        qp.setPen(QColor("#888"))
+        qp.setPen(QColor(self._fg_color))
         qp.setFont(QFont("Arial", 8))
         qp.drawText(-50, -6, 100, 13, Qt.AlignmentFlag.AlignCenter, self._label)
         qp.restore()
@@ -346,12 +360,14 @@ class _RasterCanvas(PanZoomMixin, QWidget):
         self.init_pan_zoom(zoom_min=0.10, zoom_max=30.0, zoom_step=1.15)
         self.setMouseTracking(True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setStyleSheet("background:#1e1e1e;")
+        self._bg_color = "#1e1e1e"
+        self.setStyleSheet(f"background:{self._bg_color};")
 
         self._fig        = fig
         self._pixmap     = None
         self._auto_fit   = False
         self._fit_next   = False
+        self._needs_fit  = False
 
         self._mpl_canvas = FigureCanvas(fig)
         self._mpl_canvas.setParent(self)
@@ -436,10 +452,11 @@ class _RasterCanvas(PanZoomMixin, QWidget):
 
     def paintEvent(self, _):
         qp = QPainter(self)
-        qp.fillRect(0, 0, self.width(), self.height(), QColor("#1e1e1e"))
+        qp.fillRect(0, 0, self.width(), self.height(), QColor(self._bg_color))
 
         if self._pixmap is None:
-            qp.setPen(QColor("#444"))
+            ph_col = "#444444" if self._bg_color[1:3].lower() < "88" else "#aaaaaa"
+            qp.setPen(QColor(ph_col))
             qp.setFont(QFont("Arial", 11))
             qp.drawText(0, 0, self.width(), self.height(),
                         Qt.AlignmentFlag.AlignCenter, "Select an image…")
@@ -619,11 +636,17 @@ class RasterViewQt(QWidget):
         self.controls        = {}
         self.translation_map = {}
 
+        # Couleurs thème — dark par défaut, mis à jour par apply_theme
+        self._theme_colors = {
+            'text': '#dddddd', 'text_secondary': '#888888',
+            'bg_card': '#2b2b2b', 'border': '#333333', 'suffix': '_DARK',
+        }
+
         self._debounce_timer = QTimer(self)
         self._debounce_timer.setSingleShot(True)
         self._debounce_timer.timeout.connect(self._do_update_preview)
 
-        self._fig      = Figure(figsize=(5, 5), facecolor="#1e1e1e")
+        self._fig      = Figure(figsize=(5, 5), facecolor="#111111")
         self._ax       = None
         self._img_plot = None
         self._cbar     = None
@@ -666,10 +689,12 @@ class RasterViewQt(QWidget):
 
     def _build_sidebar(self):
         sidebar = QFrame()
+        self._sidebar = sidebar
+        sidebar.setObjectName("rasterSidebar")
         sidebar.setFixedWidth(390)
         sidebar.setStyleSheet(
-            "QFrame{background:#1e1e1e;border-right:1px solid #333;}"
-            "QLabel{border:none;background:transparent;color:#ddd;}"
+            "QFrame#rasterSidebar{background:#1e1e1e;border-right:1px solid #333;}"
+            "QFrame#rasterSidebar > QLabel{border:none;background:transparent;color:#ddd;}"
         )
         lo = QVBoxLayout(sidebar)
         lo.setContentsMargins(8, 8, 8, 8)
@@ -735,6 +760,7 @@ class RasterViewQt(QWidget):
 
     def _make_file_buttons(self):
         f = QFrame()
+        self._file_buttons_frame = f
         f.setStyleSheet("QFrame{background:#333;border-radius:6px;}")
         lo = QVBoxLayout(f)
         lo.setContentsMargins(6, 6, 6, 6)
@@ -825,6 +851,15 @@ class RasterViewQt(QWidget):
         lo.addLayout(sw_row)
 
         self._add_slider_input(lo, self.t.get("line_step", "Line Step"), 0.01, 1.0, 0.1307, "line_step", precision=4)
+        # Rendre line_step non-éditable (valeur pilotée par hor_linestep / ver_linestep)
+        if "line_step" in self.controls:
+            ctrl = self.controls["line_step"]
+            ctrl["entry"].setReadOnly(True)
+            ctrl["entry"].setStyleSheet(
+                "QLineEdit{background:#2a2a2a;border:1px solid #333;"
+                "border-radius:4px;color:#888;padding:2px;}"
+            )
+            ctrl["slider"].setEnabled(False)
         self._add_slider_input(lo, self.t.get("dpi_resolution", "DPI"), 10, 1200, 254, "dpi", is_int=True)
         lo.addSpacing(6)
 
@@ -876,6 +911,7 @@ class RasterViewQt(QWidget):
         lo = self._tab_gcode._inner
 
         sec_frame = QFrame()
+        self._gcode_sec_frame = sec_frame
         sec_frame.setStyleSheet(
             "QFrame{background:#2b2b2b;border:1px solid #555;border-radius:8px;}"
             "QLabel{border:none;background:transparent;}"
@@ -1022,6 +1058,7 @@ class RasterViewQt(QWidget):
 
     def _build_right_panel(self):
         w = QWidget()
+        self._right_panel = w
         w.setStyleSheet("background:#111;")
         lo = QVBoxLayout(w)
         lo.setContentsMargins(4, 4, 4, 4)
@@ -1058,6 +1095,7 @@ class RasterViewQt(QWidget):
 
         # Stats + Histogramme
         stats_frame = QFrame()
+        self._stats_frame = stats_frame
         stats_frame.setStyleSheet(
             "QFrame{background:#202020;border:1px solid #333;border-radius:6px;}"
         )
@@ -1092,7 +1130,7 @@ class RasterViewQt(QWidget):
         self._ax = self._fig.add_subplot(111)
         self._fig.subplots_adjust(left=0.10, right=0.90, top=0.90, bottom=0.10)
 
-        self._ax.set_facecolor("#1e1e1e")
+        self._ax.set_facecolor("#111111")
         self._ax.tick_params(axis="both", colors="#888888", labelsize=9)
         self._ax.set_axisbelow(False)
         self._ax.grid(True, color="#ffffff", linestyle=":", linewidth=0.5, alpha=0.3, zorder=10)
@@ -1178,7 +1216,7 @@ class RasterViewQt(QWidget):
 
         combo = QComboBox()
         combo.setFixedHeight(30)
-        combo.setStyleSheet(get_combo_stylesheet(_ARROW_PATH))
+        combo.setStyleSheet(self._combo_style())
 
         is_tuple = options and isinstance(options[0], tuple)
         if is_tuple:
@@ -1207,24 +1245,53 @@ class RasterViewQt(QWidget):
                 f"border:none;font-weight:bold;}}"
                 f"QPushButton:hover{{background:{hover};}}")
 
-    @staticmethod
-    def _seg_btn_style():
+    def _seg_btn_style(self):
+        is_dark  = self._theme_colors.get('suffix', '_DARK') == '_DARK'
+        seg_bg   = "#333333" if is_dark else "#e0e0e0"
+        seg_col  = "#aaaaaa" if is_dark else "#555555"
+        seg_brd  = "#555555" if is_dark else "#bbbbbb"
+        hover_bg = "#444444" if is_dark else "#d0d0d0"
+        col_act  = "white"   if is_dark else "#111111"
         return (
-            "QPushButton{background:#333;color:#aaa;border:1px solid #555;"
-            "border-radius:4px;padding:2px 8px;min-width:60px;font-size:11px;}"
-            "QPushButton:checked{background:#1F6AA5;color:white;border-color:#2a6dbd;}"
-            "QPushButton:hover:!checked{background:#444;color:white;}"
+            f"QPushButton{{background:{seg_bg};color:{seg_col};"
+            f"border:1px solid {seg_brd};border-radius:4px;"
+            f"padding:2px 8px;min-width:60px;font-size:11px;}}"
+            f"QPushButton:checked{{background:#1F6AA5;color:white;border-color:#2a6dbd;}}"
+            f"QPushButton:hover:!checked{{background:{hover_bg};color:{col_act};}}"
         )
 
-    @staticmethod
-    def _entry_style():
-        return ("QLineEdit{background:#1e1e1e;border:1px solid #444;"
-                "border-radius:4px;color:white;padding:2px;}")
+    def _entry_style(self):
+        is_dark   = self._theme_colors.get('suffix', '_DARK') == '_DARK'
+        bg        = "#1e1e1e" if is_dark else "#ffffff"
+        border    = "#444444" if is_dark else "#cccccc"
+        col       = "white"   if is_dark else "#111111"
+        return (f"QLineEdit{{background:{bg};border:1px solid {border};"
+                f"border-radius:4px;color:{col};padding:2px;}}")
 
-    @staticmethod
-    def _textedit_style():
-        return ("QTextEdit{background:#1a1a1a;border:1px solid #444;"
-                "border-radius:6px;color:#8fbdf0;font-family:Consolas;font-size:10px;padding:4px;}")
+    def _textedit_style(self):
+        is_dark = self._theme_colors.get('suffix', '_DARK') == '_DARK'
+        bg      = "#1a1a1a" if is_dark else "#ffffff"
+        border  = "#444444" if is_dark else "#cccccc"
+        return (f"QTextEdit{{background:{bg};border:1px solid {border};"
+                f"border-radius:6px;color:#8fbdf0;"
+                f"font-family:Consolas;font-size:10px;padding:4px;}}")
+
+    def _combo_style(self):
+        is_dark   = self._theme_colors.get('suffix', '_DARK') == '_DARK'
+        bg        = "#1e1e1e" if is_dark else "#ffffff"
+        border    = "#444444" if is_dark else "#cccccc"
+        col       = "white"   if is_dark else "#111111"
+        sel       = "#444444" if is_dark else "#d0e4f7"
+        arrow     = _ARROW_PATH.replace("\\", "/")
+        return (
+            f"QComboBox{{background:{bg};border:1px solid {border};"
+            f"border-radius:5px;padding:3px 30px 3px 10px;color:{col};}}"
+            f"QComboBox::drop-down{{subcontrol-origin:padding;"
+            f"subcontrol-position:top right;width:25px;border:none;background:transparent;}}"
+            f"QComboBox::down-arrow{{image:url({arrow});width:12px;height:8px;}}"
+            f"QComboBox QAbstractItemView{{background:{bg};color:{col};"
+            f"selection-background-color:{sel};border:1px solid {border};}}"
+        )
 
     # ── Handlers ──────────────────────────────────────────────────────
 
@@ -1238,7 +1305,23 @@ class RasterViewQt(QWidget):
         else:
             self.width_label_widget.setText(self.t.get("target_width", "Target Width"))
             self.lbl_force_width.setText(self.t.get("force_width", "Force Exact Width"))
+        self._sync_line_step_from_mode(key)
         self._schedule_preview()
+
+    def _sync_line_step_from_mode(self, mode):
+        """Met à jour le champ line_step (lecture seule) depuis hor_linestep ou ver_linestep."""
+        setting_key = "hor_linestep" if mode == "horizontal" else "ver_linestep"
+        raw = self.controller.config_manager.get_item("machine_settings", setting_key)
+        try:
+            val = float(raw) if raw is not None else 0.1307
+        except (ValueError, TypeError):
+            val = 0.1307
+        if "line_step" in self.controls:
+            ctrl = self.controls["line_step"]
+            ctrl["entry"].setText(f"{val:.4f}")
+            sl = ctrl.get("slider")
+            if sl and sl is not ctrl["entry"]:
+                sl.setValue(int(val * 100))
 
     def _on_origin_change(self, value):
         self.custom_offset_frame.setVisible(value == "Custom")
@@ -1722,6 +1805,9 @@ class RasterViewQt(QWidget):
         self._apply_settings(raster_data)
         self._loading = False
 
+        # Synchronise line_step depuis hor/ver_linestep selon le mode actif
+        self._sync_line_step_from_mode(self._raster_mode)
+
         self.refresh_global_previews()
 
     def _collect_settings(self):
@@ -1823,10 +1909,15 @@ class RasterViewQt(QWidget):
     def apply_lock_state(self):
         self.lock_btn.setText("🔒" if self.is_locked else "🔓")
         self._machine_container.setEnabled(not self.is_locked)
-        style = ("background:#444;" if self.is_locked else "background:#D32F2F;")
+        is_dark   = self._theme_colors.get('suffix', '_DARK') == '_DARK'
+        locked_bg = "#444444" if is_dark else "#bbbbbb"
+        hover_bg  = "#666666" if is_dark else "#999999"
+        locked_col = "white"  if is_dark else "#111111"
+        style = locked_bg if self.is_locked else "#D32F2F"
         self.lock_btn.setStyleSheet(
-            f"QPushButton{{{style}color:white;border-radius:4px;border:none;font-size:13px;}}"
-            "QPushButton:hover{background:#666;}"
+            f"QPushButton{{background:{style};color:{locked_col};"
+            f"border-radius:4px;border:none;font-size:13px;}}"
+            f"QPushButton:hover{{background:{hover_bg};}}"
         )
 
     # ── Global previews ───────────────────────────────────────────────
@@ -1840,6 +1931,193 @@ class RasterViewQt(QWidget):
             gf if gf else self.t.get("no_global_footer", "(Machine Settings Footer…)"))
 
     # ── Traduction dynamique ──────────────────────────────────────────
+
+    def apply_theme(self, colors):
+        """Met à jour toutes les couleurs de la vue selon le thème reçu."""
+        self._theme_colors = colors
+        is_dark = colors.get("suffix", "_DARK") == "_DARK"
+
+        bg_main   = "#1e1e1e"   if is_dark else "#f0f0f0"
+        bg_card   = colors.get("bg_card",  "#2b2b2b" if is_dark else "#f0f0f0")
+        border    = colors.get("border",   "#333333" if is_dark else "#cccccc")
+        text      = colors.get("text",     "#dddddd" if is_dark else "#111111")
+        text_sec  = colors.get("text_secondary", "#888888" if is_dark else "#555555")
+
+        # Couleurs dérivées selon dark/light
+        bg_tabs   = "#252525"   if is_dark else "#f5f5f5"
+        bg_tab    = "#2b2b2b"   if is_dark else "#e0e0e0"
+        bg_right  = "#111111"   if is_dark else "#e8e8e8"
+        bg_stats  = "#202020"   if is_dark else "#f0f0f0"
+        bg_prev   = "#222222"   if is_dark else "#eeeeee"
+        col_prev  = "#666666"   if is_dark else "#999999"
+        btn_prof  = "#444444"   if is_dark else "#cccccc"
+        btn_prof_text = "white" if is_dark else "#222222"
+        sec_brd   = "#555555"   if is_dark else "#bbbbbb"
+        stats_col = "#aaaaaa"   if is_dark else "#444444"
+        canvas_fc = bg_right
+        ax_col    = "#888888"   if is_dark else "#444444"
+        spine_col = "#333333"   if is_dark else "#cccccc"
+        ph_col    = "#444444"   if is_dark else "#aaaaaa"
+        entry_col = "white"     if is_dark else "#111111"
+
+        # ── Sidebar ───────────────────────────────────────────────────
+        if hasattr(self, "_sidebar"):
+            self._sidebar.setStyleSheet(
+                f"QFrame#rasterSidebar{{background:{bg_main};border-right:1px solid {border};}}"
+                f"QFrame#rasterSidebar > QLabel{{border:none;background:transparent;color:{text};}}"
+            )
+
+        # ── Cadre boutons fichiers ────────────────────────────────────
+        if hasattr(self, "_file_buttons_frame"):
+            self._file_buttons_frame.setStyleSheet(
+                f"QFrame{{background:{btn_prof};border-radius:6px;}}"
+            )
+
+        # ── Boutons Import/Export profil ──────────────────────────────
+        prof_style = (
+            f"QPushButton{{background:{btn_prof};color:{btn_prof_text};"
+            f"border-radius:6px;border:none;font-weight:bold;}}"
+            f"QPushButton:hover{{background:{bg_card};}}"
+        )
+        if hasattr(self, "btn_load_prof"):
+            self.btn_load_prof.setStyleSheet(prof_style)
+        if hasattr(self, "btn_save_prof"):
+            self.btn_save_prof.setStyleSheet(prof_style)
+
+        # ── Onglets ───────────────────────────────────────────────────
+        tab_col = "#aaaaaa" if is_dark else "#555555"
+        if hasattr(self, "_tabs"):
+            self._tabs.setStyleSheet(f"""
+                QTabWidget::pane {{ border: 1px solid {border}; background: {bg_tabs}; }}
+                QTabBar::tab {{
+                    background: {bg_tab}; color: {tab_col}; padding: 5px 12px;
+                    border: 1px solid {border}; border-bottom: none;
+                    border-radius: 4px 4px 0 0;
+                }}
+                QTabBar::tab:selected {{ background: #1F6AA5; color: white; }}
+            """)
+            # Forcer le fond des scrollareas et containers internes des tabs
+            for tab in [self._tab_geom, self._tab_img, self._tab_laser, self._tab_gcode]:
+                tab.setStyleSheet(f"background:{bg_tabs};")
+                if tab.widget():
+                    tab.widget().setStyleSheet(f"background:{bg_tabs};")
+
+        # ── Labels dans les onglets (via findChildren) ────────────────
+        for tab in [self._tab_geom, self._tab_img, self._tab_laser, self._tab_gcode]:
+            for lbl in tab.findChildren(QLabel):
+                if not lbl.styleSheet().__contains__("font-weight:bold") and \
+                   not lbl.styleSheet().__contains__("FF9500"):
+                    lbl.setStyleSheet(f"color:{text};font-size:12px;border:none;background:transparent;")
+
+        # ── Boutons raster mode ───────────────────────────────────────
+        for btn in self._btn_raster.values():
+            btn.setStyleSheet(self._seg_btn_style())
+
+        # ── QLineEdit des contrôles ───────────────────────────────────
+        entry_style = self._entry_style()
+        for ctrl in self.controls.values():
+            if "entry" in ctrl and isinstance(ctrl["entry"], QLineEdit):
+                ctrl["entry"].setStyleSheet(entry_style)
+
+        # ── QComboBox des contrôles ───────────────────────────────────
+        combo_style = self._combo_style()
+        for ctrl in self.controls.values():
+            if "combo" in ctrl:
+                ctrl["combo"].setStyleSheet(combo_style)
+
+        # ── Sliders (couleur neutre, le style Qt platform gère le reste)
+        # pas de setStyleSheet ici pour garder le look natif
+
+        # ── Label line_step informatif ────────────────────────────────
+        if hasattr(self, "_line_step_value_lbl"):
+            ls_bg  = "#2a2a2a" if is_dark else "#e8e8e8"
+            ls_brd = "#333333" if is_dark else "#cccccc"
+            self._line_step_value_lbl.setStyleSheet(
+                f"color:{text_sec};font-size:12px;font-family:Consolas;"
+                f"background:{ls_bg};border:1px solid {ls_brd};"
+                "border-radius:4px;padding:2px 8px;"
+            )
+
+        # ── Champs texte libres (header/footer) ───────────────────────
+        for te in [self.txt_header, self.txt_footer]:
+            te.setStyleSheet(self._textedit_style())
+
+        # ── Previews header/footer globaux ────────────────────────────
+        prev_style = (
+            f"QTextEdit{{background:{bg_prev};color:{col_prev};"
+            f"border:none;font-family:Consolas;font-size:9px;}}"
+        )
+        for te in [self.txt_global_header_preview, self.txt_global_footer_preview]:
+            te.setStyleSheet(prev_style)
+
+        # ── Entrées simples (pause_cmd, frame_power) ──────────────────
+        for entry in [self.pause_cmd_entry, self.frame_power_entry]:
+            entry.setStyleSheet(self._entry_style())
+
+        # ── Section machine params (gcode tab) ───────────────────────
+        if hasattr(self, "_gcode_sec_frame"):
+            self._gcode_sec_frame.setStyleSheet(
+                f"QFrame{{background:{bg_card};border:1px solid {sec_brd};border-radius:8px;}}"
+                f"QLabel{{border:none;background:transparent;}}"
+            )
+
+        # ── Bouton cadenas ────────────────────────────────────────────
+        if hasattr(self, "lock_btn"):
+            self.apply_lock_state()
+
+        # ── Panneau droit ─────────────────────────────────────────────
+        if hasattr(self, "_right_panel"):
+            self._right_panel.setStyleSheet(f"background:{bg_right};")
+
+        # ── Canvas (fond derrière l'image) — après le parent ─────────
+        if hasattr(self, "_canvas"):
+            self._canvas._bg_color = bg_right
+            self._canvas.setStyleSheet(f"background:{bg_right};")
+            self._canvas.update()
+        if hasattr(self, "_stats_frame"):
+            self._stats_frame.setStyleSheet(
+                f"QFrame{{background:{bg_stats};border:1px solid {border};border-radius:6px;}}"
+            )
+        for lbl in self.stats_labels:
+            lbl.setStyleSheet(
+                f"color:{stats_col};font-family:Consolas;font-size:12px;"
+                "background:transparent;border:none;"
+            )
+
+        # ── Frame stats ───────────────────────────────────────────────
+        if hasattr(self, "_cbar_widget"):
+            self._cbar_widget.set_theme(bg_right, text_sec)
+
+        # ── Histogramme ───────────────────────────────────────────────
+        if hasattr(self, "_hist_widget"):
+            self._hist_widget.set_theme(bg_stats, text_sec)
+
+        # ── Bouton reset view ─────────────────────────────────────────
+        if hasattr(self, "btn_reset_view"):
+            rv_bg    = "#2c2c2c" if is_dark else "#dcdcdc"
+            rv_hover = "#3a3a3a" if is_dark else "#c8c8c8"
+            rv_col   = "#aaaaaa" if is_dark else "#333333"
+            self.btn_reset_view.setStyleSheet(
+                f"QPushButton{{background:{rv_bg};color:{rv_col};border:none;"
+                f"border-radius:4px;font-size:10px;}}"
+                f"QPushButton:hover{{background:{rv_hover};color:{entry_col};}}"
+            )
+            from gui.utils_qt import get_svg_pixmap
+            from PyQt6.QtCore import QSize
+            fit_pix = get_svg_pixmap(SVG_ICONS["FIT"], QSize(24, 24), text)
+            if not fit_pix.isNull():
+                self.btn_reset_view.setIcon(QIcon(fit_pix))
+
+        # ── Matplotlib (canvas + axes) ────────────────────────────────
+        if hasattr(self, "_fig") and self._ax is not None:
+            self._fig.set_facecolor(canvas_fc)
+            self._ax.set_facecolor(canvas_fc)
+            self._ax.tick_params(axis="both", colors=ax_col)
+            for spine in self._ax.spines.values():
+                spine.set_edgecolor(spine_col)
+            if self._placeholder_text:
+                self._placeholder_text.set_color(ph_col)
+            self._canvas.redraw()
 
     def update_texts(self):
         lang = self.controller.config_manager.get_item("machine_settings", "language", "English")

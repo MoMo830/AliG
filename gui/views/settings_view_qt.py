@@ -26,7 +26,14 @@ class SettingsViewQt(QWidget):
             self.texts = TRANSLATIONS["English"]["settings"]
 
         self.controls = {}
-        self.loading = True  # Bloque les événements durant la création
+        self._section_frames = []  # Références directes aux frames de section
+        self.loading = True
+
+        # Couleurs du thème — initialisées dark, mises à jour par apply_theme
+        self._theme_colors = {
+            'text': '#ffffff', 'text_secondary': '#aaaaaa',
+            'bg_card': '#2b2b2b', 'border': '#3d3d3d', 'suffix': '_DARK',
+        }
 
         # 2. Configuration du Layout Principal
         self.main_layout = QVBoxLayout(self)
@@ -42,6 +49,53 @@ class SettingsViewQt(QWidget):
         
         # 5. Fin de l'initialisation
         self.loading = False      # Autorise maintenant le mark_as_changed
+
+    # ── Helpers de style (lisent _theme_colors) ──────────────────────────
+
+    def _c(self, key, dark_val, light_val):
+        is_dark = self._theme_colors.get('suffix', '_DARK') == '_DARK'
+        return dark_val if is_dark else light_val
+
+    def _entry_style(self):
+        bg  = self._c('', '#1e1e1e', '#ffffff')
+        brd = self._c('', '#444444', '#bbbbbb')
+        col = self._theme_colors.get('text', '#ffffff')
+        return (f"QLineEdit{{background-color:{bg};border:1px solid {brd};"
+                f"border-radius:4px;color:{col};padding:3px;}}")
+
+    def _combo_style(self):
+        bg  = self._c('', '#1e1e1e', '#ffffff')
+        brd = self._c('', '#444444', '#bbbbbb')
+        col = self._theme_colors.get('text', '#ffffff')
+        sel = self._c('', '#444444', '#d0e4f7')
+        arrow_path = SVG_ICONS["ARROW_DOWN"].replace("\\", "/")
+        return (
+            f"QComboBox{{background-color:{bg};border:1px solid {brd};"
+            f"border-radius:5px;padding:3px 30px 3px 10px;color:{col};}}"
+            f"QComboBox::drop-down{{subcontrol-origin:padding;subcontrol-position:top right;"
+            f"width:25px;border:none;background:transparent;}}"
+            f"QComboBox::down-arrow{{image:url({arrow_path});width:12px;height:8px;}}"
+            f"QComboBox QAbstractItemView{{background-color:{bg};color:{col};"
+            f"selection-background-color:{sel};border:1px solid {brd};}}"
+        )
+
+    def _textedit_style(self):
+        bg  = self._c('', '#1a1a1a', '#f8f8f8')
+        brd = self._c('', '#444444', '#bbbbbb')
+        return (f"QTextEdit{{background-color:{bg};border:1px solid {brd};"
+                f"border-radius:6px;color:#8fbdf0;padding:5px;}}")
+
+    def _label_row_style(self):
+        col = self._theme_colors.get('text', '#ffffff')
+        return f"color:{col};font-size:13px;border:none;background:transparent;"
+
+    def _section_frame_style(self):
+        bg  = self._theme_colors.get('bg_card', '#2b2b2b')
+        brd = self._theme_colors.get('border', '#3d3d3d')
+        col = self._theme_colors.get('text', '#ffffff')
+        return (f"QFrame{{background-color:{bg};border:1px solid {brd};"
+                f"border-radius:12px;}}"
+                f"QLabel{{border:none;background:transparent;color:{col};}}")
 
     def setup_header(self):
         """Crée l'en-tête avec titre et bouton Sauvegarder"""
@@ -190,10 +244,8 @@ class SettingsViewQt(QWidget):
         """Crée un bloc section et enregistre le label pour la traduction centralisée"""
         section_frame = QFrame()
         section_frame.setObjectName("sectionFrame")
-        section_frame.setStyleSheet("""
-            QFrame { background-color: #2b2b2b; border: 1px solid #3d3d3d; border-radius: 12px; }
-            QLabel { border: none; background: transparent; } 
-        """)
+        section_frame.setStyleSheet(self._section_frame_style())
+        self._section_frames.append(section_frame)
         sec_layout = QVBoxLayout(section_frame)
         sec_layout.setContentsMargins(15, 15, 15, 15)
         sec_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -250,7 +302,7 @@ class SettingsViewQt(QWidget):
             # Cas sans clé technique (juste du texte statique)
             lbl = QLabel(label_key)
 
-        lbl.setStyleSheet("color: #ddd; font-size: 13px;")
+        lbl.setStyleSheet(self._label_row_style())
         
         row_layout.addWidget(lbl)
         row_layout.addStretch()
@@ -261,15 +313,7 @@ class SettingsViewQt(QWidget):
         """Crée une ligne avec un Label et un QLineEdit sans valeur par défaut externe"""
         edit = QLineEdit()
         edit.setFixedWidth(100)
-        edit.setStyleSheet("""
-            QLineEdit { 
-                background-color: #1e1e1e; 
-                border: 1px solid #444; 
-                border-radius: 4px; 
-                color: white; 
-                padding: 3px; 
-            }
-        """)
+        edit.setStyleSheet(self._entry_style())
 
         # On initialise à 0 par défaut, formaté selon la précision
         initial_value = 0
@@ -414,14 +458,7 @@ class SettingsViewQt(QWidget):
         entry = QLineEdit(str(initial_val))
         entry.setFixedWidth(50)
         entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        entry.setStyleSheet("""
-            QLineEdit { 
-                background-color: #1e1e1e; 
-                border: 1px solid #444; 
-                border-radius: 4px; 
-                color: white; 
-            }
-        """)
+        entry.setStyleSheet(self._entry_style())
 
         # --- GESTION DES CONNEXIONS ---
         
@@ -465,7 +502,8 @@ class SettingsViewQt(QWidget):
         # On va chercher la traduction de la clé (ex: "label_header")
         display_text = self.texts.get(label_key, label_key)
         lbl = QLabel(display_text)
-        lbl.setStyleSheet("color: #bbb; font-size: 11px; font-weight: bold; border: none; background: transparent;")
+        lbl.setStyleSheet(f"color:{self._theme_colors.get('text_secondary','#bbbbbb')};"
+                          "font-size:11px;font-weight:bold;border:none;background:transparent;")
         lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         
         # --- ENREGISTREMENT POUR LA TRADUCTION DYNAMIQUE ---
@@ -477,15 +515,7 @@ class SettingsViewQt(QWidget):
         text_edit = QTextEdit()
         text_edit.setFixedHeight(80)
         text_edit.setFont(QFont("Consolas", 10))
-        text_edit.setStyleSheet("""
-            QTextEdit {
-                background-color: #1a1a1a;
-                border: 1px solid #444;
-                border-radius: 6px;
-                color: #8fbdf0;
-                padding: 5px;
-            }
-        """)
+        text_edit.setStyleSheet(self._textedit_style())
         text_edit.textChanged.connect(self.mark_as_changed)
         
         v_box.addWidget(lbl)
@@ -502,36 +532,7 @@ class SettingsViewQt(QWidget):
         combo.addItems(options)
         combo.setFixedWidth(150)
         
-        # Correction du chemin de l'icône pour Windows/Linux
-        arrow_path = SVG_ICONS["ARROW_DOWN"].replace("\\", "/")
-        
-        combo.setStyleSheet(f"""
-            QComboBox {{
-                background-color: #1e1e1e;
-                border: 1px solid #444;
-                border-radius: 5px;
-                padding: 3px 30px 3px 10px;
-                color: white;
-            }}
-            QComboBox::drop-down {{
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 25px;
-                border: none;
-                background: transparent;
-            }}
-            QComboBox::down-arrow {{
-                image: url({arrow_path});
-                width: 12px;
-                height: 8px;
-            }}
-            QComboBox QAbstractItemView {{
-                background-color: #1e1e1e;
-                color: white;
-                selection-background-color: #444;
-                border: 1px solid #444;
-            }}
-        """)
+        combo.setStyleSheet(self._combo_style())
 
         combo.currentIndexChanged.connect(self.mark_as_changed)
 
@@ -723,30 +724,56 @@ class SettingsViewQt(QWidget):
 
     def apply_theme(self, colors):
         """Met à jour dynamiquement les couleurs de la vue Settings"""
-        # 1. Mise à jour du style des sections (les cadres)
-        # On utilise le sélecteur QFrame pour ne pas impacter les enfants
-        section_style = f"""
-            QFrame {{
-                background-color: {colors['bg_card']};
-                border: 1px solid {colors['border']};
-                border-radius: 12px;
-            }}
-            QLabel {{ border: none; background: transparent; color: {colors['text']}; }}
-        """
+        self._theme_colors = colors
 
-        # On parcourt tous les widgets pour trouver nos sections
-        # (Ou plus simplement, on réapplique le style aux frames stockées)
-        for widget in self.findChildren(QFrame):
-            if widget.objectName() == "sectionFrame":
-                widget.setStyleSheet(section_style)
+        is_dark  = colors.get('suffix', '_DARK') == '_DARK'
+        text     = colors.get('text', '#ffffff' if is_dark else '#000000')
+        text_sec = colors.get('text_secondary', '#aaaaaa' if is_dark else '#555555')
 
-        # 2. Mise à jour des labels de texte (Headers, Sliders, etc.)
-        # On force la couleur du texte et on enlève les bordures
-        label_style = f"color: {colors['text']}; border: none; background: transparent;"
+        # ── Vue racine ────────────────────────────────────────────
+        self.setStyleSheet("background-color: transparent;")
+
+        # ── Sections ─────────────────────────────────────────────
+        for frame in self._section_frames:
+            frame.setStyleSheet(self._section_frame_style())
+
+        # ── Labels ───────────────────────────────────────────────
         for lbl in self.findChildren(QLabel):
-            # On évite de toucher au titre principal s'il a un style spécifique
-            if lbl.objectName() != "headerTitle":
-                lbl.setStyleSheet(label_style)
-        
-        # 3. Mise à jour du fond de la vue elle-même (si besoin)
-        self.setStyleSheet(f"background-color: transparent;")
+            if lbl.objectName() == "headerTitle":
+                continue
+            if lbl.styleSheet() and '#3a9ad9' in lbl.styleSheet():
+                continue
+            if lbl.styleSheet() and 'font-weight:bold' in lbl.styleSheet().replace(' ', ''):
+                lbl.setStyleSheet(
+                    f"color:{text_sec};font-size:11px;font-weight:bold;"
+                    "border:none;background:transparent;"
+                )
+            else:
+                lbl.setStyleSheet(self._label_row_style())
+
+        # ── QLineEdit ─────────────────────────────────────────────
+        for w in self.findChildren(QLineEdit):
+            w.setStyleSheet(self._entry_style())
+
+        # ── QComboBox ─────────────────────────────────────────────
+        for w in self.findChildren(QComboBox):
+            w.setStyleSheet(self._combo_style())
+
+        # ── QTextEdit ─────────────────────────────────────────────
+        for w in self.findChildren(QTextEdit):
+            w.setStyleSheet(self._textedit_style())
+
+        # ── Boutons maintenance ───────────────────────────────────
+        if hasattr(self, 'btn_clear_data'):
+            btn_bg = '#444444' if is_dark else '#cccccc'
+            self.btn_clear_data.setStyleSheet(
+                f"QPushButton{{background-color:{btn_bg};color:{text};"
+                f"border-radius:6px;font-weight:bold;}}"
+                f"QPushButton:hover{{background-color:#942121;color:white;}}"
+            )
+        if hasattr(self, 'btn_reset_all'):
+            self.btn_reset_all.setStyleSheet(
+                f"QPushButton{{background-color:transparent;color:{text_sec};"
+                f"border:1px solid #8b0000;border-radius:6px;}}"
+                f"QPushButton:hover{{background-color:#8b0000;color:white;}}"
+            )

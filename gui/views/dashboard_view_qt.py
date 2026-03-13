@@ -240,9 +240,9 @@ class DashboardViewQt(QWidget):
         # layout.addWidget(title)
 
         # Zone Historique (Simplifiée pour l'instant)
-        history_label = QLabel(self.texts.get("history", "History"))
-        history_label.setStyleSheet("font-weight: bold; color: white; margin-top: 10px; background: transparent; border: none;")
-        layout.addWidget(history_label)
+        self.history_label = QLabel(self.texts.get("history", "History"))
+        self.history_label.setStyleSheet("font-weight: bold; color: white; margin-top: 10px; background: transparent; border: none;")
+        layout.addWidget(self.history_label)
 
         self.history_area = QScrollArea() 
         self.history_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -361,14 +361,22 @@ class DashboardViewQt(QWidget):
             col = i % max_columns
             
             container = QFrame()
-            container.setFixedHeight(220) 
-            container.setStyleSheet("""
-                QFrame { 
-                    background-color: #2b2b2b; 
+            container.setFixedHeight(220)
+            # Utilise les couleurs du thème courant si disponibles
+            _c = getattr(self, "_current_colors", None)
+            if _c:
+                bg   = _c["bg_card"]
+                brd  = _c["border"]
+            else:
+                bg   = "#2b2b2b"
+                brd  = "#3d3d3d"
+            container.setStyleSheet(f"""
+                QFrame {{ 
+                    background-color: {bg}; 
                     border-radius: 8px; 
-                    border: 1px solid #3d3d3d;
-                }
-                QFrame:hover { border-color: #1F6AA5; background-color: #333333; }
+                    border: 1px solid {brd};
+                }}
+                QFrame:hover {{ border-color: #1F6AA5; background-color: {bg}; }}
             """)
             
             v_layout = QVBoxLayout(container)
@@ -397,9 +405,9 @@ class DashboardViewQt(QWidget):
 
     def setup_stats(self, parent_layout):
         # 1. Création du conteneur principal
-        stats_frame = QFrame()
-        stats_frame.setFixedHeight(120) # Un peu plus haut pour laisser respirer les textes
-        stats_frame.setStyleSheet("""
+        self.stats_frame = QFrame()
+        self.stats_frame.setFixedHeight(120)
+        self.stats_frame.setStyleSheet("""
             QFrame {
                 background-color: #1e1e1e; 
                 border-radius: 15px; 
@@ -407,8 +415,7 @@ class DashboardViewQt(QWidget):
             }
         """)
         
-        # Layout horizontal pour répartir les 3 colonnes de stats
-        main_layout = QHBoxLayout(stats_frame)
+        main_layout = QHBoxLayout(self.stats_frame)
         main_layout.setContentsMargins(10, 10, 10, 10)
 
         # 2. Récupération et calcul des données (Logique conservée)
@@ -469,7 +476,7 @@ class DashboardViewQt(QWidget):
                 main_layout.addWidget(line)
 
         # Ajout du bloc complet au layout de la colonne de droite
-        parent_layout.addWidget(stats_frame)
+        parent_layout.addWidget(self.stats_frame)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -482,12 +489,65 @@ class DashboardViewQt(QWidget):
         from gui.utils_qt import get_svg_pixmap
         from PyQt6.QtCore import QSize
 
-        # 1. Mettre à jour le fond de la vue elle-même
-        # On utilise une version légèrement plus sombre ou claire pour le contraste
-        self.setStyleSheet(f"background-color: transparent;")
+        # Mémoriser les couleurs pour render_grid
+        self._current_colors = colors
 
-        # 2. Parcourir toutes les cartes de mode
-        # Supposons que vos cartes sont dans self.modes_layout
+        is_dark = colors["suffix"] == "_DARK"
+
+        # 1. Fond de la vue
+        self.setStyleSheet("background-color: transparent;")
+
+        # 2. Label "History"
+        if hasattr(self, "history_label"):
+            self.history_label.setStyleSheet(
+                f"font-weight: bold; color: {colors['text']}; "
+                "margin-top: 10px; background: transparent; border: none;"
+            )
+
+        # 3. Cadre thumbnails (history_area)
+        if hasattr(self, "history_area"):
+            scrollbar_bg  = "#202020" if is_dark else "#e8e8e8"
+            scrollbar_hdl = "#3e3e3e" if is_dark else "#b0b0b0"
+            self.history_area.setStyleSheet(
+                f"background-color: {colors['bg_card']}; "
+                "border-radius: 10px; border: 1px solid "
+                f"{colors['border']};"
+            )
+            self.history_area.verticalScrollBar().setStyleSheet(f"""
+                QScrollBar:vertical {{
+                    border: none;
+                    background: {scrollbar_bg};
+                    width: 10px;
+                    margin: 0px;
+                }}
+                QScrollBar::handle:vertical {{
+                    background: {scrollbar_hdl};
+                    min-height: 20px;
+                    border-radius: 5px;
+                }}
+                QScrollBar::handle:vertical:hover {{
+                    background: #1F6AA5;
+                }}
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                    height: 0px;
+                }}
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                    background: none;
+                }}
+            """)
+
+        # 4. Frame de statistiques
+        if hasattr(self, "stats_frame"):
+            self.stats_frame.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {colors['bg_card']};
+                    border-radius: 15px;
+                    border: 1px solid {colors['border']};
+                }}
+            """)
+
+        # 5. Cartes de mode
+        hover_bg = "#333333" if is_dark else "#dde8f5"
         for i in range(self.modes_layout.count()):
             item = self.modes_layout.itemAt(i)
             if not item: continue
@@ -495,18 +555,16 @@ class DashboardViewQt(QWidget):
             if not card or card.objectName() != "modeCard": continue
 
             is_disabled = (card.state == "disabled")
-            
-            # Définition des couleurs selon le thème reçu
+
             if is_disabled:
-                bg = "#1e1e1e" if colors["suffix"] == "_DARK" else "#E0E0E0"
-                txt = "#777777"
+                bg     = "#1e1e1e" if is_dark else "#E0E0E0"
+                txt    = "#777777"
                 icon_c = "#555555"
             else:
-                bg = colors["bg_card"]
-                txt = colors["text"]
+                bg     = colors["bg_card"]
+                txt    = colors["text"]
                 icon_c = colors["text"]
 
-            # Mise à jour du style de la carte
             if is_disabled:
                 card.setStyleSheet(f"""
                     QFrame#modeCard {{
@@ -524,18 +582,26 @@ class DashboardViewQt(QWidget):
                     }}
                     QFrame#modeCard:hover {{
                         border-color: #1F6AA5;
-                        background-color: #333333;
+                        background-color: {hover_bg};
                     }}
                 """)
 
-            # Mise à jour des labels
-            card.title_label.setStyleSheet(f"color: {txt}; font-weight: bold; font-size: 15px; border: none; background: transparent;")
-            card.desc_label.setStyleSheet(f"color: {colors['text_secondary']}; font-size: 11px; border: none; background: transparent;")
+            card.title_label.setStyleSheet(
+                f"color: {txt}; font-weight: bold; font-size: 15px; "
+                "border: none; background: transparent;"
+            )
+            card.desc_label.setStyleSheet(
+                f"color: {colors['text_secondary']}; font-size: 11px; "
+                "border: none; background: transparent;"
+            )
 
-            # Mise à jour de l'icône SVG si nécessaire
             if isinstance(card.icon_data, str) and card.icon_data.endswith(".svg"):
                 pix = get_svg_pixmap(card.icon_data, size=QSize(35, 35), color_hex=icon_c)
                 card.icon_label.setPixmap(pix)
+
+        # 6. Re-rendu des vignettes avec les nouvelles couleurs
+        if hasattr(self, "all_pixmaps"):
+            self.render_grid()
 
     def update_texts(self):
         """Met à jour dynamiquement tous les labels du Dashboard"""

@@ -420,7 +420,8 @@ class _SimCanvas(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
-        self.setStyleSheet('background:#050505;')
+        self._bg_color = '#050505'
+        self.setStyleSheet(f'background:{self._bg_color};')
         self.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Expanding)
         self.setMouseTracking(True)
@@ -439,6 +440,11 @@ class _SimCanvas(QWidget):
         self._p0     = None
         self._p0_pan = None
         self._mouse_mm = None
+
+    def set_theme(self, bg: str):
+        self._bg_color = bg
+        self.setStyleSheet(f'background:{bg};')
+        self.update()
 
     # ─── API ─────────────────────────────
 
@@ -487,7 +493,7 @@ class _SimCanvas(QWidget):
         qp = QPainter(self)
         qp.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         w, h = self.width(), self.height()
-        qp.fillRect(0, 0, w, h, QColor('#050505'))
+        qp.fillRect(0, 0, w, h, QColor(self._bg_color))
 
         if self._img_buf is None:
             qp.setPen(QColor('#444'))
@@ -667,7 +673,15 @@ class SimulationViewQt(QWidget):
         self._mnx = self._mxx = 0.0
         self._mny = self._mxy = 0.0
 
-        self.setStyleSheet('background:#2b2b2b; color:white;')
+        self.setStyleSheet('QWidget#SimulationRoot{background:#2b2b2b;color:white;}')
+        self.setObjectName('SimulationRoot')
+
+        # Couleurs thème — dark par défaut, mis à jour par apply_theme
+        self._theme_colors = {
+            'text': '#ffffff', 'text_secondary': '#aaaaaa',
+            'bg_card': '#2b2b2b', 'border': '#3d3d3d', 'suffix': '_DARK',
+        }
+
         self._build_ui()
         self._show_loading()
         QTimer.singleShot(80, self._start_gen)
@@ -701,6 +715,7 @@ class SimulationViewQt(QWidget):
 
         gl = QLabel(self.t.get('live_gcode', 'Live G-Code'))
         gl.setStyleSheet('color:white;font-weight:bold;font-size:11px;border:none;')
+        self._lbl_gcode = gl
         lo.addWidget(gl)
 
         self.gcode_view = QPlainTextEdit()
@@ -735,6 +750,9 @@ class SimulationViewQt(QWidget):
         f = QFrame()
         f.setStyleSheet('QFrame{background:#252525;border-radius:6px;'
                         'border:1px solid #333;}')
+        self._stats_frame = f
+        self._stat_key_labels = []
+        self._stat_val_labels = []
         lo = QVBoxLayout(f)
         lo.setContentsMargins(8, 6, 8, 6)
         lo.setSpacing(4)
@@ -749,12 +767,16 @@ class SimulationViewQt(QWidget):
             v.setAlignment(Qt.AlignmentFlag.AlignRight)
             r.addWidget(l); r.addWidget(v)
             lo.addLayout(r)
+            self._stat_key_labels.append(l)
+            self._stat_val_labels.append(v)
 
         add_row(self.t.get('final_size', 'Size'), f'{w_mm:.2f} x {h_mm:.2f} mm')
         add_row(self.t.get('output_file', 'Output'),
                 truncate_path(path, 38), color='#2ecc71')
 
-        lo.addWidget(self._make_power_bar())
+        pbar = self._make_power_bar()
+        self._power_bar = pbar
+        lo.addWidget(pbar)
         return f
 
     def _make_power_bar(self):
@@ -766,41 +788,43 @@ class SimulationViewQt(QWidget):
             def __init__(s, mn, mx):
                 super().__init__()
                 s._mn = mn;  s._mx = mx
+                s._bg_color  = '#252525'
+                s._txt_color = '#777777'
+                s._brd_color = '#555555'
                 s.setFixedHeight(55)
+
+            def set_theme(s, bg, txt, brd):
+                s._bg_color  = bg
+                s._txt_color = txt
+                s._brd_color = brd
+                s.update()
 
             def paintEvent(s, _):
                 qp = QPainter(s)
                 qp.setRenderHint(QPainter.RenderHint.Antialiasing)
                 w, h = s.width(), s.height()
-                qp.fillRect(0, 0, w, h, QColor('#252525'))
+                qp.fillRect(0, 0, w, h, QColor(s._bg_color))
                 m, by, bh = 20, 25, 10
                 bw = w - 2*m
 
-                # --- Gradient qui reflète exactement l'échelle de rendu ---
-                # 0%→min_power : blanc pur
-                # min_power→max_power : gris 200 → noir 0
-                # on dessine deux segments
                 x_min = int(m + s._mn / 100.0 * bw)
                 x_max = int(m + s._mx / 100.0 * bw)
 
-                # Segment 0% → min_power : blanc uni
                 if x_min > m:
                     qp.fillRect(m, by, x_min - m, bh, QColor(255, 255, 255))
 
-                # Segment min_power → max_power : gris 200 → noir
                 if x_max > x_min:
                     g = QLinearGradient(x_min, 0, x_max, 0)
                     g.setColorAt(0, QColor(200, 200, 200))
                     g.setColorAt(1, QColor(0, 0, 0))
                     qp.fillRect(x_min, by, x_max - x_min, bh, QBrush(g))
 
-                # Segment max_power → 100% : noir uni
                 if x_max < m + bw:
                     qp.fillRect(x_max, by, m + bw - x_max, bh, QColor(0, 0, 0))
 
-                qp.setPen(QPen(QColor('#555'), 1))
+                qp.setPen(QPen(QColor(s._brd_color), 1))
                 qp.drawRect(m, by, bw, bh)
-                qp.setPen(QColor('#777'))
+                qp.setPen(QColor(s._txt_color))
                 qp.setFont(QFont('Arial', 8))
                 qp.drawText(m, by+bh+12, '0%')
                 qp.drawText(m+bw-22, by+bh+12, '100%')
@@ -826,6 +850,7 @@ class SimulationViewQt(QWidget):
         f = QFrame()
         f.setStyleSheet('QFrame{background:#222;border:1px solid #444;'
                         'border-radius:6px;}')
+        self._opts_frame = f
         lo = QVBoxLayout(f)
         lo.setContentsMargins(8, 6, 8, 6)
         lo.setSpacing(4)
@@ -833,9 +858,11 @@ class SimulationViewQt(QWidget):
         lbl = QLabel(self.t.get('active_options', 'Active Options'))
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet('color:white;font-weight:bold;font-size:11px;border:none;')
+        self._opts_lbl = lbl
         lo.addWidget(lbl)
 
         br = QHBoxLayout()
+        self._opts_badges = []
         for key, txt in [('is_pointing', self.t.get('pointing_opt', 'POINTING')),
                          ('is_framing',  self.t.get('framing_opt',  'FRAMING'))]:
             active = self.payload.get('framing', {}).get(key, False)
@@ -847,6 +874,7 @@ class SimulationViewQt(QWidget):
                             f'font-size:9px;font-weight:bold;'
                             f'padding:3px 6px;border:none;')
             br.addWidget(b)
+            self._opts_badges.append((b, active))
         lo.addLayout(br)
 
         # lat_btn retiré d'ici — déplacé dans _make_action_buttons
@@ -952,22 +980,22 @@ class SimulationViewQt(QWidget):
         self.btn_play.setStyleSheet(self._gbtn('#27ae60', '#1e8449'))
         self.btn_play.clicked.connect(self.toggle_pause)
 
-        btn_end = QPushButton() # '⏭'
+        btn_end = QPushButton()
         skiptoend_pixmap = get_svg_pixmap(SVG_ICONS["SKIPTOEND"], QSize(24, 24), "#ffffff")
         btn_end.setIcon(QIcon(skiptoend_pixmap))
         btn_end.setFixedSize(60, 40)
-        # btn_end.setFont(QFont('Arial', 16))
         btn_end.setStyleSheet(self._gbtn('#444', '#555'))
         btn_end.clicked.connect(self.skip_to_end)
+        self._btn_end = btn_end
 
-        btn_fit = QPushButton() # '⊞'
+        btn_fit = QPushButton()
         fit_pixmap = get_svg_pixmap(SVG_ICONS["FIT"], QSize(50, 50), "#ffffff")
         btn_fit.setIcon(QIcon(fit_pixmap))
         btn_fit.setFixedSize(40, 40)
-        # btn_fit.setFont(QFont('Arial', 20))
         btn_fit.setToolTip(self.t.get('reset_zoom', 'Reset zoom / pan'))
         btn_fit.setStyleSheet(self._gbtn('#333', '#444'))
         btn_fit.clicked.connect(self.canvas.reset_view)
+        self._btn_fit = btn_fit
 
         for b in [self.btn_rew, self.btn_play, btn_end, btn_fit]:
             tr.addWidget(b)
@@ -977,12 +1005,14 @@ class SimulationViewQt(QWidget):
         sf = QFrame()
         sf.setStyleSheet('QFrame{background:#222;border:1px solid #444;'
                          'border-radius:5px;}')
+        self._spd_frame = sf
         sr = QHBoxLayout(sf)
         sr.setContentsMargins(5, 2, 5, 2)
         sr.setSpacing(2)
 
         spd_lbl = QLabel(self.t.get('speed', 'Speed:'))
         spd_lbl.setStyleSheet('color:white;font-weight:bold;font-size:9px;border:none;')
+        self._spd_lbl = spd_lbl
         sr.addWidget(spd_lbl)
 
         self._spd_btns: dict[str, QPushButton] = {}
@@ -1780,6 +1810,153 @@ class SimulationViewQt(QWidget):
         self._stop_all(); super().closeEvent(e)
 
     # ══════════════════════════════════════════════════════════════
+    #  THEME
+    # ══════════════════════════════════════════════════════════════
+
+    def apply_theme(self, colors: dict):
+        self._theme_colors = colors
+        is_dark   = colors.get('suffix', '_DARK') == '_DARK'
+        text      = colors.get('text', '#ffffff')
+        text_sec  = colors.get('text_secondary', '#aaaaaa')
+        bg_card   = colors.get('bg_card', '#2b2b2b')
+        border    = colors.get('border', '#3d3d3d')
+
+        bg_left          = '#1e1e1e' if is_dark else '#e8e8e8'
+        bg_right         = '#111111' if is_dark else '#d8d8d8'
+        bg_stats         = '#252525' if is_dark else '#dadada'
+        bg_opts          = '#222222' if is_dark else '#dedede'
+        bg_entry         = '#1a1a1a' if is_dark else '#f0f0f0'
+        brd_left         = '#333333' if is_dark else '#bbbbbb'
+        btn_neutral_bg   = '#444444' if is_dark else '#bbbbbb'
+        btn_neutral_hov  = '#555555' if is_dark else '#aaaaaa'
+        btn_cancel_bg    = '#333333' if is_dark else '#cccccc'
+        spd_bg           = '#222222' if is_dark else '#e0e0e0'
+        spd_btn          = '#3a3a3a' if is_dark else '#d0d0d0'
+        spd_col          = '#aaaaaa' if is_dark else '#444444'
+        canvas_bg        = '#050505' if is_dark else '#e0e0e0'
+
+        # ── Racine ────────────────────────────────────────────────
+        self.setStyleSheet(
+            f'QWidget#SimulationRoot{{background:{bg_card};color:{text};}}')
+
+        # ── Panneau gauche ────────────────────────────────────────
+        if hasattr(self, 'left'):
+            self.left.setStyleSheet(
+                f'QFrame{{background:{bg_left};border-right:1px solid {brd_left};}}')
+
+        # ── Label "Live G-Code" ───────────────────────────────────
+        if hasattr(self, '_lbl_gcode'):
+            self._lbl_gcode.setStyleSheet(
+                f'color:{text};font-weight:bold;font-size:11px;border:none;')
+
+        # ── gcode_view ────────────────────────────────────────────
+        if hasattr(self, 'gcode_view'):
+            gcode_col = '#00ff00' if is_dark else '#006600'
+            self.gcode_view.setStyleSheet(
+                f'QPlainTextEdit{{background:{bg_entry};color:{gcode_col};'
+                f'font-family:Consolas;border:1px solid {brd_left};border-radius:3px;}}')
+
+        # ── Stats frame ───────────────────────────────────────────
+        if hasattr(self, '_stats_frame'):
+            self._stats_frame.setStyleSheet(
+                f'QFrame{{background:{bg_stats};border-radius:6px;'
+                f'border:1px solid {brd_left};}}')
+        for lbl in getattr(self, '_stat_key_labels', []):
+            lbl.setStyleSheet(
+                f'color:{text_sec};font-size:10px;font-weight:bold;border:none;')
+        for lbl in getattr(self, '_stat_val_labels', []):
+            lbl.setStyleSheet(
+                f'color:{text};font-family:Consolas;font-size:11px;border:none;')
+
+        # ── Options frame ─────────────────────────────────────────
+        if hasattr(self, '_opts_frame'):
+            self._opts_frame.setStyleSheet(
+                f'QFrame{{background:{bg_opts};border:1px solid {border};border-radius:6px;}}')
+        if hasattr(self, '_opts_lbl'):
+            self._opts_lbl.setStyleSheet(
+                f'color:{text};font-weight:bold;font-size:11px;border:none;')
+
+        # ── Bouton latency ────────────────────────────────────────
+        if hasattr(self, 'lat_btn') and self.lat_btn:
+            self.lat_btn.setStyleSheet(
+                f'QPushButton{{background:{spd_btn};color:{spd_col};'
+                f'border:1px solid {brd_left};border-radius:4px;'
+                f'padding:4px 10px;font-size:10px;font-weight:bold;}}'
+                f'QPushButton:checked{{background:#1a4a2a;color:#2ecc71;'
+                f'border-color:#2ecc71;}}')
+
+        # ── Boutons export/cancel ─────────────────────────────────
+        if hasattr(self, 'btn_cancel'):
+            self.btn_cancel.setStyleSheet(
+                self._gbtn(btn_cancel_bg, btn_neutral_hov))
+
+        # ── Boutons transport ─────────────────────────────────────
+        if hasattr(self, 'btn_rew'):
+            self.btn_rew.setStyleSheet(self._gbtn(btn_neutral_bg, btn_neutral_hov))
+        if hasattr(self, '_btn_end'):
+            self._btn_end.setStyleSheet(self._gbtn(btn_neutral_bg, btn_neutral_hov))
+        if hasattr(self, '_btn_fit'):
+            self._btn_fit.setStyleSheet(self._gbtn(
+                '#333333' if is_dark else '#aaaaaa',
+                '#444444' if is_dark else '#999999'))
+
+        # ── Sélecteur vitesse ─────────────────────────────────────
+        if hasattr(self, '_spd_frame'):
+            self._spd_frame.setStyleSheet(
+                f'QFrame{{background:{spd_bg};border:1px solid {border};border-radius:5px;}}')
+        if hasattr(self, '_spd_lbl'):
+            self._spd_lbl.setStyleSheet(
+                f'color:{text};font-weight:bold;font-size:9px;border:none;')
+        if hasattr(self, '_spd_btns'):
+            btn_checked_bg = '#1f538d' if is_dark else '#4a90d9'
+            for b in self._spd_btns.values():
+                b.setStyleSheet(
+                    f'QPushButton{{background:{spd_btn};color:{spd_col};'
+                    f'border:1px solid {brd_left};border-radius:3px;'
+                    f'padding:0px 4px;font-size:8px;min-width:18px;max-width:30px;}}'
+                    f'QPushButton:checked{{background:{btn_checked_bg};color:white;'
+                    f'border-color:#2a6dbd;}}'
+                    f'QPushButton:hover:!checked{{background:{btn_neutral_bg};color:white;}}')
+
+        # ── Barre de puissance ────────────────────────────────────
+        if hasattr(self, '_power_bar'):
+            pbar_bg  = '#252525' if is_dark else '#e8e8e8'
+            pbar_txt = '#777777' if is_dark else '#444444'
+            pbar_brd = '#555555' if is_dark else '#aaaaaa'
+            self._power_bar.set_theme(pbar_bg, pbar_txt, pbar_brd)
+
+        # ── Badges options actives ────────────────────────────────
+        if hasattr(self, '_opts_badges'):
+            inactive_col = '#888888' if is_dark else '#666666'
+            inactive_bg  = '#282828' if is_dark else '#cccccc'
+            for badge, active in self._opts_badges:
+                if active:
+                    badge.setStyleSheet(
+                        'color:#ff9f43;background:#3d2b1f;border-radius:5px;'
+                        'font-size:9px;font-weight:bold;padding:3px 6px;border:none;')
+                else:
+                    badge.setStyleSheet(
+                        f'color:{inactive_col};background:{inactive_bg};border-radius:5px;'
+                        'font-size:9px;font-weight:bold;padding:3px 6px;border:none;')
+
+        # ── Barre de progression ──────────────────────────────────
+        if hasattr(self, 'prog_bar'):
+            prog_bg = '#333333' if is_dark else '#aaaaaa'
+            self.prog_bar.setStyleSheet(
+                f'QProgressBar{{background:{prog_bg};border-radius:7px;border:none;}}'
+                f'QProgressBar::chunk{{background:#27ae60;border-radius:7px;}}')
+        if hasattr(self, 'lbl_time'):
+            self.lbl_time.setStyleSheet(
+                f'color:{text};font-size:9px;font-weight:bold;'
+                f'background:transparent;border:none;')
+
+        # ── Panneau droit + canvas ────────────────────────────────
+        if hasattr(self, '_right_widget'):
+            self._right_widget.setStyleSheet(f'background:{bg_right};')
+        if hasattr(self, 'canvas'):
+            self.canvas.set_theme(canvas_bg)
+
+    # ══════════════════════════════════════════════════════════════
     #  UTILITAIRES
     # ══════════════════════════════════════════════════════════════
 
@@ -1798,3 +1975,9 @@ class SimulationViewQt(QWidget):
         return (f'QPushButton{{background:{bg};color:white;border-radius:6px;'
                 f'border:none;}}'
                 f'QPushButton:hover{{background:{hov};}}')
+
+    def _c(self, dark_val, light_val):
+        return dark_val if self._theme_colors.get('suffix', '_DARK') == '_DARK' else light_val
+
+    def _t(self, key='text'):
+        return self._theme_colors.get(key, '#ffffff')

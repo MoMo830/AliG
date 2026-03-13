@@ -94,7 +94,7 @@ def save_dashboard_data(config_manager, matrix, gcode_content, estimated_time=0)
     except Exception as e:
         print(f"Error saving dashboard data: {e}")
         import traceback
-        traceback.print_exc() # Pour voir exactement quelle ligne plante
+        traceback.print_exc()
         return None
         
 

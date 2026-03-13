@@ -269,8 +269,8 @@ class MainWindowQt(QMainWindow):
         """Met à jour les couleurs et les icônes de l'interface globale"""
         colors = self.get_theme_colors()
         
-        bg_style = f"background-color: {colors['bg_card']};"
-        self.central_widget.setStyleSheet(bg_style)  # Garder uniquement celle-ci
+        bg_style = f"QWidget#CentralWidget {{ background-color: {colors['bg_card']}; }}"
+        self.central_widget.setStyleSheet(bg_style)
         
         self.content_area.setStyleSheet("background: transparent; border: none;")
         
@@ -299,11 +299,24 @@ class MainWindowQt(QMainWindow):
         # 5. Re-génération des icônes SVG de la TopBar      
         home_pix = get_svg_pixmap(SVG_ICONS["HOME"], QSize(22, 22), colors['text'])
         self.btn_home.setIcon(QIcon(home_pix))
+
+        settings_pix = get_svg_pixmap(SVG_ICONS.get("SETTINGS", SVG_ICONS["GEAR"]), QSize(20, 20), colors['text'])
+        if not settings_pix.isNull():
+            self.btn_settings.setIcon(QIcon(settings_pix))
         
-        # 6. Propager le changement à la vue ACTUELLEMENT visible
+        # 6. Propager le changement à TOUTES les vues instanciées
+        for attr in ("dashboard_view", "raster_view", "settings_view",
+                     "calibration_view", "checker_view"):
+            view = getattr(self, attr, None)
+            if view and hasattr(view, 'apply_theme'):
+                view.apply_theme(colors)
+        # checker est recréé à chaque appel — propager aussi à la vue courante si non couverte
         current_view = self.content_area.currentWidget()
         if current_view and hasattr(current_view, 'apply_theme'):
-            current_view.apply_theme(colors)
+            if not any(current_view is getattr(self, a, None)
+                       for a in ("dashboard_view", "raster_view", "settings_view",
+                                 "calibration_view", "checker_view")):
+                current_view.apply_theme(colors)
 
     # --- Routage ---
     def show_dashboard(self):
@@ -312,8 +325,9 @@ class MainWindowQt(QMainWindow):
         if not hasattr(self, 'dashboard_view'):
             self.dashboard_view = DashboardViewQt(controller=self)
             self.content_area.addWidget(self.dashboard_view)
+            self.dashboard_view.apply_theme(self.get_theme_colors())
         else:
-            self.dashboard_view.refresh()  # ← AJOUTER cette ligne
+            self.dashboard_view.refresh()
         
         self.current_view = self.dashboard_view
         self.content_area.setCurrentWidget(self.dashboard_view)
@@ -332,6 +346,7 @@ class MainWindowQt(QMainWindow):
 
             self.settings_view = SettingsViewQt(self.controller)
             self.content_area.addWidget(self.settings_view)
+            self.settings_view.apply_theme(self.get_theme_colors())
         else:
             # OPTIONNEL : Si la vue existe déjà, on peut forcer un rafraîchissement 
             # des textes internes si nécessaire
@@ -352,8 +367,9 @@ class MainWindowQt(QMainWindow):
             from gui.views.raster_view_qt import RasterViewQt
             self.raster_view = RasterViewQt(parent=self, controller=self)
             self.content_area.addWidget(self.raster_view)
+            self.raster_view.apply_theme(self.get_theme_colors())
         else:
-            self.raster_view.load_settings()  # ← AJOUTER cette ligne
+            self.raster_view.load_settings()
 
         self.current_view = self.raster_view
         self.content_area.setCurrentWidget(self.raster_view)
@@ -372,6 +388,7 @@ class MainWindowQt(QMainWindow):
         self.content_area.addWidget(sim_view)
         self.content_area.setCurrentWidget(sim_view)
         self.current_view = sim_view
+        sim_view.apply_theme(self.get_theme_colors())
 
     def show_calibration_mode(self):
         """Affiche la vue de Calibration réelle"""
@@ -409,6 +426,7 @@ class MainWindowQt(QMainWindow):
         self.content_area.addWidget(checker_view)
         self.content_area.setCurrentWidget(checker_view)
         self.current_view = checker_view
+        checker_view.apply_theme(self.get_theme_colors())
 
         # Ouverture directe si un chemin est passé (ex: depuis l'historique)
         if gcode_path and os.path.isfile(gcode_path):
