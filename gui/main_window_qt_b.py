@@ -5,7 +5,7 @@ import webbrowser
 import ctypes
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QStackedWidget, QFrame, QMessageBox)
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QIcon, QPixmap, QColor, QPalette
 from PyQt6.QtWidgets import QApplication
 
@@ -43,6 +43,7 @@ class MainWindowQt(QMainWindow):
 
         self.controller = controller 
         self.config_manager = controller
+        self.controller._main_window = self   # ref pour que les vues remontent jusqu'ici
         self.version = "0.99b"
 
         # 2. CHARGEMENT DES TEXTES
@@ -69,12 +70,23 @@ class MainWindowQt(QMainWindow):
         self.main_layout.addWidget(self.content_area)
 
         # 6. Contenu (On charge TOUT maintenant)
-        from PyQt6.QtCore import QTimer
         QTimer.singleShot(0, self._post_init_ui)
 
     def _post_init_ui(self):
         self.show_dashboard()
         self.update_ui_theme()
+        # Pré-créer raster_view en arrière-plan pendant que l'utilisateur
+        # regarde le dashboard — au clic le basculement sera instantané
+        QTimer.singleShot(300, self._preload_raster_view)
+
+    def _preload_raster_view(self):
+        """Crée raster_view en avance pour un basculement immédiat au clic."""
+        if not hasattr(self, 'raster_view'):
+            from gui.views.raster_view_qt import RasterViewQt
+            self.raster_view = RasterViewQt(parent=self, controller=self)
+            self.raster_view._main_window = self
+            self.content_area.addWidget(self.raster_view)
+            self.raster_view.apply_theme(self.get_theme_colors())
         
 
 
@@ -221,49 +233,61 @@ class MainWindowQt(QMainWindow):
         """)
         self.btn_settings.clicked.connect(self.show_settings_mode)
         layout.addWidget(self.btn_settings)
-        
-        # ENREGISTREMENT TRADUCTION TOOLTIP SETTINGS
-        self.translation_map[self.btn_settings] = "settings"
+        # btn_settings a une icône — pas de setText, on met à jour le tooltip dans update_ui_language
 
         # Enfin, on ajoute la TopBar au layout principal de la fenêtre
         self.main_layout.addWidget(self.top_bar)
 
     def update_ui_language(self):
-        """Met à jour les textes de la barre de titre et de la vue active"""
+        """Met à jour les textes de toute l'interface après un changement de langue."""
         lang = self.config_manager.get_item("machine_settings", "language", "English")
-        
-        # 1. Mise à jour du dictionnaire de la TopBar
         from core.translations import TRANSLATIONS
-        self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("topbar", {})
-        
-        # 2. APPLICATION PHYSIQUE sur les widgets fixes (Support, Tooltips)
+
+        self.translations = TRANSLATIONS.get(lang, TRANSLATIONS["English"])
+        self.texts = self.translations.get("topbar", {})
+
         if hasattr(self, 'translation_map'):
             from gui.utils_qt import translate_ui_widgets
             translate_ui_widgets(self.translation_map, self.texts)
 
-        # 3. MISE À JOUR DU TITRE DYNAMIQUE (DASHBOARD / SETTINGS)
-        # On récupère le widget actuellement visible dans le StackedWidget
-        current_view = self.content_area.currentWidget()
-        
-        if current_view:
-            # On détermine la clé de traduction à utiliser pour le titre
-            from gui.views.settings_view_qt import SettingsViewQt
-            from gui.views.calibration_view_qt import CalibrationView
-            
-            title_key = "dashboard" # Par défaut
-            if isinstance(current_view, SettingsViewQt):
-                title_key = "settings"
-            elif isinstance(current_view, CalibrationView):
-                title_key = "calibration"
-            
-            # Application du texte traduit en majuscules
-            self.view_title.setText(self.texts.get(title_key, title_key).upper())
+        # Tooltip du bouton settings (icône — pas de setText)
+        if hasattr(self, 'btn_settings'):
+            self.btn_settings.setToolTip(self.texts.get("settings", "Settings"))
 
-            # 4. Notification de la vue active pour ses propres labels internes
+        # Propager à TOUTES les vues instanciées
+        for attr in ("dashboard_view", "raster_view", "settings_view",
+                     "calibration_view", "checker_view"):
+            view = getattr(self, attr, None)
+            if view is None:
+                continue
+            if hasattr(view, '_apply_language'):
+                view._apply_language(lang, self.translations)
+            elif hasattr(view, 'update_ui_language'):
+                view.update_ui_language()
+            elif hasattr(view, 'update_texts'):
+                view.update_texts()
+
+        current_view = self.content_area.currentWidget()
+        if current_view and not any(
+            current_view is getattr(self, a, None)
+            for a in ("dashboard_view", "raster_view", "settings_view",
+                      "calibration_view", "checker_view")
+        ):
             if hasattr(current_view, 'update_ui_language'):
                 current_view.update_ui_language()
             elif hasattr(current_view, 'update_texts'):
                 current_view.update_texts()
+
+        # view_title EN DERNIER — après toute propagation pour ne pas être écrasé
+        if current_view:
+            from gui.views.settings_view_qt import SettingsViewQt
+            from gui.views.calibration_view_qt import CalibrationView
+            title_key = "dashboard"
+            if isinstance(current_view, SettingsViewQt):
+                title_key = "settings"
+            elif isinstance(current_view, CalibrationView):
+                title_key = "calibration"
+            self.view_title.setText(self.texts.get(title_key, title_key).upper())
 
     def update_ui_theme(self):
         """Met à jour les couleurs et les icônes de l'interface globale"""
@@ -320,10 +344,11 @@ class MainWindowQt(QMainWindow):
 
     # --- Routage ---
     def show_dashboard(self):
-        self.view_title.setText(self.texts.get("dashboard", "DASHBOARD"))
+        self.view_title.setText(self.texts.get("dashboard", "DASHBOARD").upper())
         
         if not hasattr(self, 'dashboard_view'):
             self.dashboard_view = DashboardViewQt(controller=self)
+            self.dashboard_view._main_window = self
             self.content_area.addWidget(self.dashboard_view)
             self.dashboard_view.apply_theme(self.get_theme_colors())
         else:
@@ -343,8 +368,8 @@ class MainWindowQt(QMainWindow):
 
         # 2. Gestion de l'instance de la vue
         if not hasattr(self, 'settings_view'):
-
             self.settings_view = SettingsViewQt(self.controller)
+            self.settings_view._main_window = self
             self.content_area.addWidget(self.settings_view)
             self.settings_view.apply_theme(self.get_theme_colors())
         else:
@@ -353,19 +378,21 @@ class MainWindowQt(QMainWindow):
             self.settings_view.texts = self.controller.translations["settings"]
 
         # 3. Mise à jour du titre de la zone de contenu
-        self.view_title.setText(self.controller.translations["settings"]["title"].upper())
+        self.view_title.setText(self.texts.get("settings", "SETTINGS").upper())
         
         # 4. Affichage
         self.content_area.setCurrentWidget(self.settings_view)
 
 
     def show_raster_mode(self, image_to_load=None):
-        """Affiche la vue Raster Qt migrée."""
-        self.view_title.setText("RASTER MODE")
+        """Affiche la vue Raster Qt — pré-créée au démarrage pour un basculement immédiat."""
+        self.view_title.setText(self.texts.get("raster", "RASTER MODE").upper())
 
         if not hasattr(self, "raster_view"):
+            # Fallback si _preload_raster_view n'a pas encore tourné
             from gui.views.raster_view_qt import RasterViewQt
             self.raster_view = RasterViewQt(parent=self, controller=self)
+            self.raster_view._main_window = self
             self.content_area.addWidget(self.raster_view)
             self.raster_view.apply_theme(self.get_theme_colors())
         else:
@@ -400,6 +427,7 @@ class MainWindowQt(QMainWindow):
         # 2. Gestion de l'instance de la vue (Lazy Loading)
         if not hasattr(self, 'calibration_view'):
             self.calibration_view = CalibrationView(parent=self, controller=self.controller)
+            self.calibration_view._main_window = self
             self.content_area.addWidget(self.calibration_view)
             self.calibration_view.apply_theme(self.get_theme_colors())
         else:
@@ -422,6 +450,7 @@ class MainWindowQt(QMainWindow):
             controller=self,
             return_view='dashboard'
         )
+        self.checker_view = checker_view          # stocké pour _apply_language
         self.content_area.addWidget(checker_view)
         self.content_area.setCurrentWidget(checker_view)
         self.current_view = checker_view

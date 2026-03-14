@@ -488,10 +488,7 @@ class DashboardViewQt(QWidget):
         from gui.utils_qt import get_svg_pixmap
         from PyQt6.QtCore import QSize
 
-        # Mémoriser les couleurs pour render_grid
         self._current_colors = colors
-
-        is_dark = colors["suffix"] == "_DARK"
 
         # 1. Fond de la vue
         self.setStyleSheet("background-color: transparent;")
@@ -505,8 +502,6 @@ class DashboardViewQt(QWidget):
 
         # 3. Cadre thumbnails (history_area)
         if hasattr(self, "history_area"):
-            scrollbar_bg  = "#202020" if is_dark else "#e8e8e8"
-            scrollbar_hdl = "#3e3e3e" if is_dark else "#b0b0b0"
             self.history_area.setStyleSheet(
                 f"background-color: {colors['bg_card']}; "
                 "border-radius: 10px; border: 1px solid "
@@ -515,12 +510,12 @@ class DashboardViewQt(QWidget):
             self.history_area.verticalScrollBar().setStyleSheet(f"""
                 QScrollBar:vertical {{
                     border: none;
-                    background: {scrollbar_bg};
+                    background: {colors['scrollbar_bg']};
                     width: 10px;
                     margin: 0px;
                 }}
                 QScrollBar::handle:vertical {{
-                    background: {scrollbar_hdl};
+                    background: {colors['scrollbar_handle']};
                     min-height: 20px;
                     border-radius: 5px;
                 }}
@@ -546,7 +541,7 @@ class DashboardViewQt(QWidget):
             """)
 
         # 5. Cartes de mode
-        hover_bg = "#333333" if is_dark else "#dde8f5"
+        hover_bg = colors['hover_card']
         for i in range(self.modes_layout.count()):
             item = self.modes_layout.itemAt(i)
             if not item: continue
@@ -556,9 +551,9 @@ class DashboardViewQt(QWidget):
             is_disabled = (card.state == "disabled")
 
             if is_disabled:
-                bg     = "#1e1e1e" if is_dark else "#E0E0E0"
-                txt    = "#777777"
-                icon_c = "#555555"
+                bg     = colors['bg_main']
+                txt    = colors['text_disabled']
+                icon_c = colors['text_disabled']
             else:
                 bg     = colors["bg_card"]
                 txt    = colors["text"]

@@ -33,8 +33,10 @@ from PyQt6.QtGui import (
 from engine.gcode_parser import GCodeParser
 from core.utils import save_dashboard_data, truncate_path
 from core.translations import TRANSLATIONS
+from core.themes import get_theme
 from utils.paths import SVG_ICONS
 from gui.utils_qt import get_svg_pixmap
+from gui.switch import Switch
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -440,6 +442,7 @@ class _SimCanvas(QWidget):
         self._p0     = None
         self._p0_pan = None
         self._mouse_mm = None
+        self._overlay_h = 150
 
     def set_theme(self, bg: str):
         self._bg_color = bg
@@ -448,7 +451,7 @@ class _SimCanvas(QWidget):
 
     # ─── API ─────────────────────────────
 
-    def setup(self, img_buf, x0, y0, pw, ph, sc, mnx, mxx, mny, mxy, l_step=0.1):
+    def setup(self, img_buf, x0, y0, pw, ph, sc, mnx, mxx, mny, mxy, l_step=0.1, overlay_h=150):
         self._img_buf = img_buf
         self._x0, self._y0 = x0, y0
         self._pw, self._ph = pw, ph
@@ -456,11 +459,10 @@ class _SimCanvas(QWidget):
         self._mnx, self._mxx = mnx, mxx
         self._mny, self._mxy = mny, mxy
         self._l_step = l_step
-        self._zoom = 1.0
-        self._pan  = QPointF(0, 0)
+        self._overlay_h = overlay_h
         self._rebuild()
         self._dirty = False
-        self.update()
+        self.reset_view()
 
     def notify_dirty(self):
         self._dirty = True
@@ -471,8 +473,34 @@ class _SimCanvas(QWidget):
         self.update()
 
     def reset_view(self):
-        self._zoom = 1.0
-        self._pan  = QPointF(0, 0)
+        """Fit-to-view : zoom et pan pour que l'image remplisse la zone utile."""
+        if self._pw <= 0 or self._ph <= 0:
+            self._zoom = 1.0
+            self._pan  = QPointF(0, 0)
+            self.update()
+            return
+
+        cw, ch = self.width(), self.height()
+        if cw <= 1 or ch <= 1:
+            return
+
+        overlay_h = getattr(self, '_overlay_h', 150)
+        usable_w  = cw
+        usable_h  = max(ch - overlay_h, int(ch * 0.5))
+
+        margin = 12
+
+        zoom_x = (usable_w - 2 * margin) / self._pw
+        zoom_y = (usable_h - 2 * margin) / self._ph
+        self._zoom = min(zoom_x, zoom_y)
+
+        img_screen_w = self._pw * self._zoom
+        img_screen_h = self._ph * self._zoom
+
+        pan_x = (usable_w - img_screen_w) / 2.0 - self._x0 * self._zoom
+        pan_y = margin - self._y0 * self._zoom
+
+        self._pan = QPointF(pan_x, pan_y)
         self.update()
 
     # ─── Rendu ───────────────────────────
@@ -677,10 +705,7 @@ class SimulationViewQt(QWidget):
         self.setObjectName('SimulationRoot')
 
         # Couleurs thème — dark par défaut, mis à jour par apply_theme
-        self._theme_colors = {
-            'text': '#ffffff', 'text_secondary': '#aaaaaa',
-            'bg_card': '#2b2b2b', 'border': '#3d3d3d', 'suffix': '_DARK',
-        }
+        self._theme_colors = get_theme('Dark')
 
         self._build_ui()
         self._show_loading()
@@ -888,20 +913,21 @@ class SimulationViewQt(QWidget):
         lo.setContentsMargins(0, 0, 0, 0)
         lo.setSpacing(4)
 
-        # Bouton Simulate Latency — sorti du panneau Active Options
+        # Switch Simulate Latency — identique au checker
         self.lat_btn = None
         lat_val = float(self.payload.get('params', {}).get('laser_latency', 0))
         if lat_val != 0:
-            self.lat_btn = QPushButton(
-                self.t.get('simulate_latency', 'SIMULATE LATENCY') + '  ○')
-            self.lat_btn.setCheckable(True)
-            self.lat_btn.setStyleSheet(
-                'QPushButton{background:#333;color:#888;border:1px solid #555;'
-                'border-radius:4px;padding:4px 10px;font-size:10px;font-weight:bold;}'
-                'QPushButton:checked{background:#1a4a2a;color:#2ecc71;'
-                'border-color:#2ecc71;}')
-            self.lat_btn.toggled.connect(self._on_lat_toggle)
-            lo.addWidget(self.lat_btn)
+            lat_row = QHBoxLayout()
+            self.lbl_lat = QLabel(self.t.get('simulate_latency', 'Simulate latency'))
+            self.lbl_lat.setStyleSheet('color:#aaa;font-size:10px;border:none;')
+            lat_row.addWidget(self.lbl_lat)
+            lat_row.addStretch()
+            self.sw_latency = Switch()
+            self.sw_latency.setChecked(False)
+            self.sw_latency.toggled.connect(self._on_lat_toggle)
+            lat_row.addWidget(self.sw_latency)
+            lo.addLayout(lat_row)
+            self.lat_btn = self.sw_latency  # compatibilité avec le reste du code
 
         er = QHBoxLayout()
         self.btn_export = QPushButton(self.t.get('quick_export', 'Quick Export'))
@@ -1204,7 +1230,10 @@ class SimulationViewQt(QWidget):
         self._mny, self._mxy = by0, by1
 
         if self.lat_btn:
-            self.lat_btn.setVisible(abs(self.latence_mm) > 1e-6)
+            visible = abs(self.latence_mm) > 1e-6
+            self.lat_btn.setVisible(visible)
+            if hasattr(self, 'lbl_lat'):
+                self.lbl_lat.setVisible(visible)
 
         if self.final_gcode:
             self.gcode_view.setPlainText(self.final_gcode)
@@ -1331,7 +1360,8 @@ class SimulationViewQt(QWidget):
             x0, y0, pw, ph, sc,
             self._mnx, self._mxx,
             self._mny, self._mxy,
-            l_step  # <--- Passage du paramètre pour le zoom cranté
+            l_step,
+            overlay_h
         )
 
         self.canvas.set_laser(lx, ly)
@@ -1568,10 +1598,6 @@ class SimulationViewQt(QWidget):
 
     def _on_lat_toggle(self, checked):
         self.latence_enabled = checked
-        if self.lat_btn:
-            self.lat_btn.setText(
-                self.t.get('simulate_latency', 'SIMULATE LATENCY') +
-                f'  {"●" if checked else "○"}')
         self._redraw_to(self.current_idx)
 
     def _on_prog_click(self, e):
@@ -1815,25 +1841,17 @@ class SimulationViewQt(QWidget):
 
     def apply_theme(self, colors: dict):
         self._theme_colors = colors
-        is_dark   = colors.get('suffix', '_DARK') == '_DARK'
-        text      = colors.get('text', '#ffffff')
-        text_sec  = colors.get('text_secondary', '#aaaaaa')
-        bg_card   = colors.get('bg_card', '#2b2b2b')
-        border    = colors.get('border', '#3d3d3d')
-
-        bg_left          = '#1e1e1e' if is_dark else '#e8e8e8'
-        bg_right         = '#111111' if is_dark else '#d8d8d8'
-        bg_stats         = '#252525' if is_dark else '#dadada'
-        bg_opts          = '#222222' if is_dark else '#dedede'
-        bg_entry         = '#1a1a1a' if is_dark else '#f0f0f0'
-        brd_left         = '#333333' if is_dark else '#bbbbbb'
-        btn_neutral_bg   = '#444444' if is_dark else '#bbbbbb'
-        btn_neutral_hov  = '#555555' if is_dark else '#aaaaaa'
-        btn_cancel_bg    = '#333333' if is_dark else '#cccccc'
-        spd_bg           = '#222222' if is_dark else '#e0e0e0'
-        spd_btn          = '#3a3a3a' if is_dark else '#d0d0d0'
-        spd_col          = '#aaaaaa' if is_dark else '#444444'
-        canvas_bg        = '#050505' if is_dark else '#e0e0e0'
+        text      = colors['text']
+        text_sec  = colors['text_secondary']
+        bg_card   = colors['bg_card_alt']
+        border    = colors['border']
+        bg_left   = colors['bg_main']
+        bg_right  = colors['bg_deep']
+        bg_stats  = colors['bg_stats']
+        bg_opts   = colors['bg_opts']
+        bg_entry  = colors['bg_entry']
+        brd_left  = colors['border']
+        canvas_bg = colors['bg_canvas']
 
         # ── Racine ────────────────────────────────────────────────
         self.setStyleSheet(
@@ -1851,9 +1869,8 @@ class SimulationViewQt(QWidget):
 
         # ── gcode_view ────────────────────────────────────────────
         if hasattr(self, 'gcode_view'):
-            gcode_col = '#00ff00' if is_dark else '#006600'
             self.gcode_view.setStyleSheet(
-                f'QPlainTextEdit{{background:{bg_entry};color:{gcode_col};'
+                f'QPlainTextEdit{{background:{bg_entry};color:{colors["text_code"]};'
                 f'font-family:Consolas;border:1px solid {brd_left};border-radius:3px;}}')
 
         # ── Stats frame ───────────────────────────────────────────
@@ -1862,11 +1879,9 @@ class SimulationViewQt(QWidget):
                 f'QFrame{{background:{bg_stats};border-radius:6px;'
                 f'border:1px solid {brd_left};}}')
         for lbl in getattr(self, '_stat_key_labels', []):
-            lbl.setStyleSheet(
-                f'color:{text_sec};font-size:10px;font-weight:bold;border:none;')
+            lbl.setStyleSheet(f'color:{text_sec};font-size:10px;font-weight:bold;border:none;')
         for lbl in getattr(self, '_stat_val_labels', []):
-            lbl.setStyleSheet(
-                f'color:{text};font-family:Consolas;font-size:11px;border:none;')
+            lbl.setStyleSheet(f'color:{text};font-family:Consolas;font-size:11px;border:none;')
 
         # ── Options frame ─────────────────────────────────────────
         if hasattr(self, '_opts_frame'):
@@ -1876,59 +1891,45 @@ class SimulationViewQt(QWidget):
             self._opts_lbl.setStyleSheet(
                 f'color:{text};font-weight:bold;font-size:11px;border:none;')
 
-        # ── Bouton latency ────────────────────────────────────────
-        if hasattr(self, 'lat_btn') and self.lat_btn:
-            self.lat_btn.setStyleSheet(
-                f'QPushButton{{background:{spd_btn};color:{spd_col};'
-                f'border:1px solid {brd_left};border-radius:4px;'
-                f'padding:4px 10px;font-size:10px;font-weight:bold;}}'
-                f'QPushButton:checked{{background:#1a4a2a;color:#2ecc71;'
-                f'border-color:#2ecc71;}}')
+        # ── Label latency ─────────────────────────────────────────
+        if hasattr(self, 'lbl_lat') and self.lbl_lat:
+            self.lbl_lat.setStyleSheet(f'color:{text_sec};font-size:10px;border:none;')
 
         # ── Boutons export/cancel ─────────────────────────────────
         if hasattr(self, 'btn_cancel'):
             self.btn_cancel.setStyleSheet(
-                self._gbtn(btn_cancel_bg, btn_neutral_hov))
+                self._gbtn(colors['btn_cancel'], colors['btn_neutral_hover']))
 
         # ── Boutons transport ─────────────────────────────────────
         if hasattr(self, 'btn_rew'):
-            self.btn_rew.setStyleSheet(self._gbtn(btn_neutral_bg, btn_neutral_hov))
+            self.btn_rew.setStyleSheet(self._gbtn(colors['btn_neutral'], colors['btn_neutral_hover']))
         if hasattr(self, '_btn_end'):
-            self._btn_end.setStyleSheet(self._gbtn(btn_neutral_bg, btn_neutral_hov))
+            self._btn_end.setStyleSheet(self._gbtn(colors['btn_neutral'], colors['btn_neutral_hover']))
         if hasattr(self, '_btn_fit'):
-            self._btn_fit.setStyleSheet(self._gbtn(
-                '#333333' if is_dark else '#aaaaaa',
-                '#444444' if is_dark else '#999999'))
+            self._btn_fit.setStyleSheet(self._gbtn(colors['btn_cancel'], colors['btn_neutral_hover']))
 
         # ── Sélecteur vitesse ─────────────────────────────────────
         if hasattr(self, '_spd_frame'):
             self._spd_frame.setStyleSheet(
-                f'QFrame{{background:{spd_bg};border:1px solid {border};border-radius:5px;}}')
+                f'QFrame{{background:{colors["bg_speed"]};border:1px solid {border};border-radius:5px;}}')
         if hasattr(self, '_spd_lbl'):
-            self._spd_lbl.setStyleSheet(
-                f'color:{text};font-weight:bold;font-size:9px;border:none;')
+            self._spd_lbl.setStyleSheet(f'color:{text};font-weight:bold;font-size:9px;border:none;')
         if hasattr(self, '_spd_btns'):
-            btn_checked_bg = '#1f538d' if is_dark else '#4a90d9'
             for b in self._spd_btns.values():
                 b.setStyleSheet(
-                    f'QPushButton{{background:{spd_btn};color:{spd_col};'
+                    f'QPushButton{{background:{colors["bg_speed_btn"]};color:{colors["speed_text"]};'
                     f'border:1px solid {brd_left};border-radius:3px;'
                     f'padding:0px 4px;font-size:8px;min-width:18px;max-width:30px;}}'
-                    f'QPushButton:checked{{background:{btn_checked_bg};color:white;'
-                    f'border-color:#2a6dbd;}}'
-                    f'QPushButton:hover:!checked{{background:{btn_neutral_bg};color:white;}}')
+                    f'QPushButton:checked{{background:{colors["btn_speed_checked"]};color:white;'
+                    f'border-color:{colors["btn_speed_checked_hov"]};}}'
+                    f'QPushButton:hover:!checked{{background:{colors["btn_neutral"]};color:white;}}')
 
         # ── Barre de puissance ────────────────────────────────────
         if hasattr(self, '_power_bar'):
-            pbar_bg  = '#252525' if is_dark else '#e8e8e8'
-            pbar_txt = '#777777' if is_dark else '#444444'
-            pbar_brd = '#555555' if is_dark else '#aaaaaa'
-            self._power_bar.set_theme(pbar_bg, pbar_txt, pbar_brd)
+            self._power_bar.set_theme(colors['pbar_bg'], colors['seg_text'], colors['border_light'])
 
         # ── Badges options actives ────────────────────────────────
         if hasattr(self, '_opts_badges'):
-            inactive_col = '#888888' if is_dark else '#666666'
-            inactive_bg  = '#282828' if is_dark else '#cccccc'
             for badge, active in self._opts_badges:
                 if active:
                     badge.setStyleSheet(
@@ -1936,14 +1937,13 @@ class SimulationViewQt(QWidget):
                         'font-size:9px;font-weight:bold;padding:3px 6px;border:none;')
                 else:
                     badge.setStyleSheet(
-                        f'color:{inactive_col};background:{inactive_bg};border-radius:5px;'
+                        f'color:{colors["seg_text"]};background:{colors["bg_card"]};border-radius:5px;'
                         'font-size:9px;font-weight:bold;padding:3px 6px;border:none;')
 
         # ── Barre de progression ──────────────────────────────────
         if hasattr(self, 'prog_bar'):
-            prog_bg = '#333333' if is_dark else '#aaaaaa'
             self.prog_bar.setStyleSheet(
-                f'QProgressBar{{background:{prog_bg};border-radius:7px;border:none;}}'
+                f'QProgressBar{{background:{colors["progress_bg"]};border-radius:7px;border:none;}}'
                 f'QProgressBar::chunk{{background:#27ae60;border-radius:7px;}}')
         if hasattr(self, 'lbl_time'):
             self.lbl_time.setStyleSheet(
@@ -1977,6 +1977,7 @@ class SimulationViewQt(QWidget):
                 f'QPushButton:hover{{background:{hov};}}')
 
     def _c(self, dark_val, light_val):
+        # Conservé pour compatibilité
         return dark_val if self._theme_colors.get('suffix', '_DARK') == '_DARK' else light_val
 
     def _t(self, key='text'):

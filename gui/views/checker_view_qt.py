@@ -13,6 +13,7 @@ import numpy as np
 from PyQt6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QSizePolicy, QFileDialog, QMessageBox, QPlainTextEdit,
+    QDoubleSpinBox,
 )
 from PyQt6.QtCore import (
     Qt, QTimer, QThread, pyqtSignal, QRect, QRectF, QPointF, QLineF, QSize
@@ -27,6 +28,7 @@ from core.utils import truncate_path
 from core.translations import TRANSLATIONS
 from utils.paths import SVG_ICONS
 from gui.utils_qt import get_svg_pixmap
+from gui.switch import Switch
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -50,7 +52,7 @@ class _Renderer:
 
     def __init__(self, rect_w, rect_h, scale, total_px_h,
                  min_x, min_y, laser_width_px, ctrl_max,
-                 pwr_min=0.0, pwr_max=None, l_step_mm=None):
+                 pwr_min=0.0, pwr_max=None, l_step_mm=None, draw_step_mm=None):
         self.rect_w         = rect_w
         self.rect_h         = rect_h
         self.scale          = scale
@@ -61,9 +63,13 @@ class _Renderer:
         self.ctrl_max       = float(ctrl_max)
         self.pwr_min        = float(pwr_min)
         self.pwr_max        = float(pwr_max) if pwr_max is not None else self.ctrl_max
-        # l_step en mm — pour calculer top par index et éviter l'accumulation d'erreurs
+        # l_step_mm : espacement réel inter-lignes → snap Y (pas de gaps)
         self.l_step_mm      = float(l_step_mm) if l_step_mm else None
         self.l_step_px      = float(l_step_mm) * scale if l_step_mm else None
+        # draw_step_mm : épaisseur du trait laser (valeur utilisateur)
+        # Si None, utilise l_step_mm (comportement identique à avant)
+        _draw = draw_step_mm if draw_step_mm else l_step_mm
+        self.draw_step_px   = float(_draw) * scale if _draw else None
         self.display_data   = np.full((rect_h, rect_w), 255, dtype=np.uint8)
         self._qi_ref        = None
 
@@ -151,11 +157,11 @@ class _Renderer:
         pwr=p2[:,2][ok]
         y1_mm=y1_mm[ok]; y2_mm=y2_mm[ok]
 
-        # ── filtre longueur
+        # ── filtre longueur : ne rejeter que les segments strictement nuls
         dx = fx2 - fx1
         dy = fy2 - fy1
 
-        vis = (dx*dx + dy*dy) >= 0.25
+        vis = (dx*dx + dy*dy) > 0.0
         if not vis.any():
             return None
 
@@ -224,8 +230,9 @@ class _Renderer:
 
         h, w = self.display_data.shape
 
-        # épaisseur réelle du raster = line_step
-        step = self.l_step_px if self.l_step_px else self.laser_width_px
+        # draw_step_px : épaisseur du trait (valeur utilisateur)
+        # l_step_px : espacement inter-lignes (snap Y) — peut être différent
+        step = self.draw_step_px if self.draw_step_px else (self.l_step_px if self.l_step_px else float(self.laser_width_px))
         half = step / 2.0
 
         qi = QImage(w, h, QImage.Format.Format_Grayscale8)
@@ -312,8 +319,8 @@ class _SimCanvas(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
+        self.setStyleSheet('background:#050505;')
         self._bg_color = '#050505'
-        self.setStyleSheet(f'background:{self._bg_color};')
         self.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Expanding)
         self.setMouseTracking(True)
@@ -332,15 +339,12 @@ class _SimCanvas(QWidget):
         self._p0     = None
         self._p0_pan = None
         self._mouse_mm = None
-
-    def set_theme(self, bg: str):
-        self._bg_color = bg
-        self.setStyleSheet(f'background:{bg};')
-        self.update()
+        self._overlay_h = 150
+        self._placeholder_text = 'Open a G-Code file to start'
 
     # ─── API ─────────────────────────────
 
-    def setup(self, img_buf, x0, y0, pw, ph, sc, mnx, mxx, mny, mxy, l_step=0.1):
+    def setup(self, img_buf, x0, y0, pw, ph, sc, mnx, mxx, mny, mxy, l_step=0.1, overlay_h=150):
         self._img_buf = img_buf
         self._x0, self._y0 = x0, y0
         self._pw, self._ph = pw, ph
@@ -348,23 +352,62 @@ class _SimCanvas(QWidget):
         self._mnx, self._mxx = mnx, mxx
         self._mny, self._mxy = mny, mxy
         self._l_step = l_step
-        self._zoom = 1.0
-        self._pan  = QPointF(0, 0)
+        self._overlay_h = overlay_h
         self._rebuild()
         self._dirty = False
-        self.update()
+        # Fit-to-view automatique après setup
+        self.reset_view()
 
     def notify_dirty(self):
         self._dirty = True
         self.update()
+
+    def set_theme(self, bg: str):
+        self._bg_color = bg
+        self.setStyleSheet(f'background:{bg};')
+        self.update()
+
+    def set_placeholder(self, text: str):
+        self._placeholder_text = text
+        if self._img_buf is None:
+            self.update()
 
     def set_laser(self, sx, sy):
         self._lx, self._ly = sx, sy
         self.update()
 
     def reset_view(self):
-        self._zoom = 1.0
-        self._pan  = QPointF(0, 0)
+        """Fit-to-view : zoom et pan pour que l'image remplisse la zone utile."""
+        if self._pw <= 0 or self._ph <= 0:
+            self._zoom = 1.0
+            self._pan  = QPointF(0, 0)
+            self.update()
+            return
+
+        cw, ch = self.width(), self.height()
+        if cw <= 1 or ch <= 1:
+            return
+
+        # Zone utile : toute la largeur, hauteur sans overlay (stockée dans _overlay_h)
+        overlay_h = getattr(self, '_overlay_h', 150)
+        usable_w = cw
+        usable_h = max(ch - overlay_h, int(ch * 0.5))
+
+        margin = 12  # px de marge autour de l'image
+
+        # Zoom pour que l'image tienne dans la zone utile avec marge
+        zoom_x = (usable_w - 2 * margin) / self._pw
+        zoom_y = (usable_h - 2 * margin) / self._ph
+        self._zoom = min(zoom_x, zoom_y)
+
+        # Pan pour centrer l'image dans la zone utile
+        img_screen_w = self._pw * self._zoom
+        img_screen_h = self._ph * self._zoom
+
+        pan_x = (usable_w - img_screen_w) / 2.0 - self._x0 * self._zoom
+        pan_y = margin - self._y0 * self._zoom  # calé en haut avec marge
+
+        self._pan = QPointF(pan_x, pan_y)
         self.update()
 
     # ─── Rendu ───────────────────────────
@@ -388,11 +431,10 @@ class _SimCanvas(QWidget):
         qp.fillRect(0, 0, w, h, QColor(self._bg_color))
 
         if self._img_buf is None:
-            ph_col = '#888888' if self._bg_color[1:3].lower() >= '44' else '#444444'
-            qp.setPen(QColor(ph_col))
+            qp.setPen(QColor('#888888'))
             qp.setFont(QFont('Arial', 13))
             qp.drawText(QRect(0, 0, w, h),
-                        Qt.AlignmentFlag.AlignCenter, 'Generating…')
+                        Qt.AlignmentFlag.AlignCenter, self._placeholder_text)
             qp.end(); return
 
         # Zoom / pan
@@ -456,38 +498,16 @@ class _SimCanvas(QWidget):
     # ─── Zoom / Pan ──────────────────────
 
     def wheelEvent(self, e):
-        if self._img_buf is None or not hasattr(self, '_l_step'): 
+        if self._img_buf is None:
             return
-
-        # 1. Épaisseur actuelle d'une ligne en pixels écran
-        current_step_px = self._sc * self._zoom * self._l_step
-        
-        # 2. Calcul de la nouvelle épaisseur
-        if e.angleDelta().y() > 0:
-            # --- ZOOM AVANT : On veut de la netteté (Pixel-Perfect) ---
-            # On saute à l'entier supérieur (ex: 2.1px -> 3.0px)
-            new_step_px = np.floor(current_step_px + 1.0)
-        else:
-            # --- ZOOM ARRIÈRE : On veut de la souplesse ---
-            # On utilise un ratio simple (0.8) au lieu de soustraire 1 pixel.
-            # Cela permet de descendre à 0.8px, 0.6px, 0.4px sans jamais bloquer.
-            new_step_px = current_step_px * 0.8
-            
-        # Sécurité mini/maxi pour éviter les divisions par zéro ou les crashs
-        new_step_px = max(0.01, min(200.0, new_step_px)) 
-        
-        # 3. Calcul du nouveau zoom
-        new_zoom = new_step_px / (self._sc * self._l_step)
-
-        # 4. Point fixe sous la souris (ton code de navigation)
+        factor   = 1.15 if e.angleDelta().y() > 0 else (1.0 / 1.15)
+        new_zoom = max(0.05, min(200.0, self._zoom * factor))
         pos = e.position()
         cx, cy = pos.x(), pos.y()
         wx = (cx - self._pan.x()) / self._zoom
         wy = (cy - self._pan.y()) / self._zoom
-        
         self._zoom = new_zoom
-        self._pan  = QPointF(cx - wx*self._zoom, cy - wy*self._zoom)
-        
+        self._pan  = QPointF(cx - wx * self._zoom, cy - wy * self._zoom)
         self.update()
 
     def mousePressEvent(self, e):
@@ -552,6 +572,8 @@ class _ParseWorker(QThread):
                 deltas    = np.diff(pts[:, :2], axis=0)
                 distances = np.hypot(deltas[:, 0], deltas[:, 1])
                 rates     = pts[1:, 4] / 60.0
+                # Feedrate moyen (col 4 avant écrasement) — pour la latence
+                feedrate_mmmin = float(np.median(pts[pts[:, 4] > 0, 4])) if (pts[:, 4] > 0).any() else 3000.0
                 times     = np.divide(distances, rates,
                                       out=np.zeros_like(distances),
                                       where=rates > 0)
@@ -560,12 +582,14 @@ class _ParseWorker(QThread):
                 total_dur  = float(pts[-1, 4])
             else:
                 total_dur = 0.0
+                feedrate_mmmin = 3000.0
 
             self.done.emit({
-                'gcode':     self.gcode,
-                'pts':       pts,
-                'total_dur': total_dur,
-                'bounds':    (bx0, bx1, by0, by1),
+                'gcode':          self.gcode,
+                'pts':            pts,
+                'total_dur':      total_dur,
+                'bounds':         (bx0, bx1, by0, by1),
+                'feedrate_mmmin': feedrate_mmmin,
             })
         except Exception as e:
             import traceback; traceback.print_exc()
@@ -617,8 +641,6 @@ class CheckerViewQt(QWidget):
 
         self.setStyleSheet('background:#2b2b2b; color:white;')
         self._build_ui()
-        # Stocker les widgets thémables créés dans _make_playback_bar
-        self._spd_frame: QFrame | None = None
 
     # ══════════════════════════════════════════════════════════════
     #  CONSTRUCTION UI
@@ -645,9 +667,9 @@ class CheckerViewQt(QWidget):
 
         lo.addWidget(self._make_file_widget())
 
-        gl = QLabel(self.t.get('live_gcode', 'Live G-Code'))
-        gl.setStyleSheet('color:white;font-weight:bold;font-size:11px;border:none;')
-        lo.addWidget(gl)
+        self.gl_lbl = QLabel(self.t.get('live_gcode', 'Live G-Code'))
+        self.gl_lbl.setStyleSheet('color:white;font-weight:bold;font-size:11px;border:none;')
+        lo.addWidget(self.gl_lbl)
 
         self.gcode_view = QPlainTextEdit()
         self.gcode_view.setReadOnly(True)
@@ -696,6 +718,34 @@ class CheckerViewQt(QWidget):
         row.addWidget(self.lbl_dur)
         lo.addLayout(row)
 
+        # ── Champ line_step éditable (non sauvegardé) ──────────────
+        step_row = QHBoxLayout()
+        self.lbl_lstep = QLabel(self.t.get('line_step_lbl', 'Line step (mm):'))
+        self.lbl_lstep.setStyleSheet('color:#aaa;font-size:10px;border:none;')
+        step_row.addWidget(self.lbl_lstep)
+
+        self.spin_lstep = QDoubleSpinBox()
+        self.spin_lstep.setRange(0.001, 50.0)
+        self.spin_lstep.setDecimals(4)
+        self.spin_lstep.setSingleStep(0.01)
+        self.spin_lstep.setFixedHeight(24)
+        self.spin_lstep.setStyleSheet(
+            'QDoubleSpinBox{background:#1a1a1a;color:white;border:1px solid #555;'
+            'border-radius:3px;font-size:10px;padding:1px 4px;}'
+            'QDoubleSpinBox::up-button,QDoubleSpinBox::down-button{width:14px;}'
+        )
+        # Pré-remplir depuis config (hor_linestep par défaut)
+        try:
+            default_step = float(
+                self.controller.config_manager.get_item('machine_settings', 'hor_linestep', 0.1) or 0.1
+            )
+        except Exception:
+            default_step = 0.1
+        self.spin_lstep.setValue(default_step)
+        self.spin_lstep.valueChanged.connect(self._on_lstep_changed)
+        step_row.addWidget(self.spin_lstep)
+        lo.addLayout(step_row)
+
         return f
 
 
@@ -704,9 +754,19 @@ class CheckerViewQt(QWidget):
         f.setStyleSheet('QFrame{border:none;background:transparent;}')
         lo = QVBoxLayout(f)
         lo.setContentsMargins(0, 0, 0, 0)
-        lo.setSpacing(4)
+        lo.setSpacing(6)
 
-        self.lat_btn = None
+        # ── Switch compensation délai laser ───────────────────────
+        lat_row = QHBoxLayout()
+        self.lbl_lat = QLabel(self.t.get('simulate_latency', 'Simulate latency'))
+        self.lbl_lat.setStyleSheet('color:#aaa;font-size:10px;border:none;')
+        lat_row.addWidget(self.lbl_lat)
+        lat_row.addStretch()
+        self.sw_latency = Switch()
+        self.sw_latency.setChecked(False)
+        self.sw_latency.toggled.connect(self._on_lat_toggle)
+        lat_row.addWidget(self.sw_latency)
+        lo.addLayout(lat_row)
 
         self.btn_cancel = QPushButton(self.t.get('cancel', 'Close'))
         self.btn_cancel.setFixedHeight(30)
@@ -727,6 +787,7 @@ class CheckerViewQt(QWidget):
 
         # Canvas occupe tout l'espace
         self.canvas = _SimCanvas()
+        self.canvas.set_placeholder(self.t.get('open_gcode_hint', 'Open a G-Code file to start'))
         lo.addWidget(self.canvas, stretch=1)
 
         # Les contrôles de lecture et la barre de progression sont créés
@@ -753,13 +814,12 @@ class CheckerViewQt(QWidget):
         tr = QHBoxLayout()
         tr.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.btn_rew  = QPushButton() # '⏮'
+        btn_rew = QPushButton()
         rewind_pixmap = get_svg_pixmap(SVG_ICONS["REWIND"], QSize(24, 24), "#ffffff")
-        self.btn_rew.setIcon(QIcon(rewind_pixmap))
-        self.btn_rew.setFixedSize(60, 40)
-        self.btn_rew.setFont(QFont('Arial', 16))
-        self.btn_rew.setStyleSheet(self._gbtn('#444', '#555'))
-        self.btn_rew.clicked.connect(self.rewind_sim)
+        btn_rew.setIcon(QIcon(rewind_pixmap))
+        btn_rew.setFixedSize(60, 40)
+        btn_rew.setStyleSheet(self._gbtn('#444', '#555'))
+        btn_rew.clicked.connect(self.rewind_sim)
 
         self.btn_play = QPushButton() # '▶'
         self.play_pixmap = get_svg_pixmap(SVG_ICONS["PLAY"], QSize(24, 24), "#ffffff")
@@ -788,13 +848,12 @@ class CheckerViewQt(QWidget):
         btn_fit.setStyleSheet(self._gbtn('#333', '#444'))
         btn_fit.clicked.connect(self.canvas.reset_view)
 
-        for b in [self.btn_rew, self.btn_play, btn_end, btn_fit]:
+        for b in [btn_rew, self.btn_play, btn_end, btn_fit]:
             tr.addWidget(b)
         lo.addLayout(tr)
 
         # Sélecteur vitesse
         sf = QFrame()
-        self._spd_frame = sf
         sf.setStyleSheet('QFrame{background:#222;border:1px solid #444;'
                          'border-radius:5px;}')
         sr = QHBoxLayout(sf)
@@ -1016,8 +1075,18 @@ class CheckerViewQt(QWidget):
         self.points_list   = d['pts']
         self.total_sec     = d.get('total_dur', 0.0)
         self.framing_end   = 0
-        self.latence_mm    = 0.0
         self._last_drawn_idx = -1
+
+        # Calculer latence_mm depuis le feedrate réel et la config
+        try:
+            lat_ms = float(
+                self.controller.config_manager.get_item('machine_settings', 'laser_latency', 0.0) or 0.0
+            )
+            feedrate_mmmin = d.get('feedrate_mmmin', 3000.0)
+            # lat_ms * feedrate (mm/min) / 60000 = mm  (signe inversé)
+            self.latence_mm = -abs(lat_ms) * feedrate_mmmin / 60000.0
+        except Exception:
+            self.latence_mm = 0.0
 
         # Bounds = tous les points parsés (G0 + G1 Q=0 + G1 Q>0)
         # On veut voir l'intégralité des déplacements, overscan inclus
@@ -1041,6 +1110,23 @@ class CheckerViewQt(QWidget):
 
         self.lbl_time.setText(f'00:00:00 / {self._fmt(self.total_sec)}')
         self._right_widget.updateGeometry()
+
+        # Détecter l'axe dominant du raster pour pré-remplir le line_step
+        if pts is not None and len(pts) > 1:
+            dx_total = float(np.sum(np.abs(np.diff(pts[:, 0]))))
+            dy_total = float(np.sum(np.abs(np.diff(pts[:, 1]))))
+            is_horizontal = dx_total >= dy_total
+            try:
+                key = 'hor_linestep' if is_horizontal else 'ver_linestep'
+                step_val = float(
+                    self.controller.config_manager.get_item('machine_settings', key, 0.1) or 0.1
+                )
+                self.spin_lstep.blockSignals(True)
+                self.spin_lstep.setValue(step_val)
+                self.spin_lstep.blockSignals(False)
+            except Exception:
+                pass
+
         self._init_canvas()
 
 
@@ -1066,20 +1152,19 @@ class CheckerViewQt(QWidget):
 
         pts = self.points_list
 
-        # 2. line_step : lu depuis la config raster_settings (mm)
-        #    Définit à la fois la largeur du tracé ET le snap de position.
-        #    Fallback : 0.1 mm si absent ou invalide.
+        # 2. l_step (épaisseur trait laser) : champ éditable UI — non sauvegardé
         try:
-            l_step = float(
-                self.controller.config_manager.get_item('raster_settings', 'line_step', 0.1) or 0.1
-            )
+            l_step = float(self.spin_lstep.value())
             if l_step <= 0:
                 l_step = 0.1
         except Exception:
             l_step = 0.1
 
-        # lw_px : converti en pixels selon l'échelle courante (calculée après sc)
-        # On calcule sc d'abord, puis lw_px = max(1, round(l_step * sc))
+        # 3. scan_step (espacement réel entre lignes) : détecté depuis le G-Code
+        #    Sert au snap d'échelle et au snap Y — indépendant de l_step utilisateur
+        scan_step = self._detect_scan_step(pts)
+        if scan_step is None or scan_step <= 0:
+            scan_step = l_step  # fallback : utiliser l_step si pas de raster détecté
 
         # ─────────────────────────────
         # Dimensions réelles pièce (mm)
@@ -1092,10 +1177,15 @@ class CheckerViewQt(QWidget):
         ch_usable = max(ch - overlay_h, int(ch * 0.5))
 
         # Scale pour tenir dans la vue
-        sc = min((cw * 0.80) / tw, (ch_usable * 0.80) / th)
+        sc = min((cw * 0.90) / tw, (ch_usable * 0.90) / th)
 
-        # lw_px : largeur du tracé laser en pixels, déduite du line_step config
-        lw_px = max(1, int(round(l_step * sc)))
+        # SNAP ÉCHELLE sur scan_step (pas inter-lignes réel)
+        # → les lignes tombent exactement sur des pixels entiers → aucun gap
+        snap_px = max(1, int(np.round(scan_step * sc)))
+        sc = snap_px / scan_step  # échelle recalculée
+
+        # lw_px pour les marges du buffer (basé sur l_step affiché)
+        lw_px = max(1, int(np.round(l_step * sc)))
 
         # Dimensions projetées écran
         pw = tw * sc
@@ -1105,9 +1195,9 @@ class CheckerViewQt(QWidget):
         rw = max(1, int(round(pw)) + lw_px * 2)
         rh = max(1, int(round(ph)) + lw_px * 2)
 
-        # Position : centré horizontalement, calé en haut de la zone utile
+        # Position : centré horizontalement, marge en haut
         x0 = (cw - pw) / 2.0
-        y0 = (ch_usable - ph) * 0.20
+        y0 = max(8.0, (ch_usable - ph) * 0.10)
 
         # ─────────────────────────────
         # Initialisation renderer
@@ -1136,7 +1226,8 @@ class CheckerViewQt(QWidget):
             self.ctrl_max,
             pwr_min=pwr_min_s,
             pwr_max=pwr_max_s,
-            l_step_mm=l_step if l_step > 0 else None
+            l_step_mm=scan_step,   # snap Y basé sur espacement réel
+            draw_step_mm=l_step    # épaisseur du trait (valeur utilisateur)
         )
 
         # Stockage géométrie
@@ -1163,13 +1254,20 @@ class CheckerViewQt(QWidget):
             x0, y0, pw, ph, sc,
             self._mnx, self._mxx,
             self._mny, self._mxy,
-            l_step if l_step > 0 else 1.0
+            l_step if l_step > 0 else 1.0,
+            overlay_h
         )
 
         self.canvas.set_laser(lx, ly)
 
         # Forcer le repositionnement des overlays
         self.resizeEvent(None)
+
+        # Afficher l'image complète immédiatement au chargement
+        QTimer.singleShot(0, lambda: (
+            self._redraw_to(len(self.points_list) - 1),
+            self._update_ui(len(self.points_list) - 1)
+        ))
 
     # ══════════════════════════════════════════════════════════════
     #  ANIMATION — hot path
@@ -1330,6 +1428,44 @@ class CheckerViewQt(QWidget):
     #  CONTRÔLES PLAYBACK
     # ══════════════════════════════════════════════════════════════
 
+    def _detect_scan_step(self, pts):
+        """Détecte l'espacement réel entre lignes de scan depuis les points parsés."""
+        if pts is None or len(pts) < 2:
+            return None
+        try:
+            # Chercher les transitions laser actif → inactif (fin de ligne)
+            pwr = pts[:, 2]
+            starts = np.where((pwr[:-1] == 0) & (pwr[1:] > 0))[0] + 1
+            if len(starts) < 2:
+                # Fallback : diffs Y uniques pour raster horizontal
+                y_unique = np.unique(np.round(pts[:, 1], 6))
+                if len(y_unique) > 1:
+                    diffs = np.diff(y_unique)
+                    diffs = diffs[diffs > 1e-6]
+                    if len(diffs):
+                        return float(np.median(diffs))
+                return None
+            # Distance entre débuts de passes consécutives
+            n = min(len(starts) - 1, 30)
+            dists = []
+            for i in range(n):
+                p1 = pts[starts[i], :2]
+                p2 = pts[starts[i + 1], :2]
+                d = float(np.hypot(p2[0] - p1[0], p2[1] - p1[1]))
+                if 1e-4 < d < 10.0:
+                    dists.append(d)
+            if dists:
+                return float(np.median(dists))
+        except Exception:
+            pass
+        return None
+
+    def _on_lstep_changed(self, value):
+        """Recalcule le canvas quand l'utilisateur change le line_step."""
+        if self.points_list is not None and len(self.points_list) > 0:
+            self._stop_play()
+            self._init_canvas()
+
     def toggle_pause(self):
         if self.points_list is None or self.points_list.size == 0:
             return
@@ -1341,10 +1477,23 @@ class CheckerViewQt(QWidget):
             self._start_play()
 
     def _start_play(self):
+        # Effacer l'image si déjà dessinée, pour repartir de zéro
+        if self._last_drawn_idx > 0:
+            if self._renderer:
+                self._renderer.reset()
+                self.canvas.notify_dirty()
+            self._last_drawn_idx  = -1
+            self.current_idx      = 0
+            self.current_sim_time = 0.0
+            self.last_frame_time  = 0.0
+            self.prog_bar.setValue(0)
+            self.lbl_time.setText(f'00:00:00 / {self._fmt(self.total_sec)}')
+            if self.points_list is not None and self.points_list.size > 0:
+                lx, ly = self._mm_to_screen(self.points_list[0][0], self.points_list[0][1])
+                self.canvas.set_laser(lx, ly)
         self.sim_running     = True
         self.last_frame_time = time.perf_counter()
         self.btn_play.setIcon(QIcon(self.pause_pixmap))
-        # self.btn_play.setText('⏸')
         self.btn_play.setStyleSheet(self._gbtn('#e67e22', '#ca6f1e'))
         self._anim_timer.start()
 
@@ -1400,11 +1549,9 @@ class CheckerViewQt(QWidget):
 
     def _on_lat_toggle(self, checked):
         self.latence_enabled = checked
-        if self.lat_btn:
-            self.lat_btn.setText(
-                self.t.get('simulate_latency', 'SIMULATE LATENCY') +
-                f'  {"●" if checked else "○"}')
-        self._redraw_to(self.current_idx)
+        if self.points_list is not None and len(self.points_list) > 0:
+            target = len(self.points_list) - 1 if self._last_drawn_idx >= len(self.points_list) - 1 else self.current_idx
+            self._redraw_to(target)
 
     def _on_prog_click(self, e):
         # Sécurités de base
@@ -1558,63 +1705,88 @@ class CheckerViewQt(QWidget):
         except Exception: pass
 
     # ══════════════════════════════════════════════════════════════
+    #  EXPORT
+    # ══════════════════════════════════════════════════════════════
+
+    # ══════════════════════════════════════════════════════════════
+    #  LANGUE
+    # ══════════════════════════════════════════════════════════════
+
+    def _apply_language(self, lang: str, translations: dict):
+        """Appelée par update_ui_language — recharge self.t et met à jour les widgets."""
+        from core.translations import TRANSLATIONS as _TR
+        repo = translations if translations else _TR.get(lang, _TR['English'])
+        self.t = repo.get('simulation', {})
+
+        if hasattr(self, 'btn_open'):
+            self.btn_open.setText(self.t.get('open_file', 'Open G-Code file…'))
+        if hasattr(self, 'lbl_file') and not self._loaded_path:
+            self.lbl_file.setText(self.t.get('no_file', 'No file loaded'))
+        if hasattr(self, 'btn_cancel'):
+            self.btn_cancel.setText(self.t.get('cancel', 'Close'))
+        if hasattr(self, 'lbl_lstep'):
+            self.lbl_lstep.setText(self.t.get('line_step_lbl', 'Line step (mm):'))
+        if hasattr(self, 'lbl_lat'):
+            self.lbl_lat.setText(self.t.get('simulate_latency', 'Simulate latency'))
+        if hasattr(self, 'canvas') and self.canvas._img_buf is None:
+            self.canvas.set_placeholder(self.t.get('open_gcode_hint', 'Open a G-Code file to start'))
+
+    # ══════════════════════════════════════════════════════════════
     #  THÈME
     # ══════════════════════════════════════════════════════════════
 
     def apply_theme(self, colors: dict):
-        is_dark    = colors.get('suffix', '_DARK') == '_DARK'
-        text       = colors.get('text',       '#ffffff' if is_dark else '#000000')
-        text_sec   = colors.get('text_secondary', '#aaaaaa' if is_dark else '#555555')
-        bg_main    = '#1e1e1e' if is_dark else '#f0f0f0'
-        bg_card    = '#252525' if is_dark else '#e0e0e0'
-        bg_right   = '#111111' if is_dark else '#d8d8d8'
-        bg_entry   = '#1a1a1a' if is_dark else '#ffffff'
-        bg_spd     = '#222222' if is_dark else '#e8e8e8'
-        border     = '#333333' if is_dark else '#cccccc'
-        border_spd = '#444444' if is_dark else '#bbbbbb'
-        gcode_col  = '#00ff00' if is_dark else '#006600'
-        btn_dark_bg  = '#444444' if is_dark else '#cccccc'
-        btn_dark_hov = '#555555' if is_dark else '#b8b8b8'
+        text       = colors['text']
+        text_sec   = colors['text_secondary']
+        bg_main    = colors['bg_main']
+        bg_card    = colors['bg_card']
+        bg_right   = colors['bg_deep']
+        bg_entry   = colors['bg_entry']
+        bg_spd     = colors['bg_speed']
+        border     = colors['border']
+        border_spd = colors['border_strong']
+        gcode_col  = colors['text_code']
+        btn_dark_bg  = colors['btn_dark']
+        btn_dark_hov = colors['btn_dark_hover']
 
-        # ── Widget racine ─────────────────────────────────────────
-        self.setStyleSheet(f'background:{bg_main}; color:{text};')
+        # Scopé pour ne pas cascader sur _SimCanvas
+        self.setStyleSheet(
+            f'CheckerViewQt {{ background:{bg_main}; color:{text}; }}'
+        )
 
-        # ── Panneau gauche ────────────────────────────────────────
         if hasattr(self, 'left'):
             self.left.setStyleSheet(
                 f'QFrame#checkerLeft{{background:{bg_main};border-right:1px solid {border};}}'
             )
-
-        # ── Cadre fichier ─────────────────────────────────────────
         if hasattr(self, '_file_frame'):
             self._file_frame.setStyleSheet(
                 f'QFrame{{background:{bg_card};border-radius:6px;border:1px solid {border};}}'
             )
-
-        # ── Labels ────────────────────────────────────────────────
+        if hasattr(self, 'gl_lbl'):
+            self.gl_lbl.setStyleSheet(f'color:{text};font-weight:bold;font-size:11px;border:none;')
         if hasattr(self, 'lbl_file'):
             self.lbl_file.setStyleSheet(f'color:{text_sec};font-size:10px;border:none;')
+        if hasattr(self, 'lbl_lstep'):
+            self.lbl_lstep.setStyleSheet(f'color:{text_sec};font-size:10px;border:none;')
+        if hasattr(self, 'spin_lstep'):
+            self.spin_lstep.setStyleSheet(
+                f'QDoubleSpinBox{{background:{bg_entry};color:{text};border:1px solid {border_spd};'
+                f'border-radius:3px;font-size:10px;padding:1px 4px;}}'
+                f'QDoubleSpinBox::up-button,QDoubleSpinBox::down-button{{width:14px;}}'
+            )
+        if hasattr(self, 'lbl_lat'):
+            self.lbl_lat.setStyleSheet(f'color:{text_sec};font-size:10px;border:none;')
         if hasattr(self, 'lbl_time'):
             self.lbl_time.setStyleSheet(
                 f'color:{text};font-size:9px;font-weight:bold;background:transparent;border:none;'
             )
-
-        # ── G-Code view ───────────────────────────────────────────
         if hasattr(self, 'gcode_view'):
             self.gcode_view.setStyleSheet(
                 f'QPlainTextEdit{{background:{bg_entry};color:{gcode_col};'
                 f'font-family:Consolas;border:1px solid {border};border-radius:3px;}}'
             )
-
-        # ── Boutons ───────────────────────────────────────────────
         if hasattr(self, 'btn_cancel'):
-            btn_cancel_bg  = '#333333' if is_dark else '#d0d0d0'
-            btn_cancel_hov = '#444444' if is_dark else '#bcbcbc'
-            self.btn_cancel.setStyleSheet(self._gbtn(btn_cancel_bg, btn_cancel_hov))
-        if hasattr(self, 'btn_rew'):
-            self.btn_rew.setStyleSheet(self._gbtn(btn_dark_bg, btn_dark_hov))
-
-        # ── Barre de vitesse ──────────────────────────────────────
+            self.btn_cancel.setStyleSheet(self._gbtn(colors['btn_cancel'], colors['btn_cancel_hover']))
         if hasattr(self, '_spd_frame') and self._spd_frame:
             self._spd_frame.setStyleSheet(
                 f'QFrame{{background:{bg_spd};border:1px solid {border_spd};border-radius:5px;}}'
@@ -1626,21 +1798,17 @@ class CheckerViewQt(QWidget):
                 f'QPushButton{{background:{bg_card};color:{text_sec};'
                 f'border:1px solid {border_spd};border-radius:3px;'
                 f'padding:0px 4px;font-size:8px;min-width:18px;max-width:30px;}}'
-                f'QPushButton:checked{{background:#1f538d;color:white;border-color:#2a6dbd;}}'
+                f'QPushButton:checked{{background:{colors["btn_speed_checked"]};color:white;'
+                f'border-color:{colors["btn_speed_checked_hov"]};}}'
                 f'QPushButton:hover:!checked{{background:{btn_dark_bg};color:{text};}}'
             )
             for b in self._spd_btns.values():
                 b.setStyleSheet(spd_style)
-
-        # ── Barre de progression ──────────────────────────────────
         if hasattr(self, 'prog_bar'):
-            pb_bg = '#333333' if is_dark else '#cccccc'
             self.prog_bar.setStyleSheet(
-                f'QProgressBar{{background:{pb_bg};border-radius:7px;border:none;}}'
+                f'QProgressBar{{background:{colors["progress_bg"]};border-radius:7px;border:none;}}'
                 f'QProgressBar::chunk{{background:#27ae60;border-radius:7px;}}'
             )
-
-        # ── Panneau droit + canvas ────────────────────────────────
         if hasattr(self, '_right_widget'):
             self._right_widget.setStyleSheet(f'background:{bg_right};')
         if hasattr(self, 'canvas'):

@@ -7,7 +7,9 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QMessageBox
 import os
 import shutil
+import tempfile
 from utils.paths import SVG_ICONS
+from core.themes import get_theme
 #from utils.paths import ARROW_DOWN, CIRCLE
 from gui.switch import Switch
 
@@ -30,10 +32,7 @@ class SettingsViewQt(QWidget):
         self.loading = True
 
         # Couleurs du thème — initialisées dark, mises à jour par apply_theme
-        self._theme_colors = {
-            'text': '#ffffff', 'text_secondary': '#aaaaaa',
-            'bg_card': '#2b2b2b', 'border': '#3d3d3d', 'suffix': '_DARK',
-        }
+        self._theme_colors = get_theme('Dark')
 
         # 2. Configuration du Layout Principal
         self.main_layout = QVBoxLayout(self)
@@ -53,49 +52,64 @@ class SettingsViewQt(QWidget):
     # ── Helpers de style (lisent _theme_colors) ──────────────────────────
 
     def _c(self, key, dark_val, light_val):
-        is_dark = self._theme_colors.get('suffix', '_DARK') == '_DARK'
-        return dark_val if is_dark else light_val
+        # Conservé pour compatibilité — préférer colors['key'] directement
+        return dark_val if self._theme_colors.get('suffix', '_DARK') == '_DARK' else light_val
 
     def _entry_style(self):
-        bg  = self._c('', '#1e1e1e', '#ffffff')
-        brd = self._c('', '#444444', '#bbbbbb')
-        col = self._theme_colors.get('text', '#ffffff')
-        return (f"QLineEdit{{background-color:{bg};border:1px solid {brd};"
-                f"border-radius:4px;color:{col};padding:3px;}}")
+        c = self._theme_colors
+        return (f"QLineEdit{{background-color:{c['bg_entry']};border:1px solid {c['border_strong']};"
+                f"border-radius:4px;color:{c['text']};padding:3px;}}")
+
+    @staticmethod
+    def _arrow_svg_path(color: str) -> str:
+        """Retourne le chemin vers un SVG de flèche recolorisé (tempfile)."""
+        src = SVG_ICONS.get("ARROW_DOWN", "")
+        if not src or not os.path.isfile(src):
+            return src.replace("\\", "/")
+        try:
+            with open(src, "r", encoding="utf-8") as f:
+                svg = f.read()
+            import re
+            svg = re.sub(r'fill\s*=\s*"[^"]*"',   f'fill="{color}"',   svg)
+            svg = re.sub(r'fill\s*:\s*[^;}"]+',    f'fill:{color}',     svg)
+            svg = re.sub(r'stroke\s*=\s*"[^"]*"',  f'stroke="{color}"', svg)
+            svg = re.sub(r'stroke\s*:\s*[^;}"]+',  f'stroke:{color}',   svg)
+            tmp = tempfile.NamedTemporaryFile(
+                suffix=f'_arrow_{color.strip("#")}.svg',
+                delete=False, mode='w', encoding='utf-8'
+            )
+            tmp.write(svg)
+            tmp.close()
+            return tmp.name.replace("\\", "/")
+        except Exception:
+            return src.replace("\\", "/")
 
     def _combo_style(self):
-        bg  = self._c('', '#1e1e1e', '#ffffff')
-        brd = self._c('', '#444444', '#bbbbbb')
-        col = self._theme_colors.get('text', '#ffffff')
-        sel = self._c('', '#444444', '#d0e4f7')
-        arrow_path = SVG_ICONS["ARROW_DOWN"].replace("\\", "/")
+        c = self._theme_colors
+        arrow_path = self._arrow_svg_path(c['arrow_color'])
         return (
-            f"QComboBox{{background-color:{bg};border:1px solid {brd};"
-            f"border-radius:5px;padding:3px 30px 3px 10px;color:{col};}}"
+            f"QComboBox{{background-color:{c['bg_entry']};border:1px solid {c['border_strong']};"
+            f"border-radius:5px;padding:3px 30px 3px 10px;color:{c['text']};}}"
             f"QComboBox::drop-down{{subcontrol-origin:padding;subcontrol-position:top right;"
             f"width:25px;border:none;background:transparent;}}"
             f"QComboBox::down-arrow{{image:url({arrow_path});width:12px;height:8px;}}"
-            f"QComboBox QAbstractItemView{{background-color:{bg};color:{col};"
-            f"selection-background-color:{sel};border:1px solid {brd};}}"
+            f"QComboBox QAbstractItemView{{background-color:{c['bg_entry']};color:{c['text']};"
+            f"selection-background-color:{c['combo_selection']};border:1px solid {c['border_strong']};}}"
         )
 
     def _textedit_style(self):
-        bg  = self._c('', '#1a1a1a', '#f8f8f8')
-        brd = self._c('', '#444444', '#bbbbbb')
-        return (f"QTextEdit{{background-color:{bg};border:1px solid {brd};"
+        c = self._theme_colors
+        return (f"QTextEdit{{background-color:{c['bg_entry_alt']};border:1px solid {c['border_strong']};"
                 f"border-radius:6px;color:#8fbdf0;padding:5px;}}")
 
     def _label_row_style(self):
-        col = self._theme_colors.get('text', '#ffffff')
-        return f"color:{col};font-size:13px;border:none;background:transparent;"
+        return f"color:{self._theme_colors['text']};font-size:13px;border:none;background:transparent;"
 
     def _section_frame_style(self):
-        bg  = self._theme_colors.get('bg_card', '#2b2b2b')
-        brd = self._theme_colors.get('border', '#3d3d3d')
-        col = self._theme_colors.get('text', '#ffffff')
-        return (f"QFrame{{background-color:{bg};border:1px solid {brd};"
+        c = self._theme_colors
+        return (f"QFrame{{background-color:{c['bg_card_alt']};border:1px solid {c['border_card']};"
                 f"border-radius:12px;}}"
-                f"QLabel{{border:none;background:transparent;color:{col};}}")
+                f"QLabel{{border:none;background:transparent;color:{c['text']};}}")
 
     def setup_header(self):
         """Crée l'en-tête avec titre et bouton Sauvegarder"""
@@ -736,9 +750,8 @@ class SettingsViewQt(QWidget):
         """Met à jour dynamiquement les couleurs de la vue Settings"""
         self._theme_colors = colors
 
-        is_dark  = colors.get('suffix', '_DARK') == '_DARK'
-        text     = colors.get('text', '#ffffff' if is_dark else '#000000')
-        text_sec = colors.get('text_secondary', '#aaaaaa' if is_dark else '#555555')
+        text     = colors['text']
+        text_sec = colors['text_secondary']
 
         # ── Vue racine ────────────────────────────────────────────
         self.setStyleSheet("background-color: transparent;")
@@ -775,9 +788,8 @@ class SettingsViewQt(QWidget):
 
         # ── Boutons maintenance ───────────────────────────────────
         if hasattr(self, 'btn_clear_data'):
-            btn_bg = '#444444' if is_dark else '#cccccc'
             self.btn_clear_data.setStyleSheet(
-                f"QPushButton{{background-color:{btn_bg};color:{text};"
+                f"QPushButton{{background-color:{colors['btn_neutral']};color:{text};"
                 f"border-radius:6px;font-weight:bold;}}"
                 f"QPushButton:hover{{background-color:#942121;color:white;}}"
             )

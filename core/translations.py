@@ -71,7 +71,7 @@ TRANSLATIONS = {
             "measured_offset": "Measured Offset (mm):",
             "latency_results": "Result:",
             "apply_save": "Apply & Save",
-            "linestep_title": "(!WIP!) LINE STEP TEST", 
+            "linestep_title": "LINE STEP TEST", 
             "linestep_short": "Check your ideal line step setting to avoid white stripes or overburning",
             "linestep_long": "This test is designed to optimize your scanning density (DPI/Line Interval). If the interval is too large, gaps will appear between engraving lines (white stripes). If it is too small, excessive overlap will occur, causing overburning, loss of fine detail, and unnecessary material stress. Find the value where lines perfectly touch without overlapping.",
             "power_title": "(!WIP!) POWER SCALE GRID",
@@ -203,6 +203,7 @@ TRANSLATIONS = {
             "pointing_opt": "POINTING",
             "framing_opt": "FRAMING",
             "simulate_latency": "SIMULATE LATENCY",
+            "select_gcode": "SELECT A GCODE FILE",
             "save_success" : "G-Code saved:",
             "save_failed": "Save failed:",
             "no_gcode": "No G-Code to save.",
@@ -213,7 +214,9 @@ TRANSLATIONS = {
             "parsing": "Parsing G-Code…",
             "error_title": "Error",
             "error_read_file": "Cannot read file:",
-            "parse_error_title": "Parse Error"
+            "parse_error_title": "Parse Error",
+            "line_step_lbl": "Line step (mm):",
+            "open_gcode_hint": "Open a G-Code file to start"
         }
     },
     "Français": {
@@ -284,11 +287,10 @@ TRANSLATIONS = {
             "measured_offset": "Décalage mesuré (mm):",
             "latency_results": "Resultat :",
             "apply_save": "Sauvegarder",
-
-            "linestep_title": "(!WIP!) TEST D'INTERVALLE DE LIGNES", 
+            "linestep_title": "TEST D'INTERVALLE DE LIGNES", 
             "linestep_short": "Déterminez le réglage idéal pour éviter les bandes blanches ou les brûlures excessives",
             "linestep_long": "Ce test permet d'optimiser la densité du balayage (DPI). Un intervalle trop grand laissera apparaître des lignes vides (bandes blanches), tandis qu'un intervalle trop petit entraînera un chevauchement excessif, brûlant inutilement la matière et perdant les détails.",
-            "power_title": "GRILLE D'ÉCHELLE DE PUISSANCE (!! TRAVAIL EN COURS !!)",
+            "power_title": "(!WIP!)  GRILLE D'ÉCHELLE DE PUISSANCE",
             "power_short": "Rampe d'intensité de 0% à 100%.",
             "power_long": "Génère 10 carrés avec des niveaux de gris variables.\n\nObjectif :\n- Observer comment votre matériau réagit aux différents pourcentages de puissance.\n- Identifier le seuil où le matériau commence à être marqué.\n- Déterminer le niveau de noir maximal effectif.",
             "btn_generate": "Générer le G-code...",
@@ -414,6 +416,7 @@ TRANSLATIONS = {
             "pointing_opt": "POINTAGE",
             "framing_opt": "ENCADREMENT",
             "simulate_latency": "SIMULATER LA LATENCE",
+            "select_gcode": "SELECTIONNER UN FICHIER GCODE",
             "save_success" : "G-Code sauvegardé :",
             "save_failed": "Problème durant la sauvegarde :",
             "no_gcode": "G-code vide.",
@@ -424,7 +427,9 @@ TRANSLATIONS = {
             "parsing": "Analyse du G-Code…",
             "error_title": "Erreur",
             "error_read_file": "Impossible de lire le fichier :",
-            "parse_error_title": "Erreur d'analyse"
+            "parse_error_title": "Erreur d'analyse",
+            "line_step_lbl": "Pas de ligne (mm) :",
+            "open_gcode_hint": "Ouvrez un fichier G-Code pour commencer"
         }
     },
     "Deutsch": {
@@ -493,10 +498,10 @@ TRANSLATIONS = {
             "measured_offset": "Gemessener Versatz (mm):",
             "latency_results": "Ergebnis:",
             "apply_save": "Anwenden & Speichern",
-            "linestep_title": "(!WIP!) ZEILENSCHRITT-TEST", 
+            "linestep_title": "ZEILENSCHRITT-TEST", 
             "linestep_short": "Ideale Zeilenabstand-Einstellung prüfen, um weiße Streifen oder Verbrennungen zu vermeiden",
             "linestep_long": "Optimiert die Scandichte (DPI/Zeilenintervall). Ist das Intervall zu groß, entstehen Lücken (weiße Streifen). Ist es zu klein, führt Überlappung zu Verbrennungen und Detailverlust.",
-            "power_title": "LEISTUNGSSKALA-GITTER (!! IN ARBEIT !! )",
+            "power_title": "(!WIP!) LEISTUNGSSKALA-GITTER",
             "power_short": "Intensitätsrampe von 0% bis 100%.",
             "power_long": "Erzeugt 10 Quadrate mit variierenden Graustufen.\n\nZiel:\n- Reaktion des Materials auf verschiedene Leistungsprozentsätze beobachten.\n- Schwellenwert für Materialmarkierung identifizieren.\n- Maximalen effektiven Schwarzpegel bestimmen.",
             "btn_generate": "G-Code generieren...",
@@ -632,7 +637,9 @@ TRANSLATIONS = {
             "parsing": "G-Code wird analysiert…",
             "error_title": "Fehler",
             "error_read_file": "Datei kann nicht gelesen werden:",
-            "parse_error_title": "Analysefehler"
+            "parse_error_title": "Analysefehler",
+            "line_step_lbl": "Zeilenschritt (mm):",
+            "open_gcode_hint": "G-Code-Datei öffnen um zu beginnen"
         }
     }
 }

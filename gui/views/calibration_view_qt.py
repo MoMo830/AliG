@@ -1,4 +1,5 @@
 import os
+import tempfile
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QBoxLayout, QFrame, 
                              QLabel, QScrollArea, QStackedWidget, QPushButton, 
                              QLineEdit, QGridLayout, QButtonGroup, QFileDialog,
@@ -7,6 +8,7 @@ from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QIcon, QPixmap
 
 from utils.paths import SVG_ICONS, EXPLAIN_PNG
+from core.themes import get_theme
 from gui.switch import Switch
 from core.translations import TRANSLATIONS
 from gui.utils_qt import get_svg_pixmap
@@ -25,10 +27,7 @@ class CalibrationView(QWidget):
         self._last_calc_ms   = None
 
         # Couleurs thème — dark par défaut, mis à jour par apply_theme
-        self._theme_colors = {
-            'text': '#DCE4EE', 'text_secondary': '#aaaaaa',
-            'bg_card': '#2b2b2b', 'border': '#3d3d3d', 'suffix': '_DARK',
-        }
+        self._theme_colors = get_theme('Dark')
         
         # 1. Chargement initial des textes
         self.load_texts()
@@ -52,74 +51,58 @@ class CalibrationView(QWidget):
         self.dynamic_params_widget = QWidget()
         self.dynamic_layout = QVBoxLayout(self.dynamic_params_widget)
         self.right_layout.addWidget(self.dynamic_params_widget)
-        
-        # Bouton d'action (on lui donne un objectName pour le retrouver)
-        self.action_btn = QPushButton(self.texts.get("btn_prepare", "Prepare"))
-        self.action_btn.setFixedHeight(52)
-        self.action_btn.setStyleSheet("background-color: #e67e22; font-weight: bold; border-radius: 10px;")
-        self.action_btn.hide()   # caché jusqu'à ce qu'un test soit sélectionné
-        self.right_layout.addWidget(self.action_btn)
+        self.action_btn = None  # créé dynamiquement par chaque setup_*_params
 
     # ══════════════════════════════════════════════════════════════
     #  THEME
     # ══════════════════════════════════════════════════════════════
 
     def _c(self, dark_val, light_val):
+        # Conservé pour compatibilité — préférer colors['key'] directement
         return dark_val if self._theme_colors.get('suffix', '_DARK') == '_DARK' else light_val
 
     def _container_style(self):
-        bg        = self._c('#2b2b2b', '#f0f0f0')
-        col       = self._theme_colors.get('text', '#DCE4EE')
-        entry_bg  = self._c('#3d3d3d', '#ffffff')
-        entry_brd = self._c('#555555', '#bbbbbb')
-        entry_col = self._c('white',   '#111111')
+        c = self._theme_colors
         return (
-            f"QFrame#ParamsContainer{{background-color:{bg};border-radius:10px;padding:15px;}}"
-            f"QLabel{{color:{col};font-size:13px;}}"
-            f"QLineEdit,QComboBox{{background-color:{entry_bg};border:1px solid {entry_brd};"
-            f"border-radius:4px;color:{entry_col};padding:5px;}}"
+            f"QFrame#ParamsContainer{{background-color:{c['bg_card_alt']};border-radius:10px;padding:8px;}}"
+            f"QLabel{{color:{c['text']};font-size:13px;}}"
+            f"QLineEdit{{background-color:{c['bg_entry_alt']};border:1px solid {c['border_light']};"
+            f"border-radius:4px;color:{c['text']};padding:5px;}}"
         )
 
     def _calc_style(self):
-        bg        = self._c('#2b2b2b', '#f0f0f0')
-        col       = self._theme_colors.get('text', '#DCE4EE')
-        entry_bg  = self._c('#3d3d3d', '#ffffff')
-        entry_brd = self._c('#555555', '#bbbbbb')
-        entry_col = self._c('white',   '#111111')
+        c = self._theme_colors
         return (
-            f"QFrame#CalcContainer{{background-color:{bg};border-radius:10px;padding:15px;}}"
-            f"QLabel{{color:{col};font-size:13px;}}"
-            f"QLineEdit{{background-color:{entry_bg};border:1px solid {entry_brd};"
-            f"border-radius:4px;color:{entry_col};padding:5px;}}"
+            f"QFrame#CalcContainer{{background-color:{c['bg_card_alt']};border-radius:10px;padding:15px;}}"
+            f"QLabel{{color:{c['text']};font-size:13px;}}"
+            f"QLineEdit{{background-color:{c['bg_entry_alt']};border:1px solid {c['border_light']};"
+            f"border-radius:4px;color:{c['text']};padding:5px;}}"
         )
 
     def _select_style(self):
-        bg = self._c('#1a1a1a', '#e8e8e8')
+        c = self._theme_colors
         return (
-            f"QFrame#SelectContainer{{background-color:{bg};"
+            f"QFrame#SelectContainer{{background-color:{c['bg_select']};"
             f"border-radius:10px;padding:12px;margin-top:8px;}}"
         )
 
     def _btn_style_step(self):
-        bg  = self._c('#252525', '#e0e0e0')
-        col = self._c('#cccccc', '#333333')
-        brd = self._c('#444444', '#bbbbbb')
+        c = self._theme_colors
         return (
-            f"QPushButton{{background:{bg};color:{col};font-size:10px;"
-            f"border:1px solid {brd};border-radius:6px;text-align:left;"
+            f"QPushButton{{background:{c['bg_card']};color:{c['text_secondary']};font-size:10px;"
+            f"border:1px solid {c['border_strong']};border-radius:6px;text-align:left;"
             f"padding-top:2px;padding-bottom:5px;}}"
             f"QPushButton:hover{{background:#1f538d;border-color:#3a8fd4;color:white;}}"
         )
 
     def apply_theme(self, colors: dict):
         self._theme_colors = colors
-        is_dark  = colors.get('suffix', '_DARK') == '_DARK'
-        text     = colors.get('text', '#DCE4EE' if is_dark else '#111111')
-        text_sec = colors.get('text_secondary', '#aaaaaa' if is_dark else '#555555')
-        bg_right = '#202020' if is_dark else '#f5f5f5'
-        card_bg  = '#2b2b2b' if is_dark else '#e8e8e8'
-        card_brd = '#3d3d3d' if is_dark else '#cccccc'
-        card_hov = '#353535' if is_dark else '#d8d8d8'
+        text     = colors['text']
+        text_sec = colors['text_secondary']
+        bg_right = colors['bg_scroll']
+        card_bg  = colors['bg_card_alt']
+        card_brd = colors['border_card']
+        card_hov = colors['hover_card_alt']
 
         # ── Colonne droite ────────────────────────────────────────
         if hasattr(self, 'right_column'):
@@ -137,7 +120,7 @@ class CalibrationView(QWidget):
             card._bg_hover  = card_hov
             card._bd_normal = card_brd
             card._bd_hover  = '#e67e22'
-            checked_bg = '#3d3d3d' if is_dark else '#e0e0e0'
+            checked_bg = colors['bg_card']
             card.setStyleSheet(
                 f"QPushButton{{background-color:{card_bg};border:1px solid {card_brd};"
                 f"border-radius:8px;text-align:left;padding:10px;}}"
@@ -162,9 +145,25 @@ class CalibrationView(QWidget):
             self.detail_desc.setStyleSheet(f"font-size:13px;color:{text};line-height:1.4;")
 
         # ── Bouton action ─────────────────────────────────────────
-        if hasattr(self, 'action_btn'):
+        if hasattr(self, 'action_btn') and self.action_btn and getattr(self, 'current_test_id', None) != 'overscan':
             self.action_btn.setStyleSheet(
                 "background-color:#e67e22;font-weight:bold;border-radius:10px;color:white;")
+
+        # ── Icônes des cartes (latency/linestep) selon thème ─────────
+        color_main   = colors['text']
+        color_active = "#e67e22"
+        current_id   = getattr(self, 'current_test_id', None)
+        for card in getattr(self, 'test_cards', []):
+            t_id      = card.property("test_id")
+            test_meta = next((t for t in self.tests_data if t["id"] == t_id), {})
+            if not test_meta.get("fixed", False):
+                is_selected        = (t_id == current_id)
+                current_icon_color = color_active if is_selected else color_main
+                icon_path          = test_meta.get("icon")   # clé correcte
+                if icon_path and os.path.exists(icon_path):
+                    pix = get_svg_pixmap(icon_path, size=QSize(35, 35), color_hex=current_icon_color)
+                    if pix and not pix.isNull():
+                        card.setIcon(QIcon(pix))
 
         # ── Widgets dynamiques (si déjà créés) ────────────────────
         self._restyle_dynamic()
@@ -179,32 +178,21 @@ class CalibrationView(QWidget):
             elif w.objectName() == "SelectContainer":
                 w.setStyleSheet(self._select_style())
 
-        entry_bg  = self._c('#3d3d3d', '#ffffff')
-        entry_brd = self._c('#555555', '#bbbbbb')
-        entry_col = self._c('white',   '#111111')
-        entry_s = (f"QLineEdit{{background:{entry_bg};border:1px solid {entry_brd};"
-                   f"border-radius:4px;color:{entry_col};padding:5px;}}")
+        c = self._theme_colors
+        entry_s = (f"QLineEdit{{background:{c['bg_entry_alt']};border:1px solid {c['border_light']};"
+                   f"border-radius:4px;color:{c['text']};padding:5px;}}")
         for w in self.dynamic_params_widget.findChildren(QLineEdit):
             w.setStyleSheet(entry_s)
 
-        combo_bg  = self._c('#3d3d3d', '#ffffff')
-        combo_col = self._c('white',   '#111111')
-        combo_brd = self._c('#555555', '#bbbbbb')
-        sel       = self._c('#555555', '#d0e4f7')
-        combo_s = (f"QComboBox{{background:{combo_bg};border:1px solid {combo_brd};"
-                   f"border-radius:4px;color:{combo_col};padding:5px;}}"
-                   f"QComboBox QAbstractItemView{{background:{combo_bg};color:{combo_col};"
-                   f"selection-background-color:{sel};}}")
         for w in self.dynamic_params_widget.findChildren(QComboBox):
-            w.setStyleSheet(combo_s)
+            w.setStyleSheet(self._combo_style())
 
         step_s = self._btn_style_step()
         for btn in getattr(self, '_step_buttons', []):
             btn.setStyleSheet(step_s)
             for lbl in btn.findChildren(QLabel):
-                col = self._c('#cccccc', '#333333')
                 lbl.setStyleSheet(
-                    f"color:{col};font-size:10px;border:none;background:transparent;")
+                    f"color:{c['text_secondary']};font-size:10px;border:none;background:transparent;")
 
     # ══════════════════════════════════════════════════════════════
 
@@ -295,7 +283,11 @@ class CalibrationView(QWidget):
         # ── Icône via QIcon — résiste aux state changes (checked/hover/repaint) ──
         icon_path     = test_info.get("icon_path")
         keep_original = test_info.get("fixed_color", False)
-        target_color  = None if keep_original else "#EEEEEE"
+        if keep_original:
+            target_color = None
+        else:
+            _theme = self.controller.get_item("machine_settings", "theme", "Dark")
+            target_color = "#000000" if _theme == "Light" else "#EEEEEE"
 
         if icon_path and os.path.exists(icon_path):
             pix = get_svg_pixmap(icon_path, size=QSize(35, 35), color_hex=target_color)
@@ -410,10 +402,10 @@ class CalibrationView(QWidget):
             test_meta = next((t for t in self.tests_data if t["id"] == t_id), {})
 
             # Recoloriage via setIcon — ne provoque pas de repaint des enfants
-            if not test_meta.get("fixed_color", False):
+            if not test_meta.get("fixed", False):
                 current_icon_color = color_active if is_selected else color_main
                 pix = get_svg_pixmap(
-                    test_meta.get("icon_path"),
+                    test_meta.get("icon"),
                     size=QSize(35, 35),
                     color_hex=current_icon_color
                 )
@@ -442,36 +434,26 @@ class CalibrationView(QWidget):
         # --- 4. PARAMÈTRES DYNAMIQUES ---
         self.clear_dynamic_layout()
 
-        # --- CORRECTION DE LA DÉCONNEXION ---
-        # On tente de déconnecter toutes les fonctions liées au clic du bouton.
-        # On attrape (Exception) pour couvrir TypeError et RuntimeError selon le contexte.
-        try:
-            self.action_btn.clicked.disconnect()
-        except Exception:
-            pass 
-
-        # --- CONFIGURATION DU BOUTON SELON LE TEST ---
         if self.current_test_id == "latency":
             self.setup_latency_params()
-            self.action_btn.setText(self.texts.get("btn_generate", "Generate G-Code..."))
-            self.action_btn.clicked.connect(self.validate_and_generate_latency)
-            
+            self._make_action_btn(
+                self.texts.get("btn_generate", "Generate G-Code..."),
+                self.validate_and_generate_latency)
+
         elif self.current_test_id == "linestep":
             self.setup_linestep_params()
-            self.action_btn.setText(self.texts.get("btn_generate", "Generate G-Code..."))
-            self.action_btn.clicked.connect(self.validate_and_generate_linestep)
+            self._make_action_btn(
+                self.texts.get("btn_generate", "Generate G-Code..."),
+                self.validate_and_generate_linestep)
 
         elif self.current_test_id == "overscan":
             self.setup_overscan_params()
-            self.action_btn.hide()   # pas de génération G-Code — calcul + save uniquement
-            
-        elif self.current_test_id == "power":
-            self.action_btn.setText(self.texts.get("btn_prepare", "Prepare"))
-            # self.action_btn.clicked.connect(self.prepare_power) # Exemple si besoin
+            # Pas de bouton generate pour l'overscan
 
-        # On affiche le bouton sauf pour les tests sans génération G-Code
-        if self.current_test_id != "overscan":
-            self.action_btn.show()
+        elif self.current_test_id == "power":
+            self._make_action_btn(
+                self.texts.get("btn_prepare", "Prepare"),
+                lambda: None)
 
     def clear_dynamic_layout(self):
         """Supprime tous les widgets de la zone de paramètres dynamique"""
@@ -480,35 +462,48 @@ class CalibrationView(QWidget):
             widget = item.widget()
             if widget:
                 widget.deleteLater()
+        self.action_btn = None
+
+    def _make_action_btn(self, label: str, callback) -> QPushButton:
+        """Crée et ajoute un bouton action en bas du dynamic_layout."""
+        btn = QPushButton(label)
+        btn.setFixedHeight(52)
+        btn.setStyleSheet(
+            "background-color:#e67e22;font-weight:bold;border-radius:10px;color:white;")
+        btn.clicked.connect(callback)
+        self.dynamic_layout.addWidget(btn)
+        self.action_btn = btn
+        return btn
 
     def setup_detail_header(self):
         """Prépare la zone de texte en haut de la colonne de droite"""
-        # Conteneur pour le texte
         header_widget = QWidget()
+        header_widget.setMaximumHeight(320)  # cap pour éviter mintrack trop grand
         header_layout = QVBoxLayout(header_widget)
         header_layout.setContentsMargins(10, 10, 10, 10)
         header_layout.setSpacing(10)
 
-        # Titre du test (ex: LASER LATENCY TEST)
+        # Titre du test
         self.detail_title = QLabel(self.texts.get("default_title", "Select a test"))
         self.detail_title.setStyleSheet("font-size: 20px; font-weight: bold; color: #e67e22;")
         self.detail_title.setWordWrap(True)
+        self.detail_title.setMaximumHeight(60)
         header_layout.addWidget(self.detail_title)
 
-        # Description longue (Instructions)
+        # Description longue
         self.detail_desc = QLabel(self.texts.get("default_desc", ""))
         self.detail_desc.setStyleSheet("font-size: 13px; color: #DCE4EE; line-height: 1.4;")
         self.detail_desc.setWordWrap(True)
-        # On permet au texte d'occuper l'espace nécessaire
         self.detail_desc.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.detail_desc.setMaximumHeight(100)
         header_layout.addWidget(self.detail_desc)
-        # Création du label pour l'image d'illustration à droite
+
+        # Image d'illustration
         self.preview_image_label = QLabel()
         self.preview_image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_image_label.setMinimumHeight(150) # Réserve l'espace
+        self.preview_image_label.setFixedHeight(130)
         header_layout.addWidget(self.preview_image_label)
 
-        # Ajout au layout principal de droite
         self.right_layout.addWidget(header_widget)
 
 
@@ -610,7 +605,7 @@ class CalibrationView(QWidget):
         container.setObjectName("ParamsContainer")
         container.setStyleSheet(self._container_style())
         grid = QGridLayout(container)
-        grid.setSpacing(12)
+        grid.setSpacing(6)
 
         # Ligne 0 : Pas Minimum & Multiplicateur
         grid.addWidget(QLabel(self.texts.get("min_step", "Min. Machine Step (mm):")), 0, 0)
@@ -629,6 +624,7 @@ class CalibrationView(QWidget):
         grid.addWidget(QLabel(self.texts.get("scan_mode", "Scan Mode:")), 1, 0)
         self.scan_mode_combo = QComboBox()
         self.scan_mode_combo.addItems(["Horizontal", "Vertical"])
+        self.scan_mode_combo.setStyleSheet(self._combo_style())
         grid.addWidget(self.scan_mode_combo, 1, 1)
 
         grid.addWidget(QLabel(self.texts.get("feedrate", "Feedrate (mm/min):")), 1, 2)
@@ -750,17 +746,7 @@ class CalibrationView(QWidget):
                 layout.addWidget(text_lbl)
                 
                 # On applique le style au bouton vide
-                btn.setStyleSheet("""
-                    QPushButton {
-                        background: #252525;
-                        border: 1px solid #444;
-                        border-radius: 6px;
-                    }
-                    QPushButton:hover {
-                        background: #1f538d;
-                        border-color: #3a8fd4;
-                    }
-                """)
+                btn.setStyleSheet(self._get_btn_style("center"))
                 
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip(f"{'Col' if is_vertical else 'Blk'} {block_num} — {step:.4f} mm")
@@ -772,14 +758,47 @@ class CalibrationView(QWidget):
             self._step_btn_row.addWidget(btn)
             self._step_buttons.append(btn)
 
+    @staticmethod
+    def _arrow_svg_path(color: str) -> str:
+        """Retourne le chemin vers un SVG de flèche recolorisé (tempfile)."""
+        src = SVG_ICONS.get("ARROW_DOWN", "")
+        if not src or not os.path.isfile(src):
+            return src.replace("\\", "/")
+        try:
+            import re
+            with open(src, "r", encoding="utf-8") as f:
+                svg = f.read()
+            svg = re.sub(r'fill\s*=\s*"[^"]*"',   f'fill="{color}"',   svg)
+            svg = re.sub(r'fill\s*:\s*[^;}"]+',    f'fill:{color}',     svg)
+            svg = re.sub(r'stroke\s*=\s*"[^"]*"',  f'stroke="{color}"', svg)
+            svg = re.sub(r'stroke\s*:\s*[^;}"]+',  f'stroke:{color}',   svg)
+            tmp = tempfile.NamedTemporaryFile(
+                suffix=f'_arrow_{color.strip("#")}.svg',
+                delete=False, mode='w', encoding='utf-8')
+            tmp.write(svg); tmp.close()
+            return tmp.name.replace("\\", "/")
+        except Exception:
+            return src.replace("\\", "/")
+
+    def _combo_style(self):
+        c = self._theme_colors
+        arrow_path = self._arrow_svg_path(c['arrow_color'])
+        return (
+            f"QComboBox{{background-color:{c['bg_entry_alt']};border:1px solid {c['border_light']};"
+            f"border-radius:5px;padding:3px 30px 3px 10px;color:{c['text']};}}"
+            f"QComboBox::drop-down{{subcontrol-origin:padding;subcontrol-position:top right;"
+            f"width:25px;border:none;background:transparent;}}"
+            f"QComboBox::down-arrow{{image:url({arrow_path});width:12px;height:8px;}}"
+            f"QComboBox QAbstractItemView{{background-color:{c['bg_entry_alt']};color:{c['text']};"
+            f"selection-background-color:{c['combo_selection']};border:1px solid {c['border_light']};}}"
+        )
+
     def _get_btn_style(self, align, padding_top="2px"):
         """Génère le style CSS des boutons avec alignement et padding variables."""
-        bg  = self._c('#252525', '#e0e0e0')
-        col = self._c('#cccccc', '#333333')
-        brd = self._c('#444444', '#bbbbbb')
+        c = self._theme_colors
         return (
-            f"QPushButton{{background:{bg};color:{col};font-size:10px;"
-            f"border:1px solid {brd};border-radius:6px;text-align:{align};"
+            f"QPushButton{{background:{c['bg_card']};color:{c['text_secondary']};font-size:10px;"
+            f"border:1px solid {c['border_strong']};border-radius:6px;text-align:{align};"
             f"padding-top:{padding_top};padding-bottom:5px;}}"
             f"QPushButton:hover{{background:#1f538d;border-color:#3a8fd4;color:white;}}"
         )
@@ -792,7 +811,7 @@ class CalibrationView(QWidget):
         w, h = 44, 38
         pix = QPixmap(w, h)
         # On peut mettre transparent ou garder le fond sombre
-        pix.fill(QColor(self._c('#1a1a1a', '#e8e8e8')))
+        pix.fill(QColor(self._theme_colors.get('bg_select', '#1a1a1a')))
         
         qp = QPainter(pix)
         qp.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -1106,16 +1125,16 @@ class CalibrationView(QWidget):
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(gcode_content)
                 # Feedback visuel temporaire sur le bouton
-                orig_text = self.action_btn.text()
-                orig_style = self.action_btn.styleSheet()
-                self.action_btn.setText("✅ G-Code Saved!")
-                self.action_btn.setStyleSheet(
-                    "background-color: #27AE60; font-weight: bold; border-radius: 10px;")
-                
-                QTimer.singleShot(2000, lambda: (
-                    self.action_btn.setText(orig_text),
-                    self.action_btn.setStyleSheet(orig_style)
-                ))
+                if self.action_btn:
+                    orig_text = self.action_btn.text()
+                    orig_style = self.action_btn.styleSheet()
+                    self.action_btn.setText("✅ G-Code Saved!")
+                    self.action_btn.setStyleSheet(
+                        "background-color: #27AE60; font-weight: bold; border-radius: 10px;")
+                    QTimer.singleShot(2000, lambda: (
+                        self.action_btn.setText(orig_text),
+                        self.action_btn.setStyleSheet(orig_style)
+                    ))
 
         except ValueError:
             QMessageBox.warning(self, "Invalid input", "⚠️ Please enter valid numbers in all fields.")
@@ -1161,11 +1180,12 @@ class CalibrationView(QWidget):
                     f.write(gcode_content)
                 
                 # Feedback visuel
-                orig_text = self.action_btn.text()
-                orig_style = self.action_btn.styleSheet()
-                self.action_btn.setText("Grid Test Saved!")
-                self.action_btn.setStyleSheet("background-color: #27AE60; font-weight: bold; border-radius: 10px; color: white;")
-                QTimer.singleShot(2000, lambda: (self.action_btn.setText(orig_text), self.action_btn.setStyleSheet(orig_style)))
+                if self.action_btn:
+                    orig_text = self.action_btn.text()
+                    orig_style = self.action_btn.styleSheet()
+                    self.action_btn.setText("Grid Test Saved!")
+                    self.action_btn.setStyleSheet("background-color: #27AE60; font-weight: bold; border-radius: 10px; color: white;")
+                    QTimer.singleShot(2000, lambda: (self.action_btn.setText(orig_text), self.action_btn.setStyleSheet(orig_style)))
 
         except ValueError:
             QMessageBox.warning(self, "Invalid input", "⚠️ Please enter valid numbers.")
@@ -1222,7 +1242,7 @@ class CalibrationView(QWidget):
         if hasattr(self, 'sidebar_title_label'):
             self.sidebar_title_label.setText(self.texts.get("sidebar_title", "Tests"))
         
-        if hasattr(self, 'action_btn'):
+        if hasattr(self, 'action_btn') and self.action_btn:
             self.action_btn.setText(self.texts.get("btn_prepare", "Prepare"))
         
         # 3. Mise à jour des cartes de test dans la sidebar
@@ -1244,18 +1264,11 @@ class CalibrationView(QWidget):
             # Traduction du titre et de la description longue
             self.detail_title.setText(self.texts.get(f"{self.current_test_id}_title", ""))
             self.detail_desc.setText(self.texts.get(f"{self.current_test_id}_long", ""))
-            
-            # --- IMPORTANT : Mise à jour des labels dynamiques (Feedrate, Power, etc.) ---
-            # On relance la construction des paramètres pour rafraîchir les labels traduits
-            if self.current_test_id == "latency":
-                self.setup_latency_params()
-            elif self.current_test_id == "linestep":
-                self.setup_linestep_params()
-            elif self.current_test_id == "overscan":
-                self.setup_overscan_params()
-            elif self.current_test_id == "power":
-                # self.setup_power_params()
-                pass
+
+            # Relancer on_test_selected pour reconstruire params + bouton traduit
+            test_info = next((t for t in self.tests_data if t["id"] == self.current_test_id), {})
+            if test_info:
+                self.on_test_selected(test_info)
         else:
             # Retour à l'état par défaut si aucun test n'est sélectionné
             self.detail_title.setText(self.texts.get("default_title", "Select a test"))
@@ -1276,9 +1289,8 @@ class CalibrationView(QWidget):
         self.detail_desc.setText(self.texts.get("default_desc", ""))
         self.preview_image_label.clear()
         
-        # Vider les paramètres
+        # Vider les paramètres (détruit aussi le bouton action)
         self.clear_dynamic_layout()
-        self.action_btn.hide()
 
     def showEvent(self, event):
         """

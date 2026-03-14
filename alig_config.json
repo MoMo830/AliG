@@ -1,7 +1,7 @@
 {
     "machine_settings": {
         "theme": "Dark",
-        "language": "English",
+        "language": "Fran\u00e7ais",
         "enable_thumbnails": true,
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
@@ -16,18 +16,17 @@
         "custom_footer": "M334"
     },
     "stats": {
-        "total_lines": 33063,
-        "total_gcodes": 2,
-        "total_time_seconds": 615.5578002929688,
-        "last_project_time": 307.7789306640625
+        "total_lines": 301116,
+        "total_gcodes": 4,
+        "total_time_seconds": 35051.12091064453,
+        "last_project_time": 658.1724853515625
     },
     "window_settings": {
         "is_maximized": true,
         "geometry": "1440x890+0+-6"
     },
     "raster_settings": {
-        "width": 30.0,
-        "line_step": 0.1307,
+        "width": 47.58,
         "dpi": 158.0,
         "origin_mode": "Lower-Left",
         "custom_x": 0.0,
