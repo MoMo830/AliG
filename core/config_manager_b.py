@@ -32,8 +32,8 @@ class ConfigManager:
             "language": "English",
             "cmd_mode": "M67 (Analog)",
             "firing_mode": "M3/M5",
-            "m67_e_num": 0,
-            "ctrl_max": 1000,
+            "m67_e_num": "0",
+            "ctrl_max": "1000",
             "gcode_extension": ".nc",
             "laser_latency": 0.0,
             "premove": 10.0,
@@ -49,9 +49,6 @@ class ConfigManager:
             "total_time_seconds": 0.0
         }
     }
-
-    # Clés qui doivent toujours être des entiers
-    _INT_KEYS = {"m67_e_num", "ctrl_max"}
 
     def __init__(self, config_path):
         self.config_path = config_path
@@ -69,7 +66,7 @@ class ConfigManager:
             return {}
 
     def _apply_defaults(self):
-        """Injecte les valeurs par défaut manquantes et corrige les types connus."""
+        """Injecte les valeurs par défaut manquantes dans les données chargées"""
         for section, content in self.DEFAULT_CONFIG.items():
             if section not in self.data:
                 self.data[section] = copy.deepcopy(content)
@@ -77,14 +74,6 @@ class ConfigManager:
                 for key, val in content.items():
                     if key not in self.data[section]:
                         self.data[section][key] = val
-        # Correction des types : m67_e_num et ctrl_max doivent être int
-        ms = self.data.get("machine_settings", {})
-        for key in self._INT_KEYS:
-            if key in ms:
-                try:
-                    ms[key] = int(float(str(ms[key])))
-                except (ValueError, TypeError):
-                    ms[key] = self.DEFAULT_CONFIG["machine_settings"][key]
 
     def get_item(self, section, key, default=None):
         """LA MÉTHODE MANQUANTE : Récupère une valeur spécifique"""

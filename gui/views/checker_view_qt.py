@@ -673,7 +673,7 @@ class CheckerViewQt(QWidget):
         lo.setContentsMargins(8, 8, 8, 8)
         lo.setSpacing(6)
 
-        self.btn_open = QPushButton('📂  ' + self.t.get('open_file', 'Open G-Code file…'))
+        self.btn_open = QPushButton(self.t.get('open_file', 'Open G-Code file…'))
         self.btn_open.setFixedHeight(38)
         self.btn_open.setStyleSheet(self._gbtn('#1f538d', '#2a6dbd'))
         self.btn_open.clicked.connect(self._on_open_file)

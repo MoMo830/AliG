@@ -364,8 +364,8 @@ class SettingsViewQt(QWidget):
                 "enable_thumbnails": self.controls["enable_thumbnails"]["check"].isChecked(),
                 "cmd_mode": self.controls["cmd_mode"]["combo"].currentText(),
                 "firing_mode": self.controls["firing_mode"]["combo"].currentText(),
-                "m67_e_num": int(float(self.controls["m67_e_num"]["entry"].text() or "0")),
-                "ctrl_max":  int(float(self.controls["ctrl_max"]["entry"].text()  or "0")),
+                "m67_e_num": self.controls["m67_e_num"]["entry"].text(),
+                "ctrl_max": self.controls["ctrl_max"]["entry"].text(),
                 "gcode_extension": self.controls["gcode_extension"]["entry"].text(),
                 "laser_latency": get_float("laser_latency"),
                 "premove": get_float("premove"),
@@ -594,15 +594,7 @@ class SettingsViewQt(QWidget):
                     self.controls[key]["combo"].setCurrentIndex(index)
 
         # 2. LineEdits
-        for key in ["m67_e_num", "ctrl_max"]:
-            if key in self.controls:
-                raw = data.get(key, 0)
-                try:
-                    val = int(float(str(raw)))  # gère "0", 0, 0.0, "1000.0"
-                except (ValueError, TypeError):
-                    val = 0
-                self.controls[key]["entry"].setText(str(val))
-        for key in ["gcode_extension"]:
+        for key in ["m67_e_num", "ctrl_max", "gcode_extension"]:
             if key in self.controls:
                 self.controls[key]["entry"].setText(str(data.get(key, "")))
 
