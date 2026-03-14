@@ -77,17 +77,31 @@ TRANSLATIONS = {
             "power_title": "(!WIP!) POWER SCALE GRID",
             "power_short": "Intensity ramp from 0% to 100%.",
             "power_long": "Generates 10 squares with varying gray levels.\n\nGoal:\n- Observe how your material reacts to different power percentages.\n- Identify the threshold where the material starts to mark.\n- Determine the maximum effective black level.",
-            "btn_generate": "Generate G-Code..."
+            "btn_generate": "Generate G-Code...",
+            "overscan_title": "OVERSCAN CALCULATOR",
+            "overscan_short": "Calculate the ideal overscan from your machine acceleration.",
+            "overscan_long": "The overscan (premove) is the distance the laser head travels before the engraving area to reach the target speed before firing.\n\nFormula: overscan = v² / (2 × a)\n  v = feedrate in mm/s\n  a = max machine acceleration in mm/s²\n\nInstructions:\n1. Enter your engraving feedrate.\n2. Enter your machine's maximum acceleration (check your controller settings).\n3. The calculator returns the minimum required overscan with a 20% safety margin.\n4. Save the result directly as the Premove value in machine settings.",
+            "max_accel": "Max Acceleration (mm/s²):",
+            "overscan_calculator": "Overscan Calculator:",
+            "overscan_formula": "Formula: overscan = (v²/(2a) + |lat_mm|) × 1.2",
+            "overscan_result": "Recommended overscan:",
+            "overscan_current": "Current premove:",
+            "overscan_calc_btn": "Calculate",
+            "overscan_save_btn": "Save as Premove",
+            "overscan_saved": "Saved!",
+            "error_title": "Error"
         },
         "topbar": {
             "support": "☕ Support the project",
             "credits": "Developed by Alexandre 'MoMo'",
             "dashboard": "DASHBOARD",
+            "settings": "SETTINGS",
             "raster": "Raster engraving",
             "simulation": "G-Code Simulation",
             "calibration": "Machine Calibration"
         },
         "common": {
+            "loading": "Loading…",
             "import_profile": "IMPORT PROFILE",
             "export_profile": "EXPORT PROFILE",
             "geometry": "Geometry",
@@ -192,8 +206,14 @@ TRANSLATIONS = {
             "save_success" : "G-Code saved:",
             "save_failed": "Save failed:",
             "no_gcode": "No G-Code to save.",
-            "generating": "Generating G-Code & Trajectory…"
-
+            "generating": "Generating G-Code & Trajectory…",
+            "open_file": "Open G-Code file…",
+            "no_file": "No file loaded",
+            "reset_zoom": "Reset zoom / pan",
+            "parsing": "Parsing G-Code…",
+            "error_title": "Error",
+            "error_read_file": "Cannot read file:",
+            "parse_error_title": "Parse Error"
         }
     },
     "Français": {
@@ -210,6 +230,8 @@ TRANSLATIONS = {
             "sec_hardware": "COMPORTEMENT MATÉRIEL",
             "label_latency": "Latence laser (ms) :",
             "label_overscan": "Overscan par défaut (mm) :",
+            "hor_linestep": "Pas horizontal (mm) :",
+            "ver_linestep": "Pas vertical (mm) :",
             "sec_scripts": "SCRIPTS SYSTÈME",
             "label_header": "G-Code d'en-tête global",
             "label_footer": "G-Code de fin global",
@@ -269,17 +291,31 @@ TRANSLATIONS = {
             "power_title": "GRILLE D'ÉCHELLE DE PUISSANCE (!! TRAVAIL EN COURS !!)",
             "power_short": "Rampe d'intensité de 0% à 100%.",
             "power_long": "Génère 10 carrés avec des niveaux de gris variables.\n\nObjectif :\n- Observer comment votre matériau réagit aux différents pourcentages de puissance.\n- Identifier le seuil où le matériau commence à être marqué.\n- Déterminer le niveau de noir maximal effectif.",
-            "btn_generate": "Générer le G-code..."
+            "btn_generate": "Générer le G-code...",
+            "overscan_title": "CALCULATEUR D'OVERSCAN",
+            "overscan_short": "Calculez l'overscan idéal selon l'accélération de votre machine.",
+            "overscan_long": "L'overscan (premove) est la distance parcourue par la tête laser avant la zone de gravure pour atteindre la vitesse cible avant le déclenchement.\n\nFormule : overscan = v² / (2 × a)\n  v = vitesse d'avance en mm/s\n  a = accélération maximale de la machine en mm/s²\n\nInstructions :\n1. Saisissez votre vitesse de gravure.\n2. Entrez l'accélération maximale de votre machine (voir paramètres du contrôleur).\n3. Le calculateur retourne l'overscan minimal requis avec une marge de sécurité de 20%.\n4. Sauvegardez directement la valeur comme Premove dans les réglages machine.",
+            "max_accel": "Accélération max (mm/s²):",
+            "overscan_calculator": "Calculateur d'overscan :",
+            "overscan_formula": "Formule : overscan = (v²/(2a) + |lat_mm|) × 1.2",
+            "overscan_result": "Overscan recommandé :",
+            "overscan_current": "Premove actuel :",
+            "overscan_calc_btn": "Calculer",
+            "overscan_save_btn": "Sauvegarder comme Premove",
+            "overscan_saved": "Sauvegardé !",
+            "error_title": "Erreur"
         },
         "topbar": {
             "support": "☕ Soutenir le projet",
             "credits": "Développé par Alexandre 'MoMo'",
             "dashboard": "Tableau de bord",
+            "settings": "Réglages",
             "raster": "Gravure en boustrophédon",
             "simulation": "Simulation de G-Code",
             "calibration": "Calibrage machine"
         },
         "common": {
+            "loading": "Chargement…",
             "import_profile": "Importer un profil",
             "export_profile": "Exporter un profil",
             "geometry": "Géometrie",
@@ -306,9 +342,9 @@ TRANSLATIONS = {
             "laser_latency": "Latence Laser (ms)",
             "gray_steps": "Niveaux de gris",
             "cmd_mode": "Mode de commande laser :",
-            "m67_output": "Numéro de sortie M67 (E) :",
+            "m67_output": "Sortie M67 (E) :",
             "choose_image": "VEUILLEZ SELECTIONNER UNE IMAGE\nPOUR COMMENCER",
-            "ctrl_max_value": "Pleine échelle de controleur :",
+            "ctrl_max_value": "Pleine échelle :",
             "firing_mode": "Mode de commande :",
             "gcode_header": "En-tête de G-Code",
             "at_start": " (au début)",
@@ -381,7 +417,14 @@ TRANSLATIONS = {
             "save_success" : "G-Code sauvegardé :",
             "save_failed": "Problème durant la sauvegarde :",
             "no_gcode": "G-code vide.",
-            "generating": "Génération du G-code et du rendu…"
+            "generating": "Génération du G-code et du rendu…",
+            "open_file": "Ouvrir un fichier G-Code…",
+            "no_file": "Aucun fichier chargé",
+            "reset_zoom": "Réinitialiser zoom / déplacement",
+            "parsing": "Analyse du G-Code…",
+            "error_title": "Erreur",
+            "error_read_file": "Impossible de lire le fichier :",
+            "parse_error_title": "Erreur d'analyse"
         }
     },
     "Deutsch": {
@@ -456,17 +499,31 @@ TRANSLATIONS = {
             "power_title": "LEISTUNGSSKALA-GITTER (!! IN ARBEIT !! )",
             "power_short": "Intensitätsrampe von 0% bis 100%.",
             "power_long": "Erzeugt 10 Quadrate mit variierenden Graustufen.\n\nZiel:\n- Reaktion des Materials auf verschiedene Leistungsprozentsätze beobachten.\n- Schwellenwert für Materialmarkierung identifizieren.\n- Maximalen effektiven Schwarzpegel bestimmen.",
-            "btn_generate": "G-Code generieren..."
+            "btn_generate": "G-Code generieren...",
+            "overscan_title": "OVERSCAN-RECHNER",
+            "overscan_short": "Idealen Overscan aus der Maschinenbeschleunigung berechnen.",
+            "overscan_long": "Der Overscan (Premove) ist die Strecke, die der Laserkopf vor dem Gravurbereich zurücklegt, um die Zielgeschwindigkeit zu erreichen.\n\nFormel: Overscan = v² / (2 × a)\n  v = Vorschub in mm/s\n  a = maximale Beschleunigung in mm/s²\n\nAnweisungen:\n1. Gravurvorschub eingeben.\n2. Maximale Beschleunigung eingeben (Controller-Einstellungen prüfen).\n3. Das Tool berechnet den minimalen Overscan mit 20% Sicherheitsmarge.\n4. Ergebnis direkt als Premove in den Maschineneinstellungen speichern.",
+            "max_accel": "Max. Beschleunigung (mm/s²):",
+            "overscan_calculator": "Overscan-Rechner:",
+            "overscan_formula": "Formel: Overscan = (v²/(2a) + |lat_mm|) × 1.2",
+            "overscan_result": "Empfohlener Overscan:",
+            "overscan_current": "Aktueller Premove:",
+            "overscan_calc_btn": "Berechnen",
+            "overscan_save_btn": "Als Premove speichern",
+            "overscan_saved": "Gespeichert!",
+            "error_title": "Fehler"
         },
         "topbar": {
             "support": "☕ Projekt unterstützen",
             "credits": "Entwickelt von Alexandre 'MoMo'",
             "dashboard": "DASHBOARD",
+            "settings": "Einstellungen",
             "raster": "Raster-Gravur",
             "simulation": "G-Code Simulation",
             "calibration": "Maschinen-Kalibrierung"
         },
         "common": {
+            "loading": "Laden…",
             "import_profile": "PROFIL IMPORTIEREN",
             "export_profile": "PROFIL EXPORTIEREN",
             "geometry": "Geometrie",
@@ -568,7 +625,14 @@ TRANSLATIONS = {
             "save_success" : "G-Code gespeichert:",
             "save_failed": "Speichern fehlgeschlagen:",
             "no_gcode": "Kein G-Code zum Speichern.",
-            "generating": "G-Code & Trajektorie werden generiert..."
+            "generating": "G-Code & Trajektorie werden generiert...",
+            "open_file": "G-Code-Datei öffnen…",
+            "no_file": "Keine Datei geladen",
+            "reset_zoom": "Zoom / Ansicht zurücksetzen",
+            "parsing": "G-Code wird analysiert…",
+            "error_title": "Fehler",
+            "error_read_file": "Datei kann nicht gelesen werden:",
+            "parse_error_title": "Analysefehler"
         }
     }
 }

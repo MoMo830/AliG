@@ -9,7 +9,7 @@
         "ctrl_max": 100,
         "gcode_extension": ".nc",
         "laser_latency": -11.5,
-        "premove": 10.58,
+        "premove": 3.2,
         "hor_linestep": 0.1307,
         "ver_linestep": 0.1,
         "custom_header": "",

@@ -667,9 +667,7 @@ class RasterViewQt(QWidget):
         self._loading = False
         self.load_settings()
 
-        # Le render est différé jusqu'au premier affichage (showEvent)
-        # pour ne pas bloquer l'UI pendant le préchargement en arrière-plan
-        self._render_pending = True
+        QTimer.singleShot(500, self._initial_render)
 
     # ── Construction de l'UI ─────────────────────────────────────────
 
@@ -852,24 +850,16 @@ class RasterViewQt(QWidget):
         sw_row.addWidget(self.sw_force_width)
         lo.addLayout(sw_row)
 
-        # line_step — label informatif seulement (valeur pilotée par hor/ver_linestep en Settings)
-        lbl_ls = QLabel(self.t.get("line_step", "Line Step"))
-        lbl_ls.setStyleSheet("color:#ddd;font-size:12px;")
-        self.translation_map[lbl_ls] = "line_step"
-        lo.addWidget(lbl_ls)
-        ls_row = QHBoxLayout()
-        self._line_step_value_lbl = QLabel("0.1307")
-        self._line_step_value_lbl.setStyleSheet(
-            "color:#aaa;font-size:12px;font-family:Consolas;"
-            "background:#2a2a2a;border:1px solid #333;"
-            "border-radius:4px;padding:2px 8px;"
-        )
-        self._line_step_value_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ls_row.addStretch()
-        ls_row.addWidget(self._line_step_value_lbl)
-        lo.addLayout(ls_row)
-        # Enregistrer dans controls pour que _get_val("line_step") fonctionne
-        self.controls["line_step"] = {"label": self._line_step_value_lbl, "precision": 4, "is_int": False}
+        self._add_slider_input(lo, "line_step", 0.01, 1.0, 0.1307, "line_step", precision=4)
+        # Rendre line_step non-éditable (valeur pilotée par hor_linestep / ver_linestep)
+        if "line_step" in self.controls:
+            ctrl = self.controls["line_step"]
+            ctrl["entry"].setReadOnly(True)
+            ctrl["entry"].setStyleSheet(
+                "QLineEdit{background:#2a2a2a;border:1px solid #333;"
+                "border-radius:4px;color:#888;padding:2px;}"
+            )
+            ctrl["slider"].setEnabled(False)
         self._add_slider_input(lo, "dpi_resolution", 10, 1200, 254, "dpi", is_int=True)
         lo.addSpacing(6)
 
@@ -1324,15 +1314,19 @@ class RasterViewQt(QWidget):
         self._schedule_preview()
 
     def _sync_line_step_from_mode(self, mode):
-        """Met à jour le label line_step depuis hor_linestep ou ver_linestep."""
+        """Met à jour le champ line_step (lecture seule) depuis hor_linestep ou ver_linestep."""
         setting_key = "hor_linestep" if mode == "horizontal" else "ver_linestep"
         raw = self.controller.config_manager.get_item("machine_settings", setting_key)
         try:
             val = float(raw) if raw is not None else 0.1307
         except (ValueError, TypeError):
             val = 0.1307
-        if hasattr(self, "_line_step_value_lbl"):
-            self._line_step_value_lbl.setText(f"{val:.4f}")
+        if "line_step" in self.controls:
+            ctrl = self.controls["line_step"]
+            ctrl["entry"].setText(f"{val:.4f}")
+            sl = ctrl.get("slider")
+            if sl and sl is not ctrl["entry"]:
+                sl.setValue(int(val * 100))
 
     def _on_origin_change(self, value):
         self.custom_offset_frame.setVisible(value == "Custom")
@@ -1362,23 +1356,13 @@ class RasterViewQt(QWidget):
         if hasattr(self, "_overlay"):
             return
         if msg is None:
-            msg = self.t.get("loading", "Loading…")
+            msg = "loading"
         self._overlay = show_loading_overlay(self, msg)
 
     def _hide_loading(self):
         if hasattr(self, "_overlay"):
             hide_loading_overlay(self._overlay)
             del self._overlay
-
-    def showEvent(self, e):
-        super().showEvent(e)
-        if getattr(self, '_render_pending', False):
-            self._render_pending = False
-            # Overlay immédiat visible dès que la vue apparaît
-            if self.input_image_path and os.path.exists(self.input_image_path):
-                self._show_loading(self.t.get("loading", "Loading…"))
-            # Render au prochain tour d'événements — la vue est déjà affichée
-            QTimer.singleShot(0, self._initial_render)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
@@ -1388,10 +1372,9 @@ class RasterViewQt(QWidget):
     # ── Rendu / Preview ───────────────────────────────────────────────
 
     def _initial_render(self):
-        # Afficher l'overlay si pas déjà visible (peut avoir été créé dans __init__)
+        # Overlay uniquement si une image est présente
         if self.input_image_path and os.path.exists(self.input_image_path):
-            if not hasattr(self, '_overlay'):
-                self._show_loading(self.t.get("loading", "Loading…"))
+            self._show_loading("loading")
         try:
             self._do_update_preview(fit=True)
         finally:
@@ -1655,9 +1638,6 @@ class RasterViewQt(QWidget):
         ctrl = self.controls.get(key)
         if not ctrl: return default
         try:
-            # Cas label informatif (ex: line_step)
-            if "label" in ctrl and "entry" not in ctrl:
-                return float(ctrl["label"].text().replace(",", "."))
             return float(ctrl["entry"].text().replace(",", "."))
         except (ValueError, AttributeError):
             return default

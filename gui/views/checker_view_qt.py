@@ -994,7 +994,9 @@ class CheckerViewQt(QWidget):
                 gcode = f.read()
         except Exception as e:
             self._hide_loading()
-            QMessageBox.critical(self, 'Error', f'Cannot read file:\n{e}')
+            QMessageBox.critical(self,
+                self.t.get('error_title', 'Error'),
+                f"{self.t.get('error_read_file', 'Cannot read file:')}\n{e}")
             return
 
         # Parsing dans un thread pour ne pas bloquer l'UI
@@ -1005,7 +1007,7 @@ class CheckerViewQt(QWidget):
 
     def _on_parse_error(self, msg):
         self._hide_loading()
-        QMessageBox.critical(self, 'Parse Error', msg)
+        QMessageBox.critical(self, self.t.get('parse_error_title', 'Parse Error'), msg)
 
     def _on_parse_done(self, d):
         self._hide_loading()

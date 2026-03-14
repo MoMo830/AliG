@@ -49,6 +49,7 @@ SVG_ICONS = {
     "GCODE": os.path.join(ASSETS_DIR, "loupe.svg"),
     "LATENCY": os.path.join(ASSETS_DIR, "latency_calibration.svg"),
     "LINESTEP": os.path.join(ASSETS_DIR, "linestep_calibration.svg"),
+    "OVERSCAN": os.path.join(ASSETS_DIR, "overscan_calibration.svg"),
     "POWER": os.path.join(ASSETS_DIR, "power_calibration.svg"),
     "ARROW_DOWN": os.path.join(ASSETS_DIR, "arrow_down.svg"),
     "CIRCLE": os.path.join(ASSETS_DIR, "circle.svg"),

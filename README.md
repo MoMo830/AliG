@@ -142,7 +142,7 @@ If you just want to use the software without installing Python, follow these ste
 * **[In discussion] 3D Relief Engraving Mode:** Implementation of multi-pass logic with Z-axis decrement for deep carving. *Currently seeking user feedback/interest due to hardware power constraints.*
 
 ### Known Issues: 
-- **Real-time Translation**: UI components do not update instantly when the language is changed; a manual restart is required.
+- ~~**Real-time Translation**: UI components do not update instantly when the language is changed; a manual restart is required.~~_(pending next release)_
 - ~~**Incomplete Light Theme**: Styling is currently optimized for Dark Mode; Light Theme may exhibit contrast issues.~~_(pending next release)_
 
 

@@ -255,10 +255,9 @@ class CalibrationView(QWidget):
         
         # 2. Configuration des données de base
         self.tests_data = [
-            {"id": "latency",  "icon": SVG_ICONS["LATENCY"],  "fixed": False},
+            {"id": "latency", "icon": SVG_ICONS["LATENCY"], "fixed": False},
             {"id": "linestep", "icon": SVG_ICONS["LINESTEP"], "fixed": False},
-            {"id": "overscan", "icon": SVG_ICONS["OVERSCAN"],  "fixed": True},
-            {"id": "power",    "icon": SVG_ICONS["POWER"],    "fixed": True}
+            {"id": "power", "icon": SVG_ICONS["POWER"], "fixed": True}
         ]
 
         for data in self.tests_data:
@@ -460,18 +459,13 @@ class CalibrationView(QWidget):
             self.setup_linestep_params()
             self.action_btn.setText(self.texts.get("btn_generate", "Generate G-Code..."))
             self.action_btn.clicked.connect(self.validate_and_generate_linestep)
-
-        elif self.current_test_id == "overscan":
-            self.setup_overscan_params()
-            self.action_btn.hide()   # pas de génération G-Code — calcul + save uniquement
             
         elif self.current_test_id == "power":
             self.action_btn.setText(self.texts.get("btn_prepare", "Prepare"))
             # self.action_btn.clicked.connect(self.prepare_power) # Exemple si besoin
 
-        # On affiche le bouton sauf pour les tests sans génération G-Code
-        if self.current_test_id != "overscan":
-            self.action_btn.show()
+        # On affiche le bouton une fois qu'il est configuré
+        self.action_btn.show()
 
     def clear_dynamic_layout(self):
         """Supprime tous les widgets de la zone de paramètres dynamique"""
@@ -841,172 +835,6 @@ class CalibrationView(QWidget):
             QMessageBox.critical(self, "Erreur", f"Échec de sauvegarde :\n{e}")
 
 
-    # ── OVERSCAN ──────────────────────────────────────────────────────────
-
-    def setup_overscan_params(self):
-        """Calcule l'overscan minimal selon vitesse et accélération machine."""
-        self.clear_dynamic_layout()
-
-        # ── Champs d'entrée ───────────────────────────────────────────
-        container = QFrame()
-        container.setObjectName("ParamsContainer")
-        container.setStyleSheet(self._container_style())
-        grid = QGridLayout(container)
-        grid.setSpacing(12)
-
-        # Feedrate
-        grid.addWidget(QLabel(self.texts.get("feedrate_calc", "Feedrate (mm/min):")), 0, 0)
-        self.overscan_feed_entry = QLineEdit()
-        self.overscan_feed_entry.setPlaceholderText("ex: 3000")
-        current_feed = self.controller.get_item("machine_settings", "feedrate", "3000")
-        self.overscan_feed_entry.setText(str(current_feed))
-        grid.addWidget(self.overscan_feed_entry, 0, 1)
-
-        # Accélération max
-        grid.addWidget(QLabel(self.texts.get("max_accel", "Max Acceleration (mm/s²):")), 1, 0)
-        self.overscan_accel_entry = QLineEdit()
-        self.overscan_accel_entry.setPlaceholderText("ex: 500")
-        self.overscan_accel_entry.setText("500")
-        grid.addWidget(self.overscan_accel_entry, 1, 1)
-
-        # Latence laser (pré-remplie depuis la config, peut être négative)
-        grid.addWidget(QLabel(self.texts.get("latency_calc", "Latency (ms):")), 2, 0)
-        self.overscan_lat_entry = QLineEdit()
-        self.overscan_lat_entry.setPlaceholderText("ex: -11.5")
-        current_lat = self.controller.get_item("machine_settings", "laser_latency", "0")
-        self.overscan_lat_entry.setText(str(current_lat))
-        grid.addWidget(self.overscan_lat_entry, 2, 1)
-
-        self.dynamic_layout.addWidget(container)
-
-        # ── Zone résultat ─────────────────────────────────────────────
-        calc_frame = QFrame()
-        calc_frame.setObjectName("CalcContainer")
-        calc_frame.setStyleSheet(self._calc_style())
-        calc_vbox = QVBoxLayout(calc_frame)
-        calc_vbox.setSpacing(10)
-
-        title_lbl = QLabel(self.texts.get("overscan_calculator", "Overscan Calculator:"))
-        title_lbl.setStyleSheet("font-weight:bold;font-size:13px;color:#e67e22;border:none;")
-        calc_vbox.addWidget(title_lbl)
-
-        # TODO : ajouter le SVG explicatif ici quand disponible
-        # svg_lbl = QLabel()
-        # svg_lbl.setPixmap(get_svg_pixmap(SVG_ICONS["OVERSCAN"], QSize(300, 120)))
-        # calc_vbox.addWidget(svg_lbl)
-
-        formula_lbl = QLabel(self.texts.get("overscan_formula", "Formula: overscan = v² / (2 × a)"))
-        formula_lbl.setStyleSheet("font-size:11px;font-style:italic;color:#888;border:none;")
-        calc_vbox.addWidget(formula_lbl)
-
-        # Résultat
-        res_row = QHBoxLayout()
-        res_lbl = QLabel(self.texts.get("overscan_result", "Recommended overscan:"))
-        res_lbl.setStyleSheet("font-size:13px;border:none;")
-        self.overscan_result_label = QLabel("-- mm")
-        self.overscan_result_label.setStyleSheet(
-            "font-weight:bold;font-size:16px;color:#2ecc71;border:none;")
-        res_row.addWidget(res_lbl)
-        res_row.addStretch()
-        res_row.addWidget(self.overscan_result_label)
-        calc_vbox.addLayout(res_row)
-
-        # Premove actuel
-        current_premove = self.controller.get_item("machine_settings", "premove", "10.0")
-        self.overscan_current_lbl = QLabel(
-            f"{self.texts.get('overscan_current', 'Current premove:')} {current_premove} mm")
-        self.overscan_current_lbl.setStyleSheet("font-size:11px;color:#888;border:none;")
-        calc_vbox.addWidget(self.overscan_current_lbl)
-
-        # Bouton Sauvegarder (caché jusqu'au premier calcul valide)
-        self.overscan_save_btn = QPushButton(
-            self.texts.get("overscan_save_btn", "Save as Premove"))
-        self.overscan_save_btn.setFixedHeight(34)
-        self.overscan_save_btn.setStyleSheet("""
-            QPushButton { background-color: #27ae60; color: white; border-radius: 6px;
-                          font-size: 12px; border: none; padding: 0 10px; }
-            QPushButton:hover { background-color: #1e8449; }
-        """)
-        self.overscan_save_btn.hide()
-        self.overscan_save_btn.clicked.connect(self._save_overscan)
-        calc_vbox.addWidget(self.overscan_save_btn)
-
-        self.dynamic_layout.addWidget(calc_frame)
-        self.dynamic_layout.addStretch()
-
-        # Recalcul automatique à la saisie
-        self.overscan_feed_entry.textChanged.connect(self._calc_overscan)
-        self.overscan_accel_entry.textChanged.connect(self._calc_overscan)
-        self.overscan_lat_entry.textChanged.connect(self._calc_overscan)
-        self._calc_overscan()   # calcul initial avec les valeurs pré-remplies
-
-    def _calc_overscan(self):
-        """Calcule overscan = (v²/(2a) + |latency_mm|) × 1.2"""
-        try:
-            feed_mm_min = float(
-                self.overscan_feed_entry.text().strip().replace(',', '.'))
-            accel_mm_s2 = float(
-                self.overscan_accel_entry.text().strip().replace(',', '.'))
-            if accel_mm_s2 <= 0:
-                raise ValueError("Accel must be > 0")
-            # Latence : optionnelle, 0 si vide ou invalide
-            try:
-                lat_ms = float(
-                    self.overscan_lat_entry.text().strip().replace(',', '.'))
-            except (ValueError, AttributeError):
-                lat_ms = 0.0
-
-            v_mm_s = feed_mm_min / 60.0
-            accel_mm   = (v_mm_s ** 2) / (2.0 * accel_mm_s2)
-            lat_mm     = abs(lat_ms) * v_mm_s / 1000.0
-            raw_mm     = accel_mm + lat_mm
-            # +20% de marge de sécurité
-            overscan_mm = round(raw_mm * 1.2 + 0.05, 1)
-            self._last_overscan_mm = overscan_mm
-            self.overscan_result_label.setText(f"{overscan_mm:.1f} mm")
-            self.overscan_result_label.setStyleSheet(
-                "font-weight:bold;font-size:16px;color:#2ecc71;border:none;")
-            self.overscan_save_btn.show()
-        except (ValueError, AttributeError):
-            self._last_overscan_mm = None
-            if hasattr(self, 'overscan_result_label'):
-                self.overscan_result_label.setText("-- mm")
-                self.overscan_result_label.setStyleSheet(
-                    "font-weight:bold;font-size:16px;color:#888;border:none;")
-            if hasattr(self, 'overscan_save_btn'):
-                self.overscan_save_btn.hide()
-
-    def _save_overscan(self):
-        """Sauvegarde la valeur calculée dans machine_settings.premove."""
-        val = getattr(self, '_last_overscan_mm', None)
-        if val is None:
-            return
-        try:
-            self.controller.set_item("machine_settings", "premove", round(val, 1))
-            self.controller.save()
-            # Mettre à jour le label "premove actuel"
-            if hasattr(self, 'overscan_current_lbl'):
-                self.overscan_current_lbl.setText(
-                    f"{self.texts.get('overscan_current', 'Current premove:')} {val:.1f} mm")
-            # Feedback visuel temporaire sur le bouton
-            orig_text  = self.overscan_save_btn.text()
-            orig_style = self.overscan_save_btn.styleSheet()
-            saved_text = "✅ " + self.texts.get("overscan_saved", "Saved!")
-            self.overscan_save_btn.setText(saved_text)
-            self.overscan_save_btn.setStyleSheet("""
-                QPushButton { background-color: #1e8449; color: white; border-radius: 6px;
-                              font-size: 12px; border: none; padding: 0 10px; }
-            """)
-            QTimer.singleShot(2000, lambda: (
-                self.overscan_save_btn.setText(orig_text),
-                self.overscan_save_btn.setStyleSheet(orig_style)
-            ))
-        except Exception as e:
-            QMessageBox.critical(
-                self, self.texts.get("error_title", "Error"), str(e))
-
-    # ── FIN OVERSCAN ───────────────────────────────────────────────────────
-
     def update_mm_display(self):
         """Calcule et affiche le décalage en mm depuis speed + latency."""
         try:
@@ -1251,8 +1079,7 @@ class CalibrationView(QWidget):
                 self.setup_latency_params()
             elif self.current_test_id == "linestep":
                 self.setup_linestep_params()
-            elif self.current_test_id == "overscan":
-                self.setup_overscan_params()
+                pass
             elif self.current_test_id == "power":
                 # self.setup_power_params()
                 pass

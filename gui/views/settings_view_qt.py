@@ -378,39 +378,41 @@ class SettingsViewQt(QWidget):
             self.controller.set_section("machine_settings", new_settings)
             
             if self.controller.save():
-                # 1. On récupère immédiatement les nouvelles traductions pour cette vue
                 from core.translations import TRANSLATIONS
                 new_lang = new_settings["language"]
+                print(f"[SAVE] langue sauvée: {new_lang}")
                 self.texts = TRANSLATIONS.get(new_lang, TRANSLATIONS["English"])["settings"]
-                
-                # 2. Mise à jour visuelle du bouton de sauvegarde
+                self.update_texts()
+
                 self.set_button_style("saved")
                 self.btn_save.setText(f"✓ {self.texts.get('btn_save', 'Save')}")
-                
-                # --- MISE À JOUR DYNAMIQUE DE L'INTERFACE GLOBALE ---
-                main_window = self.window()
-                if main_window:
-                    # A. Notifier la MainWindow de changer la langue (TopBar, etc.)
-                    if hasattr(main_window, 'update_ui_language'):
-                        main_window.update_ui_language() 
-                    
-                    # B. Forcer la mise à jour du titre de la vue dans la TopBar
-                    # (Nécessaire car ce label n'est souvent pas dans la translation_map)
-                    if hasattr(main_window, 'view_title'):
-                        topbar_texts = TRANSLATIONS.get(new_lang, TRANSLATIONS["English"]).get("topbar", {})
-                        main_window.view_title.setText(topbar_texts.get("settings", "SETTINGS").upper())
-                    
-                    # C. Mise à jour du thème (Couleurs et Icônes SVG)
-                    if hasattr(main_window, 'update_ui_theme'):
-                        main_window.update_ui_theme()
-                
+
+                main_window = (getattr(self, '_main_window', None)
+                               or getattr(self.controller, '_main_window', None)
+                               or self.window())
+                print(f"[SAVE] main_window trouvé: {main_window}")
+                print(f"[SAVE] has update_ui_language: {hasattr(main_window, 'update_ui_language')}")
+                if main_window and hasattr(main_window, 'update_ui_language'):
+                    main_window.update_ui_language()
+                if main_window and hasattr(main_window, 'update_ui_theme'):
+                    main_window.update_ui_theme()
+
                 QTimer.singleShot(2000, self.reset_save_btn)
             else:
                 raise Exception("Erreur d'écriture disque")
 
         except Exception as e:
-            print(f"Erreur de sauvegarde : {e}")
+            import traceback
+            print(f"[SAVE] ERREUR: {e}")
+            traceback.print_exc()
             self.btn_save.setStyleSheet("background-color: #942121; color: white; border-radius: 8px;")
+
+    def _apply_language(self, lang: str, translations: dict):
+        """Reçoit lang et translations directement — pas de relecture config."""
+        from core.translations import TRANSLATIONS as _TR
+        self.texts = _TR.get(lang, _TR["English"])["settings"]
+        from gui.utils_qt import translate_ui_widgets
+        translate_ui_widgets(self.translation_map, self.texts)
 
     def update_texts(self):
         """Met à jour dynamiquement tous les labels de la vue settings"""

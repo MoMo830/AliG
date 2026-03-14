@@ -102,16 +102,19 @@ class DashboardViewQt(QWidget):
         # --- LISTE DES MODES MISE À JOUR ---
         # On utilise maintenant SVG_ICONS pour les chemins
         modes = [
-            ("raster_title",      "raster_desc",      self.controller.show_raster_mode,     SVG_ICONS["RASTER"],  "normal"),
-            ("dithering_title",   "dithering_desc",   None,                                  SVG_ICONS["DITHER"],  "disabled"),
-            ("infill_title",      "infill_desc",       None,                                  SVG_ICONS["INFILL"],  "disabled"),
-            ("parser_title",      "parser_desc",       self.controller.show_checker_mode,    SVG_ICONS["GCODE"],   "normal"),
-            ("calibration_title", "calibration_desc",  self.controller.show_calibration_mode,SVG_ICONS["LATENCY"], "normal"),
-            ("settings_title",    "settings_desc",     self.controller.show_settings_mode,   SVG_ICONS["GEAR"],    "normal"),
+            # (Titre, Description, Callback, Icône (Path ou Emoji), État)
+            (self.texts["raster_title"], self.texts["raster_desc"], self.controller.show_raster_mode, SVG_ICONS["RASTER"], "normal"),
+            (self.texts["dithering_title"], self.texts["dithering_desc"], None, SVG_ICONS["DITHER"], "disabled"),
+            (self.texts["infill_title"], self.texts["infill_desc"], None, SVG_ICONS["INFILL"], "disabled"),
+            (self.texts["parser_title"], self.texts["parser_desc"], self.controller.show_checker_mode, SVG_ICONS["GCODE"], "normal"),
+            (self.texts["calibration_title"], self.texts["calibration_desc"], self.controller.show_calibration_mode, SVG_ICONS["LATENCY"], "normal"),
+            # Utilisation de l'icône Home ou Settings (ici Home pour l'exemple)
+            (self.texts["settings_title"], self.texts["settings_desc"], self.controller.show_settings_mode,SVG_ICONS["GEAR"] , "normal"), #"⚙️"
         ]
 
-        for title_key, desc_key, callback, icon_source, state in modes:
-            card = self.create_mode_card(title_key, desc_key, callback, icon_source, state)
+        for title, desc, callback, icon_source, state in modes:
+            # On passe icon_source qui peut être soit un chemin SVG, soit un Emoji
+            card = self.create_mode_card(title, desc, callback, icon_source, state)
             self.modes_layout.addWidget(card)
 
         scroll.setWidget(content)
@@ -443,7 +446,6 @@ class DashboardViewQt(QWidget):
 
         # 4. Création dynamique des colonnes
         self._stat_value_labels = []
-        self._stat_key_labels   = []
         for value, label in stat_items:
             v_layout = QVBoxLayout()
             v_layout.setSpacing(2) # Espace réduit entre valeur et texte
@@ -456,7 +458,6 @@ class DashboardViewQt(QWidget):
             
             # Label (Petit et gris)
             txt_lbl = QLabel(label)
-            self._stat_key_labels.append(txt_lbl)
             txt_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             txt_lbl.setWordWrap(True) # Au cas où le texte est long
             txt_lbl.setStyleSheet("color: gray; font-size: 10px; border: none; background: transparent;")
@@ -602,24 +603,16 @@ class DashboardViewQt(QWidget):
         if hasattr(self, "all_pixmaps"):
             self.render_grid()
 
-    def _apply_language(self, lang: str, translations: dict):
-        """Reçoit lang directement — utilisé par update_ui_language."""
-        from core.translations import TRANSLATIONS as _TR
-        self.texts = _TR.get(lang, _TR["English"])["dashboard"]
-        from gui.utils_qt import translate_ui_widgets
-        translate_ui_widgets(self.translation_map, self.texts)
-        if hasattr(self, 'history_label'):
-            self.history_label.setText(self.texts.get("history", "History"))
-        stat_keys = ["lines_generated", "gcode_saved", "total_engraving_time"]
-        for i, key in enumerate(stat_keys):
-            labels = getattr(self, '_stat_key_labels', [])
-            if i < len(labels):
-                labels[i].setText(self.texts.get(key, key))
-
     def update_texts(self):
         """Met à jour dynamiquement tous les labels du Dashboard"""
+        # 1. Rechargement des dictionnaires de texte
         lang = self.controller.config_manager.get_item("machine_settings", "language", "English")
-        self._apply_language(lang, {})
+        from core.translations import TRANSLATIONS
+        self.texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"])["dashboard"]
+        
+        # 2. Utilisation de l'utilitaire de traduction centralisé
+        from gui.utils_qt import translate_ui_widgets
+        translate_ui_widgets(self.translation_map, self.texts)
 
     def refresh(self):
         """Recharge les stats et les vignettes depuis le disque."""
