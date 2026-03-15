@@ -115,12 +115,13 @@ class CalibrationView(QWidget):
                 "font-size:18px;font-weight:bold;color:#e67e22;")
 
         # ── Cartes test ───────────────────────────────────────────
+        checked_bg = colors['bg_card']
         for card in self.test_cards:
             card._bg_normal = card_bg
             card._bg_hover  = card_hov
             card._bd_normal = card_brd
             card._bd_hover  = '#e67e22'
-            checked_bg = colors['bg_card']
+            # Appliquer le style en respectant l'état checked courant
             card.setStyleSheet(
                 f"QPushButton{{background-color:{card_bg};border:1px solid {card_brd};"
                 f"border-radius:8px;text-align:left;padding:10px;}}"
@@ -342,7 +343,37 @@ class CalibrationView(QWidget):
         card._bd_normal = "#3d3d3d"
         card._bd_hover  = "#e67e22"
 
+        def _reset_style(c):
+            """Remet le style normal ou checked selon l'état de la carte."""
+            if c.isChecked():
+                c.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {c._bg_normal};
+                        border: 1px solid {c._bd_normal};
+                        border-radius: 8px; text-align: left; padding: 10px;
+                    }}
+                    QPushButton:checked {{
+                        background-color: #3d3d3d; border: 2px solid #e67e22;
+                    }}
+                """)
+            else:
+                c.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {c._bg_normal};
+                        border: 1px solid {c._bd_normal};
+                        border-radius: 8px; text-align: left; padding: 10px;
+                    }}
+                    QPushButton:checked {{
+                        background-color: #3d3d3d; border: 2px solid #e67e22;
+                    }}
+                """)
+
         def _enter(e, c=card):
+            # Remettre le style normal sur toutes les cartes non survolées
+            for other in self.test_cards:
+                if other is not c and not other.underMouse():
+                    _reset_style(other)
+            # Appliquer le hover uniquement si la carte n'est pas sélectionnée
             if not c.isChecked():
                 c.setStyleSheet(f"""
                     QPushButton {{
@@ -356,17 +387,7 @@ class CalibrationView(QWidget):
                 """)
 
         def _leave(e, c=card):
-            if not c.isChecked():
-                c.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {c._bg_normal};
-                        border: 1px solid {c._bd_normal};
-                        border-radius: 8px; text-align: left; padding: 10px;
-                    }}
-                    QPushButton:checked {{
-                        background-color: #3d3d3d; border: 2px solid #e67e22;
-                    }}
-                """)
+            _reset_style(c)
 
         card.enterEvent = _enter
         card.leaveEvent = _leave

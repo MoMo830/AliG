@@ -1785,6 +1785,28 @@ class CheckerViewQt(QWidget):
                 f'QPlainTextEdit{{background:{bg_entry};color:{gcode_col};'
                 f'font-family:Consolas;border:1px solid {border};border-radius:3px;}}'
             )
+            self.gcode_view.verticalScrollBar().setStyleSheet(f"""
+                QScrollBar:vertical {{
+                    border: none;
+                    background: {colors['scrollbar_bg']};
+                    width: 10px;
+                    margin: 0px;
+                }}
+                QScrollBar::handle:vertical {{
+                    background: {colors['scrollbar_handle']};
+                    min-height: 20px;
+                    border-radius: 5px;
+                }}
+                QScrollBar::handle:vertical:hover {{
+                    background: #1F6AA5;
+                }}
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                    height: 0px;
+                }}
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                    background: none;
+                }}
+            """)
         if hasattr(self, 'btn_cancel'):
             self.btn_cancel.setStyleSheet(self._gbtn(colors['btn_cancel'], colors['btn_cancel_hover']))
         if hasattr(self, '_spd_frame') and self._spd_frame:

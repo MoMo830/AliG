@@ -1871,7 +1871,30 @@ class SimulationViewQt(QWidget):
         if hasattr(self, 'gcode_view'):
             self.gcode_view.setStyleSheet(
                 f'QPlainTextEdit{{background:{bg_entry};color:{colors["text_code"]};'
-                f'font-family:Consolas;border:1px solid {brd_left};border-radius:3px;}}')
+                f'font-family:Consolas;border:1px solid {brd_left};border-radius:3px;}}'  # noqa
+            )
+            self.gcode_view.verticalScrollBar().setStyleSheet(f"""
+                QScrollBar:vertical {{
+                    border: none;
+                    background: {colors['scrollbar_bg']};
+                    width: 10px;
+                    margin: 0px;
+                }}
+                QScrollBar::handle:vertical {{
+                    background: {colors['scrollbar_handle']};
+                    min-height: 20px;
+                    border-radius: 5px;
+                }}
+                QScrollBar::handle:vertical:hover {{
+                    background: #1F6AA5;
+                }}
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                    height: 0px;
+                }}
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                    background: none;
+                }}
+            """)
 
         # ── Stats frame ───────────────────────────────────────────
         if hasattr(self, '_stats_frame'):

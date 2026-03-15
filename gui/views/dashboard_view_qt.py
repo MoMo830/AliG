@@ -90,6 +90,7 @@ class DashboardViewQt(QWidget):
 
         # 1. Zone de défilement
         scroll = QScrollArea()
+        self._left_scroll = scroll
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet("background: transparent;")
@@ -508,6 +509,31 @@ class DashboardViewQt(QWidget):
                 f"{colors['border']};"
             )
             self.history_area.verticalScrollBar().setStyleSheet(f"""
+                QScrollBar:vertical {{
+                    border: none;
+                    background: {colors['scrollbar_bg']};
+                    width: 10px;
+                    margin: 0px;
+                }}
+                QScrollBar::handle:vertical {{
+                    background: {colors['scrollbar_handle']};
+                    min-height: 20px;
+                    border-radius: 5px;
+                }}
+                QScrollBar::handle:vertical:hover {{
+                    background: #1F6AA5;
+                }}
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                    height: 0px;
+                }}
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                    background: none;
+                }}
+            """)
+
+        # 3b. Scrollbar colonne gauche (harmonisée avec history_area)
+        if hasattr(self, "_left_scroll"):
+            self._left_scroll.verticalScrollBar().setStyleSheet(f"""
                 QScrollBar:vertical {{
                     border: none;
                     background: {colors['scrollbar_bg']};

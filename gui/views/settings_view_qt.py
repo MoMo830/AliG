@@ -147,6 +147,7 @@ class SettingsViewQt(QWidget):
     def setup_scroll_area(self):
         """Zone défilante contenant les colonnes de réglages"""
         scroll = QScrollArea()
+        self._main_scroll = scroll
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet("background: transparent;")
@@ -755,6 +756,31 @@ class SettingsViewQt(QWidget):
 
         # ── Vue racine ────────────────────────────────────────────
         self.setStyleSheet("background-color: transparent;")
+
+        # ── Scrollbar principale ─────────────────────────────────
+        if hasattr(self, "_main_scroll"):
+            self._main_scroll.verticalScrollBar().setStyleSheet(f"""
+                QScrollBar:vertical {{
+                    border: none;
+                    background: {colors['scrollbar_bg']};
+                    width: 10px;
+                    margin: 0px;
+                }}
+                QScrollBar::handle:vertical {{
+                    background: {colors['scrollbar_handle']};
+                    min-height: 20px;
+                    border-radius: 5px;
+                }}
+                QScrollBar::handle:vertical:hover {{
+                    background: #1F6AA5;
+                }}
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                    height: 0px;
+                }}
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                    background: none;
+                }}
+            """)
 
         # ── Sections ─────────────────────────────────────────────
         for frame in self._section_frames:

@@ -851,12 +851,11 @@ class RasterViewQt(QWidget):
         sw_row.addWidget(self.sw_force_width)
         lo.addLayout(sw_row)
 
-        # line_step — label informatif seulement (valeur pilotée par hor/ver_linestep en Settings)
+        # line_step — label + valeur sur la même ligne (non éditable, piloté par Settings)
+        ls_row = QHBoxLayout()
         lbl_ls = QLabel(self.t.get("line_step", "Line Step"))
         lbl_ls.setStyleSheet("color:#ddd;font-size:12px;")
         self.translation_map[lbl_ls] = "line_step"
-        lo.addWidget(lbl_ls)
-        ls_row = QHBoxLayout()
         self._line_step_value_lbl = QLabel("0.1307")
         self._line_step_value_lbl.setStyleSheet(
             "color:#aaa;font-size:12px;font-family:Consolas;"
@@ -864,6 +863,7 @@ class RasterViewQt(QWidget):
             "border-radius:4px;padding:2px 8px;"
         )
         self._line_step_value_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ls_row.addWidget(lbl_ls)
         ls_row.addStretch()
         ls_row.addWidget(self._line_step_value_lbl)
         lo.addLayout(ls_row)
@@ -909,7 +909,12 @@ class RasterViewQt(QWidget):
         pow_row = QHBoxLayout()
         left_p = QVBoxLayout()
         self._add_simple_input(left_p, "max_power", 40.0, "max_p")
-        self._add_simple_input(left_p, "min_power", 10.0, "min_p")
+        _, min_p_entry = self._add_simple_input(left_p, "min_power", 10.0, "min_p")
+        # Re-vérifier le warning framing dès que min_power change
+        min_p_entry.editingFinished.connect(
+            lambda: self._check_framing_power_warning()
+            if hasattr(self, '_framing_power_warning') else None
+        )
         pow_row.addLayout(left_p)
         lo.addLayout(pow_row)
 
@@ -1010,7 +1015,8 @@ class RasterViewQt(QWidget):
         lo.addWidget(lbl_fr)
 
         pause_row = QHBoxLayout()
-        lbl_pause = QLabel(self.t.get("pause_command", "pause_command"))
+        self._lbl_pause = QLabel(self.t.get("pause_command", "pause_command"))
+        lbl_pause = self._lbl_pause
         lbl_pause.setStyleSheet("color:#ddd;font-size:12px;")
         self.translation_map[lbl_pause] = "pause_command"
         self.pause_cmd_entry = QLineEdit("M0")
@@ -1046,16 +1052,32 @@ class RasterViewQt(QWidget):
         lo.addLayout(sw_frm_row)
 
         pwr_row = QHBoxLayout()
-        lbl_fpwr = QLabel(self.t.get("framing_power", "framing_power"))
+        self._lbl_framing_power = QLabel(self.t.get("framing_power", "framing_power"))
+        lbl_fpwr = self._lbl_framing_power
         lbl_fpwr.setStyleSheet("color:#ddd;font-size:12px;")
         self.translation_map[lbl_fpwr] = "framing_power"
         self.frame_power_entry = QLineEdit("0")
         self.frame_power_entry.setFixedWidth(60)
         self.frame_power_entry.setStyleSheet(self._entry_style())
+        self.frame_power_entry.editingFinished.connect(self._check_framing_power_warning)
         pwr_row.addWidget(lbl_fpwr)
         pwr_row.addWidget(self.frame_power_entry)
         pwr_row.addStretch()
         lo.addLayout(pwr_row)
+
+        # ── Warning puissance framing/pointing > min_power ────────────
+        self._framing_power_warning = QLabel()
+        self._framing_power_warning.setWordWrap(True)
+        self._framing_power_warning.setStyleSheet(
+            "QLabel{"
+            "background:#5c2a00;color:#ffaa44;"
+            "border:1px solid #ff7700;"
+            "border-radius:5px;padding:4px 8px;"
+            "font-size:11px;font-weight:bold;"
+            "}"
+        )
+        self._framing_power_warning.setVisible(False)
+        lo.addWidget(self._framing_power_warning)
 
         self._add_combo(lo, "framing_ratio",
                         ["5%","10%","20%","30%","50%","80%","100%"],
@@ -1248,7 +1270,7 @@ class RasterViewQt(QWidget):
 
         combo.currentIndexChanged.connect(on_change)
         layout.addWidget(combo)
-        self.controls[key] = {"combo": combo, "_is_tuple": is_tuple}
+        self.controls[key] = {"combo": combo, "_is_tuple": is_tuple, "_label": lbl}
         return combo
 
     # ── Styles ────────────────────────────────────────────────────────
@@ -1351,10 +1373,85 @@ class RasterViewQt(QWidget):
         is_pointing = self.sw_pointer.isChecked()
         is_framing  = self.sw_frame.isChecked()
         any_active  = is_pointing or is_framing
+        c = self._theme_colors
+
+        # ── Activation fonctionnelle ──────────────────────────────────
         self.pause_cmd_entry.setEnabled(any_active)
         self.frame_power_entry.setEnabled(any_active)
         if "frame_feed_ratio_menu" in self.controls:
             self.controls["frame_feed_ratio_menu"]["combo"].setEnabled(is_framing)
+
+        # ── Styles entrées ────────────────────────────────────────────
+        entry_on  = self._entry_style()
+        entry_off = (
+            f"QLineEdit{{background:{c.get('bg_entry','#2b2b2b')};color:#555555;"
+            f"border:1px solid #3a3a3a;border-radius:4px;padding:2px;}}"
+        )
+        self.pause_cmd_entry.setStyleSheet(entry_on if any_active else entry_off)
+        self.frame_power_entry.setStyleSheet(entry_on if any_active else entry_off)
+
+        # ── Styles labels associés (widget par widget pour ne pas être écrasé) ──
+        lbl_color_on  = c.get('text', '#dddddd')
+        lbl_color_off = '#555555'
+        lbl_style_on  = f"color:{lbl_color_on};font-size:12px;border:none;background:transparent;"
+        lbl_style_off = "color:#555555;font-size:12px;border:none;background:transparent;"
+
+        for lbl in [
+            getattr(self, '_lbl_pause',          None),
+            getattr(self, '_lbl_framing_power',  None),
+        ]:
+            if lbl is not None:
+                lbl.setStyleSheet(lbl_style_on if any_active else lbl_style_off)
+
+        # Label du combo framing_ratio (actif seulement si is_framing)
+        if "frame_feed_ratio_menu" in self.controls:
+            combo = self.controls["frame_feed_ratio_menu"]["combo"]
+            lbl_ratio = self.controls["frame_feed_ratio_menu"].get("_label")
+            if is_framing:
+                combo.setStyleSheet(self._combo_style())
+                if lbl_ratio:
+                    lbl_ratio.setStyleSheet(lbl_style_on)
+            else:
+                combo.setStyleSheet(
+                    f"QComboBox{{background:{c.get('bg_entry','#2b2b2b')};color:#555555;"
+                    f"border:1px solid #3a3a3a;border-radius:5px;"
+                    f"padding:3px 30px 3px 10px;}}"
+                    f"QComboBox::drop-down{{border:none;background:transparent;}}"
+                    f"QComboBox QAbstractItemView{{background:{c.get('bg_entry','#2b2b2b')};"
+                    f"color:{c.get('text','#ddd')};}}"
+                )
+                if lbl_ratio:
+                    lbl_ratio.setStyleSheet(lbl_style_off)
+
+        # ── Warning puissance ─────────────────────────────────────────
+        if hasattr(self, '_framing_power_warning'):
+            self._check_framing_power_warning()
+
+    def _check_framing_power_warning(self):
+        """Affiche un warning si la puissance pointing/framing >= min_power (risque de gravure)."""
+        if not hasattr(self, '_framing_power_warning'):
+            return
+        is_pointing = self.sw_pointer.isChecked()
+        is_framing  = self.sw_frame.isChecked()
+        if not (is_pointing or is_framing):
+            self._framing_power_warning.setVisible(False)
+            return
+        try:
+            frame_pwr = float(self.frame_power_entry.text().replace(",", "."))
+        except ValueError:
+            self._framing_power_warning.setVisible(False)
+            return
+        min_pwr = self._get_val("min_p", default=0.0)
+        if frame_pwr > 0 and frame_pwr >= min_pwr:
+            warn_text = (
+                f"⚠  Puissance pointing/framing ({frame_pwr:.1f}) "
+                f"≥ puissance min ({min_pwr:.1f}) — "
+                f"risque de gravure du matériau !"
+            )
+            self._framing_power_warning.setText(warn_text)
+            self._framing_power_warning.setVisible(True)
+        else:
+            self._framing_power_warning.setVisible(False)
 
     def _on_switch_with_delay(self, _=None):
         QTimer.singleShot(120, self._schedule_preview)
@@ -1939,7 +2036,7 @@ class RasterViewQt(QWidget):
         self.apply_lock_state()
 
     def apply_lock_state(self):
-        self.lock_btn.setText("🔒" if self.is_locked else "🔓")
+        self.lock_btn.setText("\U0001f512" if self.is_locked else "\U0001f513")
         self._machine_container.setEnabled(not self.is_locked)
         c = self._theme_colors
         style = c['locked_btn'] if self.is_locked else "#D32F2F"
@@ -1948,6 +2045,37 @@ class RasterViewQt(QWidget):
             f"border-radius:4px;border:none;font-size:13px;}}"
             f"QPushButton:hover{{background:{c['locked_btn_hover']};}}"
         )
+        # Grisage widget par widget (priorité sur les styles inline appliqués par apply_theme)
+        from PyQt6.QtWidgets import QLabel as _QL, QLineEdit as _QLE, QComboBox as _QCB
+        if self.is_locked:
+            for lbl in self._machine_container.findChildren(_QL):
+                lbl.setStyleSheet(
+                    "color:#555555;font-size:12px;border:none;background:transparent;"
+                )
+            for entry in self._machine_container.findChildren(_QLE):
+                entry.setStyleSheet(
+                    f"QLineEdit{{color:#555555;border:1px solid #3a3a3a;"
+                    f"background:{c.get('bg_entry','#2b2b2b')};border-radius:4px;padding:2px;}}"
+                )
+            for combo in self._machine_container.findChildren(_QCB):
+                combo.setStyleSheet(
+                    f"QComboBox{{color:#555555;border:1px solid #3a3a3a;"
+                    f"background:{c.get('bg_entry','#2b2b2b')};border-radius:5px;"
+                    f"padding:3px 30px 3px 10px;}}"
+                    f"QComboBox::drop-down{{border:none;background:transparent;}}"
+                    f"QComboBox QAbstractItemView{{background:{c.get('bg_entry','#2b2b2b')};"
+                    f"color:#555555;}}"
+                )
+        else:
+            # Restaurer les styles normaux du thème
+            for lbl in self._machine_container.findChildren(_QL):
+                lbl.setStyleSheet(
+                    f"color:{c['text']};font-size:12px;border:none;background:transparent;"
+                )
+            for entry in self._machine_container.findChildren(_QLE):
+                entry.setStyleSheet(self._entry_style())
+            for combo in self._machine_container.findChildren(_QCB):
+                combo.setStyleSheet(self._combo_style())
 
     # ── Global previews ───────────────────────────────────────────────
 
@@ -2026,6 +2154,28 @@ class RasterViewQt(QWidget):
                 tab.setStyleSheet(f"background:{bg_tabs};")
                 if tab.widget():
                     tab.widget().setStyleSheet(f"background:{bg_tabs};")
+                tab.verticalScrollBar().setStyleSheet(f"""
+                    QScrollBar:vertical {{
+                        border: none;
+                        background: {colors['scrollbar_bg']};
+                        width: 10px;
+                        margin: 0px;
+                    }}
+                    QScrollBar::handle:vertical {{
+                        background: {colors['scrollbar_handle']};
+                        min-height: 20px;
+                        border-radius: 5px;
+                    }}
+                    QScrollBar::handle:vertical:hover {{
+                        background: #1F6AA5;
+                    }}
+                    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                        height: 0px;
+                    }}
+                    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                        background: none;
+                    }}
+                """)
 
         # ── Labels dans les onglets ───────────────────────────────────
         for tab in [self._tab_geom, self._tab_img, self._tab_laser, self._tab_gcode]:
@@ -2080,6 +2230,10 @@ class RasterViewQt(QWidget):
                 f"QFrame{{background:{bg_card};border:1px solid {sec_brd};border-radius:8px;}}"
                 f"QLabel{{border:none;background:transparent;}}"
             )
+
+        # ── État framing/pointing (après labels pour ne pas être écrasé) ──
+        if hasattr(self, "sw_pointer"):
+            self._update_framing_state()
 
         # ── Bouton cadenas ────────────────────────────────────────────
         if hasattr(self, "lock_btn"):
