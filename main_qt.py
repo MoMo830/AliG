@@ -31,34 +31,27 @@ def main():
     
         window = MainWindowQt(controller=config_manager)
         window.setWindowOpacity(0.0)
-        
+
+        # show() dès que ui_ready est émis (dashboard construit + thémé)
         def reveal_final():
-            "fade-in / anti white flash"
             data = config_manager.get_section("window_settings")
             if data.get("is_maximized", False):
                 window.showMaximized()
             else:
                 window.show()
-            
             window.setUpdatesEnabled(True)
-            if hasattr(window, 'top_bar'):
-                window.top_bar.setUpdatesEnabled(True)
-            
-            # Force le refresh de tous les widgets enfants
-            for widget in window.findChildren(__import__('PyQt6.QtWidgets', fromlist=['QWidget']).QWidget):
-                widget.setUpdatesEnabled(True)
-                widget.update()
-            
             window.fade_anim = QPropertyAnimation(window, b"windowOpacity")
-            window.fade_anim.setDuration(150)          
+            window.fade_anim.setDuration(250)
             window.fade_anim.setStartValue(0.0)
             window.fade_anim.setEndValue(1.0)
-            window.fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic) 
+            window.fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
             window.fade_anim.start()
             window.raise_()
+            # Précharger raster_view après l'animation — aucun impact visuel
+            window.fade_anim.finished.connect(
+                lambda: QTimer.singleShot(200, window._preload_raster_view))
 
-
-        QTimer.singleShot(150, reveal_final)
+        window.ui_ready.connect(reveal_final)
 
         sys.exit(app.exec())
 

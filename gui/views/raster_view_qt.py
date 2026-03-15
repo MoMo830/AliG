@@ -309,7 +309,7 @@ class _ColorbarWidget(QWidget):
         qp.fillRect(0, 0, W, H, QColor(self._bg_color))
 
         tm, bm = 12, 12
-        bar_x  = 20
+        bar_x  = 14
         bar_w  = 14
         bar_h  = H - tm - bm
         if bar_h <= 0:
@@ -338,13 +338,19 @@ class _ColorbarWidget(QWidget):
 
         # Label vertical
         qp.save()
-        qp.translate(W - 4, tm + bar_h // 2)
+        qp.translate(W - 10, tm + bar_h // 2)  # décalé 6px à gauche
         qp.rotate(-90)
         qp.setPen(QColor(self._fg_color))
         qp.setFont(QFont("Arial", 8))
         qp.drawText(-50, -6, 100, 13, Qt.AlignmentFlag.AlignCenter, self._label)
         qp.restore()
         qp.end()
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  TABBAR CENTRÉ
+# ═══════════════════════════════════════════════════════════════════
+
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -705,24 +711,36 @@ class RasterViewQt(QWidget):
         lo.addWidget(self._make_profile_buttons())
 
         self._tabs = QTabWidget()
+        self._tabs.tabBar().setExpanding(False)
+        self._tabs.tabBar().setDrawBase(False)
         self._tabs.setStyleSheet("""
             QTabWidget::pane { border: 1px solid #333; background: #252525; }
             QTabBar::tab {
-                background: #2b2b2b; color: #aaa; padding: 5px 12px;
+                background: #2b2b2b; color: #aaa; padding: 5px 18px;
                 border: 1px solid #333; border-bottom: none; border-radius: 4px 4px 0 0;
             }
             QTabBar::tab:selected { background: #1F6AA5; color: white; }
         """)
+        # Centrage : décaler la tabBar via son parent layout
+        from PyQt6.QtCore import QTimer as _QT
+        def _center_tabs():
+            tb = self._tabs.tabBar()
+            total = sum(tb.tabRect(i).width() for i in range(tb.count()))
+            offset = max(0, (tb.parent().width() - total) // 2)
+            tb.setGeometry(offset, tb.y(), tb.parent().width() - offset, tb.height())
+        self._tabs.tabBar().installEventFilter(self)
+        self._center_tabs_fn = _center_tabs
+        _QT.singleShot(0, _center_tabs)
 
         self._tab_geom  = self._make_scrollable_tab()
         self._tab_img   = self._make_scrollable_tab()
         self._tab_laser = self._make_scrollable_tab()
         self._tab_gcode = self._make_scrollable_tab()
 
-        self._tabs.addTab(self._tab_geom,  "geometry")
-        self._tabs.addTab(self._tab_img,   "image")
-        self._tabs.addTab(self._tab_laser, "laser")
-        self._tabs.addTab(self._tab_gcode, "gcode")
+        self._tabs.addTab(self._tab_geom,  self.t.get("geometry", "Geometry"))
+        self._tabs.addTab(self._tab_img,   self.t.get("image",    "Image"))
+        self._tabs.addTab(self._tab_laser, self.t.get("laser",    "Laser"))
+        self._tabs.addTab(self._tab_gcode, self.t.get("gcode",    "G-Code"))
 
         self._setup_tab_geom()
         self._setup_tab_img()
@@ -838,7 +856,16 @@ class RasterViewQt(QWidget):
         lo.addSpacing(6)
 
         self.width_label_widget, _ = self._add_slider_input(
-            lo, "target_width", 5, 400, 30.0, "width")
+            lo, "target_width", 5, 400, 30.0, "width",
+            unclamped_entry=True)
+
+        # Warning mémoire — visible si matrice trop grande
+        self._mem_warn_label = QLabel()
+        self._mem_warn_label.setWordWrap(True)
+        self._mem_warn_label.setStyleSheet(
+            "color: #FF9500; font-size: 11px; background: transparent; border: none;")
+        self._mem_warn_label.setVisible(False)
+        lo.addWidget(self._mem_warn_label)
 
         sw_row = QHBoxLayout()
         self.lbl_force_width = QLabel(self.t.get("force_width", "force_width"))
@@ -1185,7 +1212,7 @@ class RasterViewQt(QWidget):
     # ── Helpers construction ──────────────────────────────────────────
 
     def _add_slider_input(self, layout, label_key, vmin, vmax, default, key,
-                          is_int=False, precision=2):
+                          is_int=False, precision=2, unclamped_entry=False):
         lbl = QLabel(self.t.get(label_key, label_key))
         lbl.setStyleSheet("color:#ddd;font-size:12px;")
         self.translation_map[lbl] = label_key
@@ -1211,7 +1238,10 @@ class RasterViewQt(QWidget):
         def on_entry():
             try:
                 v = float(entry.text().replace(",", "."))
-                slider.setValue(int(v) if is_int else int(v * 100))
+                # Si unclamped_entry, on borne le slider à vmax mais pas la valeur
+                slider_v = min(int(v) if is_int else int(v * 100),
+                               int(vmax) if is_int else int(vmax * 100))
+                slider.setValue(slider_v)
                 self._schedule_preview()
             except ValueError:
                 pass
@@ -1228,6 +1258,7 @@ class RasterViewQt(QWidget):
             "slider": slider, "entry": entry,
             "is_int": is_int, "precision": precision,
             "_vmin": vmin, "_vmax": vmax,
+            "unclamped": unclamped_entry,
         }
         return lbl, entry
 
@@ -1490,6 +1521,15 @@ class RasterViewQt(QWidget):
             # Render au prochain tour d'événements — la vue est déjà affichée
             QTimer.singleShot(0, self._initial_render)
 
+    def eventFilter(self, obj, event):
+        from PyQt6.QtCore import QEvent
+        if (hasattr(self, "_center_tabs_fn")
+                and hasattr(self, "_tabs")
+                and obj is self._tabs.tabBar()
+                and event.type() == QEvent.Type.Resize):
+            self._center_tabs_fn()
+        return super().eventFilter(obj, event)
+
     def resizeEvent(self, e):
         super().resizeEvent(e)
         if hasattr(self, "_overlay"):
@@ -1562,7 +1602,7 @@ class RasterViewQt(QWidget):
         # Colorbar Qt fixe
         self._cbar_widget.setVisible(True)
         self._cbar_widget.set_range(v_min, v_max,
-                                    "laser_power_level")
+                                    self.t.get("laser_power_level", "Laser Power"))
 
         # Overscan — calcul des rectangles (coordonnées mm exactes)
         direction = self._raster_mode
@@ -1743,6 +1783,10 @@ class RasterViewQt(QWidget):
             )
             matrix, img_obj, geom, mem_warn = results
 
+            # Afficher ou masquer le warning mémoire
+            if hasattr(self, "_mem_warn_label"):
+                self._update_mem_warning(mem_warn, geom)
+
             if raster_mode == "vertical":
                 geom["machine_step_x"] = geom.get("y_step", 0.1)
                 geom["machine_step_y"] = geom.get("x_step", 0.1)
@@ -1771,6 +1815,40 @@ class RasterViewQt(QWidget):
         cx = self._get_val("custom_x") or 0.0
         cy = self._get_val("custom_y") or 0.0
         return self.engine.calculate_offsets(origin_key, real_w, real_h, cx, cy)
+
+    def _update_mem_warning(self, mem_warn, geom):
+        """Met à jour le label de warning mémoire."""
+        if not hasattr(self, "_mem_warn_label"):
+            return
+        w_px = geom.get("w_px", 0)
+        h_px = geom.get("h_px", 0)
+        total = w_px * h_px
+        rescaled = total < (self._get_val("width") / (25.4 / max(1, self._get_val("dpi"))))
+
+        if total > 10_000_000:
+            dpi_now = int(self._get_val("dpi"))
+            dpi_sug = max(10, int(dpi_now * 0.7))
+            tpl = self.t.get("mem_warn_hard",
+                "⚠ Matrix too large ({total:.1f}M px) — image was rescaled."
+                "\nTry reducing DPI (e.g. {dpi_sug} instead of {dpi_now}).")
+            msg = tpl.format(total=total/1_000_000, dpi_sug=dpi_sug, dpi_now=dpi_now)
+            self._mem_warn_label.setStyleSheet(
+                "color: #e74c3c; font-size: 11px; background: transparent; border: none;")
+            self._mem_warn_label.setText(msg)
+            self._mem_warn_label.setVisible(True)
+        elif mem_warn:
+            dpi_now = int(self._get_val("dpi"))
+            dpi_sug = max(10, int(dpi_now * 0.7))
+            tpl = self.t.get("mem_warn_soft",
+                "⚠ Large matrix ({total:.1f}M px) — may be slow."
+                "\nConsider reducing DPI (e.g. {dpi_sug} instead of {dpi_now}).")
+            msg = tpl.format(total=total/1_000_000, dpi_sug=dpi_sug, dpi_now=dpi_now)
+            self._mem_warn_label.setStyleSheet(
+                "color: #FF9500; font-size: 11px; background: transparent; border: none;")
+            self._mem_warn_label.setText(msg)
+            self._mem_warn_label.setVisible(True)
+        else:
+            self._mem_warn_label.setVisible(False)
 
     def _get_val(self, key, default=0.0):
         ctrl = self.controls.get(key)
@@ -1960,6 +2038,11 @@ class RasterViewQt(QWidget):
                 self.t.get("choose_image", "PLEASE SELECT AN IMAGE\nTO BEGIN"))
             if not self.input_image_path:
                 self._canvas.redraw()
+
+        # Mettre à jour le label de la colorbar selon la langue
+        if hasattr(self, "_cbar_widget") and self._cbar_widget.isVisible():
+            self._cbar_widget._label = self.t.get("laser_power_level", "Laser Power")
+            self._cbar_widget.update()
 
         self.refresh_global_previews()
 
@@ -2327,6 +2410,10 @@ class RasterViewQt(QWidget):
         self._tabs.setTabText(1, self.t.get("image",    "Image"))
         self._tabs.setTabText(2, self.t.get("laser",    "Laser"))
         self._tabs.setTabText(3, self.t.get("gcode",    "G-Code"))
+        # Recalculer le centrage après changement des textes
+        if hasattr(self, "_center_tabs_fn"):
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, self._center_tabs_fn)
 
         # Boutons mode raster
         for key, btn in self._btn_raster.items():
@@ -2356,5 +2443,10 @@ class RasterViewQt(QWidget):
                 self.t.get("choose_image", "PLEASE SELECT AN IMAGE\nTO BEGIN"))
             if not self.input_image_path:
                 self._canvas.redraw()
+
+        # Mettre à jour le label de la colorbar selon la langue
+        if hasattr(self, "_cbar_widget") and self._cbar_widget.isVisible():
+            self._cbar_widget._label = self.t.get("laser_power_level", "Laser Power")
+            self._cbar_widget.update()
 
         self.refresh_global_previews()

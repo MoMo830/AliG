@@ -189,8 +189,6 @@ class GCodeEngine:
         geom = {
             "w_px": w_px,
             "h_px": h_px,
-            "w_px":   w_px,
-            "h_px":   h_px,
             "real_w": real_w,
             "real_h": real_h,
             "x_step": x_step,

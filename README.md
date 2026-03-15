@@ -171,16 +171,3 @@ Contributions help fund testing materials, hardware validation, and continued fe
 > - Inspect generated G-code before execution
 >
 > Full safety documentation is available in the [Wiki](https://github.com/MoMo830/AliG/wiki).
-
-
-
-
-      
-
-
-
- 
-
-
-
-

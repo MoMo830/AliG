@@ -35,7 +35,6 @@ class MainWindowQt(QMainWindow):
         pal.setColor(QPalette.ColorRole.Base, dark_color)
         pal.setColor(QPalette.ColorRole.Button, dark_color)
         self.setPalette(pal)
-        self.setUpdatesEnabled(False)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         
         
@@ -74,10 +73,9 @@ class MainWindowQt(QMainWindow):
         QTimer.singleShot(0, self._post_init_ui)
 
     def _post_init_ui(self):
-        self.show_dashboard()
+        # Appliquer le thème en premier pour éviter un double rendu
         self.update_ui_theme()
-        # Pré-créer raster_view en arrière-plan pendant que l'utilisateur
-        # regarde le dashboard — au clic le basculement sera instantané
+        self.show_dashboard()
         QTimer.singleShot(300, self._preload_raster_view)
 
     def _preload_raster_view(self):
@@ -159,6 +157,7 @@ class MainWindowQt(QMainWindow):
             QPushButton { background: transparent; border: none; border-radius: 5px; } 
             QPushButton:hover { background-color: #3d3d3d; }
         """)
+        self.btn_home.setObjectName("home_btn")
         self.btn_home.clicked.connect(self.show_dashboard)
         layout.addWidget(self.btn_home)
 
@@ -207,6 +206,7 @@ class MainWindowQt(QMainWindow):
             }
             QPushButton:hover { color: #3B8ED0; text-decoration: underline; }
         """)
+        self.btn_github.setObjectName("github_btn")
         self.btn_github.clicked.connect(lambda: webbrowser.open("https://github.com/MoMo830/ALIG"))
         layout.addWidget(self.btn_github)
 
@@ -232,6 +232,7 @@ class MainWindowQt(QMainWindow):
             QPushButton { background: transparent; color: white; border: none; } 
             QPushButton:hover { background-color: #3d3d3d; border-radius: 5px; }
         """)
+        self.btn_settings.setObjectName("settings_topbar_btn")
         self.btn_settings.clicked.connect(self.show_settings_mode)
         layout.addWidget(self.btn_settings)
         # btn_settings a une icône — pas de setText, on met à jour le tooltip dans update_ui_language
