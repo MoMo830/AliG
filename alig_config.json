@@ -2,32 +2,35 @@
     "machine_settings": {
         "theme": "Dark",
         "language": "Fran\u00e7ais",
-        "enable_thumbnails": true,
-        "cmd_mode": "M67 (Analog)",
+        "cmd_mode": "S (Spindle)",
         "firing_mode": "M3/M5",
         "m67_e_num": 0,
         "ctrl_max": 100,
         "gcode_extension": ".nc",
-        "laser_latency": -11.5,
-        "premove": 3.2,
-        "hor_linestep": 0.1307,
+        "laser_latency": 0.0,
+        "premove": 10.0,
+        "hor_linestep": 0.1,
         "ver_linestep": 0.1,
+        "enable_thumbnails": true,
         "custom_header": "",
-        "custom_footer": "M334"
+        "custom_footer": ""
     },
     "stats": {
-        "total_lines": 301116,
-        "total_gcodes": 4,
-        "total_time_seconds": 35051.12091064453,
-        "last_project_time": 658.1724853515625
+        "total_lines": 28331,
+        "total_gcodes": 1,
+        "total_time_seconds": 401.8249206542969,
+        "last_project_time": 401.8249206542969
     },
     "window_settings": {
         "is_maximized": true,
         "geometry": "1440x890+0+-6"
     },
+    "app_state": {
+        "onboarding_done": true
+    },
     "raster_settings": {
-        "width": 47.58,
-        "dpi": 158.0,
+        "width": 30.0,
+        "dpi": 254.0,
         "origin_mode": "Lower-Left",
         "custom_x": 0.0,
         "custom_y": 0.0,
@@ -40,7 +43,7 @@
         "min_p": 10.0,
         "gray_steps": 256.0,
         "frame_feed_ratio_menu": "20%",
-        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/IMG_3938.jpeg",
+        "input_path": "C:/Users/momof/SynologyDrive/Python/CNC/IMG_3901.jpg",
         "output_dir": "c:\\Users\\momof\\SynologyDrive\\Python\\CNC\\ALIG_Project",
         "custom_header": "",
         "custom_footer": "",

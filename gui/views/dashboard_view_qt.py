@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 import os
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, 
-                             QLabel, QScrollArea, QGridLayout, QPushButton)
-from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame,
+                             QLabel, QScrollArea, QGridLayout, QPushButton,
+                             QStackedWidget)
+from PyQt6.QtCore import Qt, QSize, QTimer, QPoint
 from PyQt6.QtGui import QPixmap, QIcon, QFont
 from PyQt6.QtWidgets import QGraphicsDropShadowEffect
 from PyQt6.QtGui import QColor
@@ -11,6 +12,7 @@ from PyQt6.QtGui import QColor
 from core.translations import TRANSLATIONS
 from utils.paths import THUMBNAILS_DIR, ASSETS_DIR, SVG_ICONS
 from gui.utils_qt import get_svg_pixmap
+from gui.onboarding_widget import OnboardingWidget, HighlightOverlay
 
 class DashboardViewQt(QWidget):
     def __init__(self, controller):
@@ -55,7 +57,7 @@ class DashboardViewQt(QWidget):
 
         # --- THUMBNAILS ---
         self.load_thumbnails()
-        QTimer.singleShot(0, self.render_grid)
+        QTimer.singleShot(0, self._init_history_area)
 
     def setup_logo_header(self):
         """Crée le bandeau titre ALIG en haut de la vue"""
@@ -90,7 +92,6 @@ class DashboardViewQt(QWidget):
 
         # 1. Zone de défilement
         scroll = QScrollArea()
-        self._left_scroll = scroll
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet("background: transparent;")
@@ -245,7 +246,8 @@ class DashboardViewQt(QWidget):
         self.history_area = QScrollArea() 
         self.history_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.history_area.setWidgetResizable(True)
-        self.history_area.setStyleSheet("background-color: #202020; border-radius: 10px; border: 1px solid #333;")
+        self.history_area.setStyleSheet("background: transparent; border-radius: 10px; border: 1px solid #333;")
+        self.history_area.viewport().setStyleSheet("background: transparent;")
         self.history_area.verticalScrollBar().setStyleSheet("""
             QScrollBar:vertical {
                 border: none;
@@ -270,12 +272,30 @@ class DashboardViewQt(QWidget):
         """)
         self.history_area.verticalScrollBar().setSingleStep(15)
         
+        # Conteneur stacké : page 0 = onboarding, page 1 = grille vignettes
+        self._history_stack_widget = QWidget()
+        self._history_stack_widget.setStyleSheet("background: transparent;")
+        stack_outer = QVBoxLayout(self._history_stack_widget)
+        stack_outer.setContentsMargins(0, 0, 0, 0)
+        stack_outer.setSpacing(0)
+
+        self._history_stack = QStackedWidget()
+        self._history_stack.setStyleSheet("background: transparent;")
+
+        # Page 0 — onboarding (créé dans _init_history_area)
+        self._onboarding_placeholder = QWidget()
+        self._onboarding_placeholder.setStyleSheet("background: transparent;")
+        self._history_stack.addWidget(self._onboarding_placeholder)
+
+        # Page 1 — grille de vignettes
         thumb_widget = QWidget()
-        thumb_widget.setStyleSheet("background: transparent;") # Important pour le look
+        thumb_widget.setStyleSheet("background: transparent;")
         self.thumb_grid = QGridLayout(thumb_widget)
-        self.thumb_grid.setSpacing(15) # Un peu d'espace entre les vignettes
-        
-        self.history_area.setWidget(thumb_widget)
+        self.thumb_grid.setSpacing(15)
+        self._history_stack.addWidget(thumb_widget)
+
+        stack_outer.addWidget(self._history_stack)
+        self.history_area.setWidget(self._history_stack_widget)
         layout.addWidget(self.history_area)
 
         # Statistiques
@@ -321,6 +341,10 @@ class DashboardViewQt(QWidget):
 
     def render_grid(self):
         """Affiche les vignettes en s'assurant de ne JAMAIS déclencher le scroll horizontal"""
+        # S'assurer qu'on est bien sur la page vignettes
+        if hasattr(self, "_history_stack") and self._history_stack.currentIndex() != 1:
+            return
+
         # 1. Nettoyage
         while self.thumb_grid.count():
             item = self.thumb_grid.takeAt(0)
@@ -400,6 +424,362 @@ class DashboardViewQt(QWidget):
         self.thumb_grid.setSpacing(10) # Espace entre les vignettes
         self.thumb_grid.setAlignment(Qt.AlignmentFlag.AlignTop)
 
+
+    def _init_history_area(self):
+        """Décide si on affiche l'onboarding ou directement les vignettes."""
+        cfg = self.controller.config_manager
+        first_launch = cfg.get_item("app_state", "onboarding_done", False)
+
+        if not first_launch:
+            lang = self.controller.config_manager.get_item("machine_settings", "language", "English")
+            self._build_onboarding(lang, is_initial=True)
+            # Overlay placé sur la fenêtre principale
+            self._hl_overlay = HighlightOverlay(self.window())
+            self._hl_overlay.resize(self.window().size())
+            self._hl_overlay.hide()
+            self._history_stack.setCurrentIndex(0)
+        else:
+            self._history_stack.setCurrentIndex(1)
+            self.render_grid()
+
+    def _build_onboarding(self, lang, step=0, is_initial=False):
+        """Crée (ou recrée) l'OnboardingWidget pour la langue donnée.
+        Remplace le widget courant dans _history_stack[0].
+        step        : étape à restaurer après reconstruction.
+        is_initial  : True = premier lancement, active le watcher géométrie."""
+        from core.translations import TRANSLATIONS
+        colors = getattr(self, "_current_colors", None) or {
+            "text": "#dddddd", "text_secondary": "#aaaaaa",
+            "bg_card_alt": "#2a2a2a", "bg_entry": "#2b2b2b",
+            "border_strong": "#555", "border": "#333",
+            "bg_card": "#2b2b2b",
+        }
+        onb_t = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("onboarding", {})
+        new_onb = OnboardingWidget(
+            colors, translations=onb_t,
+            current_lang=lang,
+            emit_initial_highlight=False,  # on gère le highlight manuellement
+            parent=self
+        )
+        new_onb.finished.connect(self._on_onboarding_finished)
+        new_onb.request_highlight.connect(self._on_request_highlight)
+        new_onb.clear_highlight.connect(self._on_clear_highlight)
+        new_onb.language_changed.connect(self._on_onboarding_lang_changed)
+        # Restaurer l'étape courante
+        if step > 0:
+            new_onb._step = step
+            new_onb._stack.setCurrentIndex(step)
+            new_onb._refresh(emit_highlight=False)
+        # Remplacer dans le stack et s'assurer qu'il est visible
+        old_w = self._history_stack.widget(0)
+        self._history_stack.removeWidget(old_w)
+        old_w.deleteLater()
+        self._history_stack.insertWidget(0, new_onb)
+        self._history_stack.setCurrentIndex(0)
+        self._onboarding = new_onb
+        # Désactiver les cartes pendant l'onboarding
+        self._set_mode_cards_enabled(False)
+        if is_initial:
+            # Premier lancement : attendre que la géométrie soit stable
+            # (fenêtre potentiellement maximisée)
+            new_onb._emit_initial_highlight = True
+            new_onb._geom_attempts = 0
+            new_onb._last_win_size = None
+            from PyQt6.QtCore import QTimer
+            new_onb._geom_timer = QTimer(new_onb)
+            new_onb._geom_timer.timeout.connect(new_onb._wait_geometry_stable)
+            new_onb._geom_timer.start(60)
+        else:
+            # Rebuild (changement de langue) : highlight immédiat sans flash
+            new_onb._emit_highlight()
+
+    def _set_mode_cards_enabled(self, enabled: bool):
+        """Active ou désactive les cartes via CSS uniquement.
+        QGraphicsOpacityEffect est évité car il propage son rendu
+        aux widgets frères (dont l'onboarding)."""
+        for i in range(self.modes_layout.count()):
+            item = self.modes_layout.itemAt(i)
+            if not item:
+                continue
+            card = item.widget()
+            if not card:
+                continue
+            card.setEnabled(enabled)
+            if enabled:
+                # Restaurer le style normal
+                c = getattr(self, '_current_colors', {})
+                is_dis = getattr(card, 'state', '') == 'disabled'
+                bg  = c.get('bg_main', '#1e1e1e') if is_dis else c.get('bg_card', '#2b2b2b')
+                brd = c.get('border', '#3d3d3d')
+                hov = c.get('hover_card', '#333333')
+                base = (
+                    f'QFrame#modeCard {{ background-color: {bg};'
+                    f' border: 2px solid {brd}; border-radius: 15px; }}'
+                )
+                if not is_dis:
+                    base += (
+                        f' QFrame#modeCard:hover {{ border-color: #1F6AA5;'
+                        f' background-color: {hov}; }}'
+                    )
+                card.setStyleSheet(base)
+                # apply_theme restaurera les styles complets au prochain cycle
+            else:
+                # Griser via CSS — fond sombre, textes très discrets
+                card.setStyleSheet(
+                    'QFrame#modeCard { background-color: #1c1c1c;'
+                    ' border: 2px solid #252525; border-radius: 15px; }'
+                )
+                # NE PAS toucher aux labels — setEnabled(False) suffit
+                # pour bloquer les clics sans affecter le rendu visuel
+                pass
+
+    def _apply_history_area_style(self, colors=None):
+        """Applique le style de history_area selon l'etat de l'onboarding."""
+        if colors is None:
+            colors = getattr(self, '_current_colors', {})
+        onboarding_active = (
+            hasattr(self, '_history_stack')
+            and self._history_stack.currentIndex() == 0
+        )
+        if onboarding_active:
+            brd = colors.get('border', '#333333') if colors else '#333333'
+            self.history_area.setStyleSheet(
+                f"background: transparent; border-radius: 10px;"
+                f" border: 1px solid {brd};"
+            )
+            self.history_area.viewport().setStyleSheet("background: transparent;")
+        else:
+            bg  = colors.get('bg_card', '#2b2b2b')
+            brd = colors.get('border', '#333333')
+            self.history_area.setStyleSheet(
+                f"background-color: {bg};"
+                " border-radius: 10px;"
+                f" border: 1px solid {brd};"
+            )
+            self.history_area.viewport().setStyleSheet("")
+
+    def _on_request_highlight(self, names: list):
+        self._last_highlight_names = names   # mémorisé pour recalcul au resize
+        """
+        Reçoit la liste des noms de widgets à mettre en exergue.
+        Localise chaque widget dans la fenêtre principale et
+        construit les cibles pour HighlightOverlay.
+        """
+        if not hasattr(self, '_hl_overlay'):
+            return
+        main_win = self.window()
+        self._hl_overlay.setParent(main_win)
+        self._hl_overlay.resize(main_win.size())  # recalcul si fenêtre maximisée
+        self._hl_overlay.move(0, 0)
+
+        # Point d'ancrage = centre de la history_area converti en coords main_win
+        anchor_local = QPoint(
+            self.history_area.width() // 2,
+            self.history_area.height() // 2,
+        )
+        anchor = self.history_area.mapTo(main_win, anchor_local)
+
+        targets = []
+        onboarding_already_added = False
+
+        for name in names:
+            if name == 'onboarding_area':
+                # Utiliser le widget onboarding lui-même pour le rect exact
+                onb_widget = getattr(self, '_onboarding', None)
+                if onb_widget and onb_widget.isVisible():
+                    tl_onb = onb_widget.mapTo(main_win, onb_widget.rect().topLeft())
+                    rect_onb = onb_widget.rect().translated(tl_onb)
+                else:
+                    # Fallback : viewport de history_area
+                    vp = self.history_area.viewport()
+                    tl_onb = vp.mapTo(main_win, vp.rect().topLeft())
+                    rect_onb = vp.rect().translated(tl_onb)
+                targets.insert(0, {'rect': rect_onb, 'no_border': True})
+                onboarding_already_added = True
+                continue
+
+            if name == 'modes_column':
+                # Rect englobant les 3 premières cartes (Raster, Calibration, Checker)
+                rects = []
+                for i in range(self.modes_layout.count()):
+                    if len(rects) >= 3:
+                        break
+                    item = self.modes_layout.itemAt(i)
+                    if not item: continue
+                    card = item.widget()
+                    if card and card.objectName() == 'modeCard':
+                        tl = card.mapTo(main_win, card.rect().topLeft())
+                        rects.append(card.rect().translated(tl))
+                if rects:
+                    from PyQt6.QtCore import QRect
+                    united = rects[0]
+                    for r in rects[1:]:
+                        united = united.united(r)
+                    targets.append({'rect': united})
+                continue
+
+            widget = self._find_highlight_widget(name)
+            if widget is None:
+                continue
+            tl = widget.mapTo(main_win, widget.rect().topLeft())
+            rect = widget.rect().translated(tl)
+            extra = {}
+            # Boutons topbar : padding réduit pour éviter le débordement hors fenêtre
+            if name in ('settings_topbar_btn', 'home_btn', 'github_btn'):
+                extra['small_padding'] = True
+            targets.append({'rect': rect, **extra})
+
+        if targets:
+            self._hl_overlay.show_highlights(targets)
+
+    def _find_highlight_widget(self, name: str):
+        """Cherche le widget correspondant au nom dans toute l'application."""
+        main_win = self.window()
+
+        if name == 'onboarding_area':
+            return self.history_area
+
+        elif name == 'all_mode_cards':
+            # Retourne None ici — traité séparément dans _on_request_highlight
+            return None
+
+        elif name == 'parser_card':
+            for i in range(self.modes_layout.count()):
+                item = self.modes_layout.itemAt(i)
+                if not item: continue
+                card = item.widget()
+                if card and hasattr(card, 'icon_data'):
+                    from utils.paths import SVG_ICONS
+                    if card.icon_data == SVG_ICONS.get('GCODE', ''):
+                        return card
+
+        elif name == 'calibration_card':
+            for i in range(self.modes_layout.count()):
+                item = self.modes_layout.itemAt(i)
+                if not item: continue
+                card = item.widget()
+                if card and hasattr(card, 'icon_data'):
+                    from utils.paths import SVG_ICONS
+                    if card.icon_data == SVG_ICONS.get('LATENCY', ''):
+                        return card
+
+        elif name == 'settings_card':
+            for i in range(self.modes_layout.count()):
+                item = self.modes_layout.itemAt(i)
+                if not item: continue
+                card = item.widget()
+                if card and hasattr(card, 'icon_data'):
+                    from utils.paths import SVG_ICONS
+                    if card.icon_data == SVG_ICONS.get('GEAR', ''):
+                        return card
+
+        elif name in ('settings_topbar_btn', 'home_btn', 'github_btn'):
+            return self._find_topbar_btn(name, main_win)
+
+        return None
+
+    # Mots-clés par bouton : objectName, toolTip, text (insensible à la casse)
+    _TOPBAR_KEYWORDS = {
+        'settings_topbar_btn': ('setting', 'gear', 'reglage', 'einstellung'),
+        'home_btn':            ('home', 'dashboard', 'accueil', 'startseite'),
+        'github_btn':          ('github', 'git'),
+    }
+
+    def _find_topbar_btn(self, name, main_win):
+        """Recherche un bouton topbar par objectName en priorité, puis mots-clés."""
+        from PyQt6.QtWidgets import QPushButton
+
+        # 1. Recherche directe par objectName (le plus fiable)
+        btn = main_win.findChild(QPushButton, name)
+        if btn:
+            return btn
+
+        # 2. Fallback : mots-clés dans objectName/toolTip/text
+        #    limité aux boutons dans la topbar (Y < 80px)
+        keywords = self._TOPBAR_KEYWORDS.get(name, ())
+        topbar_max_y = 80
+        for btn in main_win.findChildren(QPushButton):
+            pos_in_win = btn.mapTo(main_win, btn.rect().topLeft())
+            if pos_in_win.y() > topbar_max_y:
+                continue
+            all_text = ' '.join([
+                btn.objectName().lower(),
+                btn.toolTip().lower(),
+                btn.text().lower(),
+            ])
+            if any(kw in all_text for kw in keywords):
+                return btn
+
+        return None
+        # home = plus à gauche, settings = tout à droite (dernier)
+        # github = entre les deux
+        if name == 'home_btn':
+            return silent[0]    # premier depuis la gauche
+        elif name == 'settings_topbar_btn':
+            return silent[-1]   # tout à droite
+        elif name == 'github_btn':
+            return silent[-2] if len(silent) >= 2 else silent[-1]
+        return None
+
+    def _highlight_label(self, name: str) -> str:
+        labels = {
+            'calibration_card':    'Calibration',
+            'settings_card':       'Settings',
+            'settings_topbar_btn': 'Settings',
+        }
+        return labels.get(name, '')
+
+    def _on_onboarding_lang_changed(self, lang: str):
+        """Appelé quand l'utilisateur change de langue depuis l'onboarding.
+        Sauvegarde, reconstruit l'onboarding traduit et notifie la main window."""
+        # 1. Sauvegarder la langue
+        cfg = self.controller.config_manager
+        machine = cfg.get_section("machine_settings") or {}
+        machine["language"] = lang
+        cfg.set_section("machine_settings", machine)
+        cfg.save()
+        # 2. Mémoriser l'étape courante avant reconstruction
+        current_step = getattr(self._onboarding, '_step', 0)
+        # 3. Reconstruire l'onboarding avec la nouvelle langue
+        self._on_clear_highlight()
+        self._build_onboarding(lang, step=current_step)
+        # 4. Notifier la fenêtre principale
+        main_win = self.window()
+        if main_win and hasattr(main_win, "update_ui_language"):
+            main_win.update_ui_language()
+
+    def _on_clear_highlight(self):
+        if hasattr(self, '_hl_overlay'):
+            self._hl_overlay.hide_highlights()
+        # Effacer les dernières cibles pour que resizeEvent
+        # ne puisse pas relancer le highlight après la fin
+        self._last_highlight_names = []
+
+    def _on_onboarding_finished(self, settings: dict):
+        """Appelé quand l'utilisateur termine ou skippe l'onboarding."""
+        # Masquer l'overlay immédiatement, avant toute autre opération
+        self._on_clear_highlight()
+
+        cfg = self.controller.config_manager
+
+        # Marquer comme fait
+        current = cfg.get_section("app_state") or {}
+        current["onboarding_done"] = True
+        cfg.set_section("app_state", current)
+
+        # Sauvegarder les réglages machine si fournis
+        if settings:
+            machine = cfg.get_section("machine_settings") or {}
+            machine.update(settings)
+            cfg.set_section("machine_settings", machine)
+
+        cfg.save()
+
+        # Réactiver les cartes et passer à la grille
+        self._set_mode_cards_enabled(True)
+        self._history_stack.setCurrentIndex(1)
+        self._apply_history_area_style()
+        self.render_grid()
 
     def setup_stats(self, parent_layout):
         # 1. Création du conteneur principal
@@ -483,6 +863,10 @@ class DashboardViewQt(QWidget):
         # On ne rafraîchit la grille que si la vue est prête
         if hasattr(self, 'history_area'):
             self.render_grid()
+        # Recalculer l'overlay si actif et qu'il reste des cibles
+        if (hasattr(self, '_hl_overlay') and self._hl_overlay.isVisible()
+                and getattr(self, '_last_highlight_names', [])):
+            self._on_request_highlight(self._last_highlight_names)
 
     def apply_theme(self, colors):
         """Met à jour toutes les cartes du dashboard lors d'un changement de thème"""
@@ -503,37 +887,8 @@ class DashboardViewQt(QWidget):
 
         # 3. Cadre thumbnails (history_area)
         if hasattr(self, "history_area"):
-            self.history_area.setStyleSheet(
-                f"background-color: {colors['bg_card']}; "
-                "border-radius: 10px; border: 1px solid "
-                f"{colors['border']};"
-            )
+            self._apply_history_area_style(colors)
             self.history_area.verticalScrollBar().setStyleSheet(f"""
-                QScrollBar:vertical {{
-                    border: none;
-                    background: {colors['scrollbar_bg']};
-                    width: 10px;
-                    margin: 0px;
-                }}
-                QScrollBar::handle:vertical {{
-                    background: {colors['scrollbar_handle']};
-                    min-height: 20px;
-                    border-radius: 5px;
-                }}
-                QScrollBar::handle:vertical:hover {{
-                    background: #1F6AA5;
-                }}
-                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                    height: 0px;
-                }}
-                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
-                    background: none;
-                }}
-            """)
-
-        # 3b. Scrollbar colonne gauche (harmonisée avec history_area)
-        if hasattr(self, "_left_scroll"):
-            self._left_scroll.verticalScrollBar().setStyleSheet(f"""
                 QScrollBar:vertical {{
                     border: none;
                     background: {colors['scrollbar_bg']};
@@ -619,7 +974,11 @@ class DashboardViewQt(QWidget):
                 pix = get_svg_pixmap(card.icon_data, size=QSize(35, 35), color_hex=icon_c)
                 card.icon_label.setPixmap(pix)
 
-        # 6. Re-rendu des vignettes avec les nouvelles couleurs
+        # 6. Onboarding theme
+        if hasattr(self, "_onboarding"):
+            self._onboarding.apply_theme(colors)
+
+        # 7. Re-rendu des vignettes avec les nouvelles couleurs
         if hasattr(self, "all_pixmaps"):
             self.render_grid()
 

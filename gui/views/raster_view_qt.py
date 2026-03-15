@@ -1107,6 +1107,7 @@ class RasterViewQt(QWidget):
         canvas_row.addWidget(self._canvas, stretch=1)
 
         self._cbar_widget = _ColorbarWidget()
+        self._cbar_widget.setVisible(False)  # masquée jusqu'à chargement d'une image
         canvas_row.addWidget(self._cbar_widget)
 
         lo.addLayout(canvas_row, stretch=5)
@@ -1166,12 +1167,17 @@ class RasterViewQt(QWidget):
         self._ax.set_facecolor("#111111")
         self._ax.tick_params(axis="both", colors="#888888", labelsize=9)
         self._ax.set_axisbelow(False)
-        self._ax.grid(True, color="#ffffff", linestyle=":", linewidth=0.5, alpha=0.3, zorder=10)
+        self._ax.grid(False)  # masquée jusqu'à chargement d'une image
         for spine in self._ax.spines.values():
             spine.set_edgecolor("#333333")
+        # Masquer ticks et labels tant qu'aucune image n'est chargée
+        self._ax.tick_params(axis="both", length=0)
+        self._ax.set_xticklabels([])
+        self._ax.set_yticklabels([])
 
+        _ph_text = self.t.get("choose_image", "PLEASE SELECT AN IMAGE\nTO BEGIN")
         self._placeholder_text = self._ax.text(
-            0.5, 0.5, "choose_image",
+            0.5, 0.5, _ph_text,
             color="#444444", fontsize=12, fontweight="bold",
             ha="center", va="center", transform=self._ax.transAxes
         )
@@ -1505,6 +1511,13 @@ class RasterViewQt(QWidget):
         if self._loading:
             return
         if not self.input_image_path or not os.path.isfile(self.input_image_path):
+            self._ax.grid(False)
+            self._ax.tick_params(axis="both", length=0)
+            self._ax.set_xticklabels([])
+            self._ax.set_yticklabels([])
+            for spine in self._ax.spines.values():
+                spine.set_visible(False)
+            self._cbar_widget.setVisible(False)
             self._canvas._after_draw_cb = None
             self._canvas.set_overlay(None)
             self._canvas.redraw(fit=fit)
@@ -1547,6 +1560,7 @@ class RasterViewQt(QWidget):
         self._update_image_artist(matrix, offX, offY, real_w, real_h, v_min, v_max)
 
         # Colorbar Qt fixe
+        self._cbar_widget.setVisible(True)
         self._cbar_widget.set_range(v_min, v_max,
                                     "laser_power_level")
 
@@ -1570,6 +1584,9 @@ class RasterViewQt(QWidget):
         border_rect = (offX + rf[0], global_y, rf[2] - rf[0], global_h)
 
         decal = 0.5
+        # Restaurer les spines et ticks maintenant qu'une image est affichée
+        for spine in ax.spines.values():
+            spine.set_visible(True)
         ax.set_xlim(offX + rf[0] - decal, offX + rf[2] + decal)
         ax.set_ylim(global_y - decal, global_y + global_h + decal)
         ax.tick_params(top=True, right=True, which="both")
@@ -1936,6 +1953,13 @@ class RasterViewQt(QWidget):
 
         # Synchronise line_step depuis hor/ver_linestep selon le mode actif
         self._sync_line_step_from_mode(self._raster_mode)
+
+        # Mettre à jour le placeholder si visible
+        if self._placeholder_text is not None:
+            self._placeholder_text.set_text(
+                self.t.get("choose_image", "PLEASE SELECT AN IMAGE\nTO BEGIN"))
+            if not self.input_image_path:
+                self._canvas.redraw()
 
         self.refresh_global_previews()
 
@@ -2325,5 +2349,12 @@ class RasterViewQt(QWidget):
                     if combo.itemData(i) == current_data:
                         combo.setCurrentIndex(i)
                         break
+
+        # Mettre à jour le placeholder si visible
+        if self._placeholder_text is not None:
+            self._placeholder_text.set_text(
+                self.t.get("choose_image", "PLEASE SELECT AN IMAGE\nTO BEGIN"))
+            if not self.input_image_path:
+                self._canvas.redraw()
 
         self.refresh_global_previews()

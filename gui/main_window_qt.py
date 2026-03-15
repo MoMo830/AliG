@@ -159,6 +159,7 @@ class MainWindowQt(QMainWindow):
             QPushButton { background: transparent; border: none; border-radius: 5px; } 
             QPushButton:hover { background-color: #3d3d3d; }
         """)
+        self.btn_home.setObjectName("home_btn")
         self.btn_home.clicked.connect(self.show_dashboard)
         layout.addWidget(self.btn_home)
 
@@ -207,6 +208,7 @@ class MainWindowQt(QMainWindow):
             }
             QPushButton:hover { color: #3B8ED0; text-decoration: underline; }
         """)
+        self.btn_github.setObjectName("github_btn")
         self.btn_github.clicked.connect(lambda: webbrowser.open("https://github.com/MoMo830/ALIG"))
         layout.addWidget(self.btn_github)
 
@@ -232,6 +234,7 @@ class MainWindowQt(QMainWindow):
             QPushButton { background: transparent; color: white; border: none; } 
             QPushButton:hover { background-color: #3d3d3d; border-radius: 5px; }
         """)
+        self.btn_settings.setObjectName("settings_topbar_btn")
         self.btn_settings.clicked.connect(self.show_settings_mode)
         layout.addWidget(self.btn_settings)
         # btn_settings a une icône — pas de setText, on met à jour le tooltip dans update_ui_language
