@@ -121,7 +121,7 @@ If you just want to use the software without installing Python, follow these ste
 **Goal:** Providing a rock-solid, theme-responsive tool for high-quality rastering and universal 2D G-code processing with advanced visual feedback.
 * **Calibration tools:** Integrated utilities to fine-tune line interval, overscan compensation, and power-scaling profiles.
 * **Code Consolidation & Stress Testing:** Heavy workload testing to ensure 100% stability on massive G-code files.
-* **Onboarding Experience:** First-run setup wizard for essential machine configuration.
+* ~~**Onboarding Experience:** First-run setup wizard for essential machine configuration.~~_(pending next release)_
 * ~~**2D G-code Parser & Preview:** **2D G-code Parser & Preview:** Implementation of a dedicated G-code checker using the parser to visualize any ALIG's G-code.~~_(pending next release)_
 
 ---
