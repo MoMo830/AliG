@@ -743,9 +743,54 @@ class SettingsViewQt(QWidget):
         """)
 
     def reset_settings(self):
-        if self.ask_confirmation(self.texts["reset_all_parameters"], self.texts["reset_all_parameters_confirm"]):
-            if self.controller.reset_all(): 
-                self.load_settings()
+        if not self.ask_confirmation(
+                self.texts["reset_all_parameters"],
+                self.texts["reset_all_parameters_confirm"]):
+            return
+
+        # 1. Réinitialiser les paramètres machine
+        if self.controller.reset_all():
+            self.load_settings()
+
+        # 2. Effacer les vignettes et stats (sans nouvelle confirmation)
+        self._clear_thumbnails_silent()
+
+        # 3. Réactiver l'onboarding au prochain lancement
+        current = self.controller.get_section("app_state") or {}
+        current["onboarding_done"] = False
+        self.controller.set_section("app_state", current)
+        self.controller.save()
+
+        # 4. Relancer l'onboarding sur le dashboard
+        main_win = self.window()
+        if main_win and hasattr(main_win, "dashboard_view"):
+            dv = main_win.dashboard_view
+            if hasattr(dv, "restart_onboarding"):
+                dv.restart_onboarding()
+                main_win.show_dashboard()
+
+    def _clear_thumbnails_silent(self):
+        """Efface les vignettes et stats sans confirmation ni feedback visuel."""
+        import shutil, os
+        target_dir = os.path.join(os.getcwd(), "assets", "thumbnails")
+        if os.path.exists(target_dir):
+            for filename in os.listdir(target_dir):
+                if filename == ".gitkeep":
+                    continue
+                fp = os.path.join(target_dir, filename)
+                try:
+                    if os.path.isfile(fp) or os.path.islink(fp):
+                        os.unlink(fp)
+                    elif os.path.isdir(fp):
+                        shutil.rmtree(fp)
+                except Exception as e:
+                    print(f"Impossible de supprimer {filename}: {e}")
+        empty_stats = {
+            "total_lines": 0, "total_gcodes": 0,
+            "total_time_seconds": 0.0, "last_project_time": 0.0
+        }
+        self.controller.set_section("stats", empty_stats)
+        self.controller.save()
 
     def apply_theme(self, colors):
         """Met à jour dynamiquement les couleurs de la vue Settings"""

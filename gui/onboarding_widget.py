@@ -130,7 +130,7 @@ class _StepBase(QWidget):
         lbl = QLabel(self.t.get(key, key))
         col = self.c.get("text", "#dddddd")
         lbl.setStyleSheet(
-            "color: " + col + "; font-size: 14px; font-weight: 700;"
+            "color: " + col + "; font-weight: 700;"
             " border: none; background: transparent;")
         lbl.setWordWrap(True)
         return lbl
@@ -139,7 +139,7 @@ class _StepBase(QWidget):
         lbl = QLabel(self.t.get(key, key))
         col = self.c.get("text_secondary", "#aaaaaa")
         lbl.setStyleSheet(
-            "color: " + col + "; font-size: 13px;"
+            "color: " + col + ";"
             " border: none; background: transparent;")
         lbl.setWordWrap(True)
         return lbl
@@ -148,7 +148,7 @@ class _StepBase(QWidget):
         lbl = QLabel(self.t.get(key, key))
         col = self.c.get("text_secondary", "#888888")
         lbl.setStyleSheet(
-            "color: " + col + "; font-size: 12px; font-style: italic;"
+            "color: " + col + "; font-style: italic;"
             " border: none; background: transparent;")
         lbl.setWordWrap(True)
         return lbl
@@ -186,6 +186,11 @@ class _StepBase(QWidget):
         cb = QComboBox()
         cb.addItems(options)
         cb.setFixedHeight(30)
+        # Forcer la font en pixels via setFont — évite le warning
+        # QFont::setPointSize <= 0 causé par font-size: Npx en CSS
+        f = QFont()
+        f.setPointSizeF(9.75)
+        cb.setFont(f)
         bg  = self.c.get("bg_entry",      "#2b2b2b")
         brd = self.c.get("border_strong", "#555555")
         col = self.c.get("text",          "#dddddd")
@@ -198,7 +203,7 @@ class _StepBase(QWidget):
         ) if arrow_path else "QComboBox::drop-down { border: none; }"
         cb.setStyleSheet(
             "QComboBox { background: " + bg + "; border: 1px solid " + brd + ";"
-            " border-radius: 5px; color: " + col + "; padding: 3px 30px 3px 10px; font-size: 13px; }"
+            " border-radius: 5px; color: " + col + "; padding: 3px 30px 3px 10px; }"
             + arrow_css +
             " QComboBox QAbstractItemView { background: " + bg + "; color: " + col + ";"
             " selection-background-color: " + self.c.get("combo_selection", "#1F6AA5") + "; }")
@@ -212,17 +217,21 @@ class _StepBase(QWidget):
         bg  = self.c.get("bg_entry",      "#2b2b2b")
         brd = self.c.get("border_strong", "#555555")
         col = self.c.get("text",          "#dddddd")
+        _f = QFont(); _f.setPointSizeF(9.75)
+        e.setFont(_f)
         e.setStyleSheet(
             "QLineEdit { background: " + bg + "; border: 1px solid " + brd + ";"
-            " border-radius: 5px; color: " + col + "; padding: 3px 8px; font-size: 13px; }")
+            " border-radius: 5px; color: " + col + "; padding: 3px 8px; }")
         return e
 
     def _row(self, label_key, widget):
         row = QHBoxLayout()
         col = self.c.get("text", "#dddddd")
         lbl = QLabel(self.t.get(label_key, label_key))
+        _fr = QFont(); _fr.setPointSizeF(9.75)
+        lbl.setFont(_fr)
         lbl.setStyleSheet(
-            "color: " + col + "; font-size: 13px; border: none;"
+            "color: " + col + "; border: none;"
             " background: transparent; min-width: 160px;")
         row.addWidget(lbl)
         row.addWidget(widget, 1)
@@ -397,7 +406,7 @@ class _Step1Welcome(_StepBase):
         title_lbl = QLabel(t.get("step1_title", "Welcome"))
         col_t = colors.get("text", "#dddddd")
         title_lbl.setStyleSheet(
-            "color: " + col_t + "; font-size: 14px; font-weight: 700;"
+            "color: " + col_t + "; font-weight: 700;"
             " border: none; background: transparent;")
         title_lbl.setWordWrap(True)
         top_row.addWidget(title_lbl, 1)
@@ -424,7 +433,7 @@ class _Step1Welcome(_StepBase):
             dot.setStyleSheet("background: #ffffff; border-radius: 3px; border: none;")
             lbl = QLabel(t.get(key, ""))
             lbl.setStyleSheet(
-                "color: " + col + "; font-size: 13px; border: none; background: transparent;")
+                "color: " + col + "; border: none; background: transparent;")
             lbl.setWordWrap(True)
             row.addWidget(dot)
             row.addSpacing(8)
@@ -450,14 +459,19 @@ class _Step2Config(_StepBase):
 
     def __init__(self, t, colors, parent=None):
         super().__init__(t, colors, parent)
+        # Forcer la font sur tout le step pour éviter le warning pixelSize
+        _base_font = QFont(); _base_font.setPointSizeF(9.75)
+        self.setFont(_base_font)
         self._lo.addWidget(self._title("step2_title"))
         self._lo.addWidget(self._body("step2_body"))
         # Ligne unique : combo réduit + M67 output inline
         col = colors.get("text", "#dddddd")
         cmd_row = QHBoxLayout()
         cmd_lbl = QLabel(t.get("cmd_mode_lbl", "Command mode:"))
+        _fc = QFont(); _fc.setPointSizeF(9.75)
+        cmd_lbl.setFont(_fc)
         cmd_lbl.setStyleSheet(
-            "color: " + col + "; font-size: 13px; border: none;"
+            "color: " + col + "; border: none;"
             " background: transparent; min-width: 120px;")
         self.cmd_combo = self._combo(["S (Spindle)", "M67 (Analog)"])
         self.cmd_combo.setFixedWidth(160)
@@ -467,8 +481,11 @@ class _Step2Config(_StepBase):
         # M67 output inline (masqué par défaut)
         self._m67_lbl = QLabel(t.get("m67_output_lbl", "Output:"))
         self._m67_lbl.setStyleSheet(
-            "color: " + col + "; font-size: 13px; border: none; background: transparent;")
+            "color: " + col + "; border: none; background: transparent;")
+        _f13 = QFont(); _f13.setPointSizeF(9.75)
+        self._m67_lbl.setFont(_f13)
         self.m67_entry = self._entry("0-3", "0")
+        self.m67_entry.setFont(_f13)
         self.m67_entry.setFixedWidth(50)
         cmd_row.addWidget(self._m67_lbl)
         cmd_row.addWidget(self.m67_entry)
@@ -522,7 +539,7 @@ class _Step3Settings(_StepBase):
                 "background: #ffffff; border-radius: 3px; border: none;")
             lbl = QLabel(t.get(k, k))
             lbl.setStyleSheet(
-                "color: " + col + "; font-size: 13px; border: none; background: transparent;")
+                "color: " + col + "; border: none; background: transparent;")
             row.addWidget(dot)
             row.addSpacing(8)
             row.addWidget(lbl, 1)
@@ -544,7 +561,7 @@ class _Step3Calib(_StepBase):
         col_accent = "#FF9500"
         b2 = QLabel(t.get("ptr_calib_body", ""))
         b2.setStyleSheet(
-            "color: " + col + "; font-size: 13px; border: none; background: transparent;")
+            "color: " + col + "; border: none; background: transparent;")
         b2.setWordWrap(True)
         self._lo.addWidget(b2)
         row = QHBoxLayout()
@@ -554,7 +571,7 @@ class _Step3Calib(_StepBase):
             "background: #ffffff; border-radius: 3px; border: none;")
         b3 = QLabel(t.get("ptr_calib_card", ""))
         b3.setStyleSheet(
-            "color: " + col + "; font-size: 13px; border: none; background: transparent;")
+            "color: " + col + "; border: none; background: transparent;")
         row.addWidget(dot)
         row.addSpacing(8)
         row.addWidget(b3, 1)
@@ -582,7 +599,7 @@ class _StepHome(_StepBase):
             dot.setStyleSheet("background: #ffffff; border-radius: 3px; border: none;")
             lbl = QLabel(t.get(k, k))
             lbl.setStyleSheet(
-                "color: " + col + "; font-size: 13px; border: none; background: transparent;")
+                "color: " + col + "; border: none; background: transparent;")
             lbl.setWordWrap(True)
             row.addWidget(dot)
             row.addSpacing(8)
@@ -609,7 +626,7 @@ class _StepChecker(_StepBase):
         dot.setStyleSheet("background: #ffffff; border-radius: 3px; border: none;")
         lbl = QLabel(t.get("step_checker_card", ""))
         lbl.setStyleSheet(
-            "color: " + col + "; font-size: 13px; border: none; background: transparent;")
+            "color: " + col + "; border: none; background: transparent;")
         row.addWidget(dot)
         row.addSpacing(8)
         row.addWidget(lbl, 1)
@@ -641,7 +658,7 @@ class _Step4Modes(_StepBase):
                 "#dddddd" if enabled else "#666666")
             lbl = QLabel(t.get(key, key))
             lbl.setStyleSheet(
-                "color: " + col + "; font-size: 13px;"
+                "color: " + col + ";"
                 " border: none; background: transparent;")
             lbl.setWordWrap(True)
             row.addWidget(dot)
@@ -652,7 +669,7 @@ class _Step4Modes(_StepBase):
         note = QLabel(t.get("finish_note", "All set — click Finish."))
         col_ok = colors.get("text_secondary", "#888888")
         note.setStyleSheet(
-            "color: " + col_ok + "; font-size: 13px;"
+            "color: " + col_ok + ";"
             " border: none; background: transparent;")
         note.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._lo.addWidget(note)
@@ -746,7 +763,7 @@ class OnboardingWidget(QWidget):
         self._btn_skip.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_skip.setStyleSheet(
             "QPushButton { background: transparent; color: " + col_sec + ";"
-            " border: 1px solid #444444; border-radius: 5px; padding: 0 12px; font-size: 12px; }"
+            " border: 1px solid #444444; border-radius: 5px; padding: 0 12px; }"
             " QPushButton:hover { color: #dddddd; border-color: #666666; }")
         self._btn_skip.clicked.connect(self._on_skip)
         lo.addWidget(self._btn_skip)
@@ -757,7 +774,7 @@ class OnboardingWidget(QWidget):
         self._btn_prev.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_prev.setStyleSheet(
             "QPushButton { background: " + bg_e + "; color: " + col_txt + ";"
-            " border: 1px solid #555555; border-radius: 5px; padding: 0 14px; font-size: 12px; }"
+            " border: 1px solid #555555; border-radius: 5px; padding: 0 14px; }"
             " QPushButton:hover { border-color: #888888; }")
         self._btn_prev.clicked.connect(self._on_prev)
         lo.addWidget(self._btn_prev)
@@ -768,7 +785,7 @@ class OnboardingWidget(QWidget):
         self._btn_next.setStyleSheet(
             "QPushButton { background: #1F6AA5; color: white;"
             " border: none; border-radius: 5px; padding: 0 16px;"
-            " font-size: 12px; font-weight: 700; }"
+            " font-weight: 700; }"
             " QPushButton:hover { background: #2a7fc5; }")
         self._btn_next.clicked.connect(self._on_next)
         lo.addWidget(self._btn_next)
@@ -795,13 +812,13 @@ class OnboardingWidget(QWidget):
             self._btn_next.setStyleSheet(
                 "QPushButton { background: #27ae60; color: white;"
                 " border: none; border-radius: 5px; padding: 0 16px;"
-                " font-size: 12px; font-weight: 700; }"
+                " font-weight: 700; }"
                 " QPushButton:hover { background: #2ecc71; }")
         else:
             self._btn_next.setStyleSheet(
                 "QPushButton { background: #1F6AA5; color: white;"
                 " border: none; border-radius: 5px; padding: 0 16px;"
-                " font-size: 12px; font-weight: 700; }"
+                " font-weight: 700; }"
                 " QPushButton:hover { background: #2a7fc5; }")
 
         # L'émission du highlight est déléguée à _emit_highlight

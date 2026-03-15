@@ -285,7 +285,9 @@ class MainWindowQt(QMainWindow):
 
     def update_ui_theme(self):
         """Met à jour les couleurs et les icônes de l'interface globale"""
-        colors = self.get_theme_colors()
+        from core.themes import get_theme
+        theme = self.config_manager.get_item("machine_settings", "theme", "Dark")
+        colors = get_theme(theme)
         
         bg_style = f"background-color: {colors['bg_card']};"
         self.central_widget.setStyleSheet(bg_style)  # Garder uniquement celle-ci

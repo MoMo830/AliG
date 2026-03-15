@@ -594,25 +594,19 @@ class _SimCanvas(QWidget):
         if self._img_buf is None or not hasattr(self, '_l_step'): 
             return
 
-        # 1. Épaisseur actuelle d'une ligne en pixels écran
-        current_step_px = self._sc * self._zoom * self._l_step
-        
-        # 2. Calcul de la nouvelle épaisseur
+        # Facteur de zoom symétrique — même ratio dans les deux sens
+        # pour que N crans de dézoom + N crans de rezoom revienne au point de départ
+        FACTOR = 1.15
         if e.angleDelta().y() > 0:
-            # --- ZOOM AVANT : On veut de la netteté (Pixel-Perfect) ---
-            # On saute à l'entier supérieur (ex: 2.1px -> 3.0px)
-            new_step_px = np.floor(current_step_px + 1.0)
+            new_zoom = self._zoom * FACTOR
         else:
-            # --- ZOOM ARRIÈRE : On veut de la souplesse ---
-            # On utilise un ratio simple (0.8) au lieu de soustraire 1 pixel.
-            # Cela permet de descendre à 0.8px, 0.6px, 0.4px sans jamais bloquer.
-            new_step_px = current_step_px * 0.8
+            new_zoom = self._zoom / FACTOR
             
-        # Sécurité mini/maxi pour éviter les divisions par zéro ou les crashs
-        new_step_px = max(0.01, min(200.0, new_step_px)) 
+        # Sécurité mini/maxi
+        new_zoom = max(0.01, min(200.0, new_zoom))
         
-        # 3. Calcul du nouveau zoom
-        new_zoom = new_step_px / (self._sc * self._l_step)
+        # (gardé pour compatibilité avec la suite du code)
+        new_zoom = new_zoom
 
         # 4. Point fixe sous la souris (ton code de navigation)
         pos = e.position()

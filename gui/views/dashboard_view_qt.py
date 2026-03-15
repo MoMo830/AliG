@@ -87,6 +87,8 @@ class DashboardViewQt(QWidget):
     def setup_left_column(self):
         left_container = QFrame()
         left_container.setFixedWidth(420)
+        left_container.setStyleSheet("background: transparent;")
+        self._left_container = left_container
         layout = QVBoxLayout(left_container)
         layout.setContentsMargins(0, 0, 0, 10) 
 
@@ -95,8 +97,10 @@ class DashboardViewQt(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet("background: transparent;")
+        scroll.viewport().setStyleSheet("background: transparent;")
 
         content = QWidget()
+        content.setStyleSheet("background: transparent;")
         self.modes_layout = QVBoxLayout(content)
         self.modes_layout.setSpacing(15)
         self.modes_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -222,6 +226,8 @@ class DashboardViewQt(QWidget):
 
     def setup_right_column(self):
         right_container = QWidget()
+        right_container.setStyleSheet("background: transparent;")
+        self._right_container = right_container
         layout = QVBoxLayout(right_container)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -441,6 +447,29 @@ class DashboardViewQt(QWidget):
         else:
             self._history_stack.setCurrentIndex(1)
             self.render_grid()
+
+    def restart_onboarding(self):
+        """Relance l'onboarding depuis zéro — appelé depuis settings reset.
+        Recrée l'overlay, remet les cartes en état désactivé, lance le watcher.
+        """
+        lang = self.controller.config_manager.get_item(
+            "machine_settings", "language", "English")
+        # S'assurer que l'overlay est bien positionné sur la fenêtre principale
+        main_win = self.window()
+        if not hasattr(self, '_hl_overlay'):
+            from gui.onboarding_widget import HighlightOverlay
+            self._hl_overlay = HighlightOverlay(main_win)
+        self._hl_overlay.setParent(main_win)
+        self._hl_overlay.resize(main_win.size())
+        self._hl_overlay.move(0, 0)
+        self._hl_overlay.hide()
+        self._last_highlight_names = []
+        # Restaurer le style des cartes avant de les redésactiver
+        self._set_mode_cards_enabled(True)
+        # Reconstruire et afficher l'onboarding
+        self._build_onboarding(lang, is_initial=True)
+        self._history_stack.setCurrentIndex(0)
+        self._apply_history_area_style()
 
     def _build_onboarding(self, lang, step=0, is_initial=False):
         """Crée (ou recrée) l'OnboardingWidget pour la langue donnée.
@@ -875,8 +904,12 @@ class DashboardViewQt(QWidget):
 
         self._current_colors = colors
 
-        # 1. Fond de la vue
+        # 1. Fond de la vue et containers
         self.setStyleSheet("background-color: transparent;")
+        if hasattr(self, "_left_container"):
+            self._left_container.setStyleSheet("background: transparent;")
+        if hasattr(self, "_right_container"):
+            self._right_container.setStyleSheet("background: transparent;")
 
         # 2. Label "History"
         if hasattr(self, "history_label"):
