@@ -1,11 +1,11 @@
 {
     "machine_settings": {
         "theme": "Dark",
-        "language": "English",
-        "cmd_mode": "M67 (Analog)",
+        "language": "Fran\u00e7ais",
+        "cmd_mode": "S (Spindle)",
         "firing_mode": "M3/M5",
         "m67_e_num": 0,
-        "ctrl_max": 1000,
+        "ctrl_max": 100,
         "gcode_extension": ".nc",
         "laser_latency": 0.0,
         "premove": 10.0,
@@ -22,7 +22,7 @@
         "last_project_time": 0.0
     },
     "app_state": {
-        "onboarding_done": false
+        "onboarding_done": true
     },
     "window_settings": {
         "is_maximized": true,

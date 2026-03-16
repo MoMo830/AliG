@@ -7,6 +7,59 @@ import numpy as np
 from PIL import Image
 import io
 
+try:
+    from numba import njit
+    _NUMBA = True
+except ImportError:
+    # Fallback sans Numba — fonctionne mais plus lent
+    def njit(*args, **kwargs):
+        return lambda f: f
+    _NUMBA = False
+
+
+# ─────────────────────────────────────────────────────────────────
+# Fonction JIT (compilée Numba au 1er appel, ~50ms de warm-up)
+# Calcule les segments de puissance pour une ligne de scan.
+# Retourne deux arrays : positions et puissances des points de rupture.
+# ─────────────────────────────────────────────────────────────────
+
+@njit(cache=True)
+def _compute_segments(vals, targets, start_pos, ctrl_max):
+    """
+    Parcourt les pixels et fusionne les segments de même puissance.
+    Retourne (seg_positions, seg_powers, n_segs).
+    Pré-alloue au maximum (len(vals)) pour éviter les resize.
+    """
+    n = len(vals)
+    # Pré-allocation max
+    seg_pos = np.empty(n + 1, dtype=np.float64)
+    seg_pwr = np.empty(n + 1, dtype=np.float64)
+    n_segs  = 0
+
+    current_p   = vals[0]
+    current_pos = start_pos
+
+    for i in range(n):
+        p_val  = vals[i]
+        target = targets[i]
+
+        if abs(p_val - current_p) > 0.001:
+            # Changement de puissance : enregistrer le segment
+            if abs(target - current_pos) > 0.0001:
+                seg_pos[n_segs] = target
+                seg_pwr[n_segs] = current_p
+                n_segs += 1
+                current_pos = target
+            current_p = p_val
+
+    # Dernier segment
+    if n > 0:
+        seg_pos[n_segs] = targets[n - 1]
+        seg_pwr[n_segs] = current_p
+        n_segs += 1
+
+    return seg_pos, seg_pwr, n_segs
+
 
 class GCodeEngine:
 
@@ -189,6 +242,8 @@ class GCodeEngine:
         geom = {
             "w_px": w_px,
             "h_px": h_px,
+            "w_px":   w_px,
+            "h_px":   h_px,
             "real_w": real_w,
             "real_h": real_h,
             "x_step": x_step,
@@ -209,156 +264,137 @@ class GCodeEngine:
     # INDUSTRIAL RASTER GCODE GENERATOR
     # =========================================================
 
+    # ─────────────────────────────────────────────────────────────────
+    # Génération vectorisée : NumPy pour les segments + threads pour
+    # les lignes.  hyst_p est local à chaque ligne (pas d'état partagé).
+    # ─────────────────────────────────────────────────────────────────
+
     def generate_gcode_list(self, matrix, h_px, w_px, l_step, x_st, offX, offY, gc):
-        buf = io.StringIO()
-
-        # Extraction des paramètres avec valeurs de sécurité
-        e_num = gc.get("e_num", 0)
-        use_s_mode = gc.get("use_s_mode", False)
-        ratio = gc.get("ratio", 1.0)
-        ctrl_max = gc.get("ctrl_max", 255)
-        pre = gc.get("premove", 2.0)
-        feed = gc.get("feedrate", 3000)
+        """
+        Génération G-Code optimisée.
+        La boucle interne (pixels) est vectorisée via NumPy :
+        np.diff détecte les changements de puissance en O(n) sans boucle Python.
+        """
+        e_num          = gc.get("e_num", 0)
+        use_s_mode     = gc.get("use_s_mode", False)
+        ratio          = gc.get("ratio", 1.0)
+        ctrl_max       = gc.get("ctrl_max", 255)
+        pre            = gc.get("premove", 2.0)
+        feed           = gc.get("feedrate", 3000)
         offset_latence = gc.get("offset_latence", 0.0)
+        raster_mode    = str(gc.get("raster_mode", "horizontal")).lower().strip()
 
-        raster_mode = str(gc.get("raster_mode", "horizontal")).lower().strip()
+        parts = []
+        W = parts.append
 
-        # Constantes de stabilité physique
-        HYST_THRESHOLD = max(0.02 * ctrl_max, 0.001)
-        hyst_p = 0.0
-
-        buf.write(f"G1 F{feed}\n")
-
+        W("G1 F%s" % feed)
         if not use_s_mode:
-            buf.write(f"M67 E{e_num} Q0.00\nG4 P0.1\n")
+            W("M67 E%s Q0.00" % e_num)
+            W("G4 P0.1")
 
-        p_matrix = np.clip(matrix * ratio, 0, ctrl_max)
+        p_matrix = np.clip(matrix * ratio, 0.0, ctrl_max)
 
-        # Détermination de la géométrie selon le mode
         if raster_mode == "horizontal":
-            outer_range = h_px
-            inner_count = w_px
-            step_main = l_step
-            step_scan = x_st
+            outer_range  = h_px
+            inner_count  = w_px
+            step_main    = l_step
+            step_scan    = x_st
+            axis         = "X"
         else:
-            # Mode vertical (par défaut si non horizontal)
-            outer_range = w_px
-            inner_count = h_px
-            step_main = x_st
-            step_scan = l_step
+            outer_range  = w_px
+            inner_count  = h_px
+            step_main    = x_st
+            step_scan    = l_step
+            axis         = "Y"
 
-        # La distance réelle de scan est basée sur les intervalles entre pixels
         real_scan_dist = (inner_count - 1) * step_scan
 
-        # =====================================================
-        # Boucle de balayage Raster
-        # =====================================================
+        # Positions de scan pré-calculées (partagées par toutes les lignes)
+        scan_pos_fwd = np.arange(1, inner_count + 1) * step_scan  # positions fwd
+        scan_pos_rev = np.arange(inner_count - 1, -1, -1) * step_scan  # positions rev
+
         for outer_idx in range(outer_range):
-            is_fwd = (outer_idx % 2 == 0)
+            is_fwd   = (outer_idx % 2 == 0)
             scan_dir = 1 if is_fwd else -1
-            corr = - offset_latence * scan_dir
+            corr     = -offset_latence * scan_dir
 
             if raster_mode == "horizontal":
-                main_pos = outer_idx * step_main + offY
-                # Inversion de l'index pour graver de bas en haut (standard CNC)
-                row_data = p_matrix[(h_px - 1) - outer_idx, :]
-                axis = "X"
+                main_pos    = outer_idx * step_main + offY
+                row_data    = p_matrix[(h_px - 1) - outer_idx]
                 scan_offset = offX
             else:
-                main_pos = outer_idx * step_main + offX
-                # Extraction de colonne et inversion pour graver de bas en haut
-                row_data = p_matrix[::-1, outer_idx]
-                axis = "Y"
+                main_pos    = outer_idx * step_main + offX
+                row_data    = p_matrix[::-1, outer_idx]
                 scan_offset = offY
 
-            scan_start = (0 if is_fwd else real_scan_dist) + scan_offset
-            scan_end = (real_scan_dist if is_fwd else 0) + scan_offset
+            scan_start = (0.0 if is_fwd else real_scan_dist) + scan_offset
+            scan_end   = (real_scan_dist if is_fwd else 0.0) + scan_offset
+            pre_start  = scan_start - pre * scan_dir
+            pre_end    = scan_end   + pre * scan_dir
 
-            pre_start = scan_start - (pre * scan_dir)
-            pre_end = scan_end + (pre * scan_dir)
-
-            # 1. Positionnement initial sur la ligne
+            # Positionnement initial
             if raster_mode == "horizontal":
-                buf.write(f"G1 X{pre_start:.4f} Y{main_pos:.4f}\n")
+                W("G1 X%.4f Y%.4f" % (pre_start, main_pos))
             else:
-                buf.write(f"G1 X{main_pos:.4f} Y{pre_start:.4f}\n")
+                W("G1 X%.4f Y%.4f" % (main_pos, pre_start))
 
             start_with_corr = scan_start + corr
-
-            # Gestion de l'entrée dans l'image (Overscan de sécurité)
             if abs(start_with_corr - pre_start) > 0.0001:
                 if not use_s_mode:
-                    buf.write(f"M67 E{e_num} Q0.00 G1 {axis}{start_with_corr:.4f}\n")
+                    W("M67 E%s Q0.00 G1 %s%.4f" % (e_num, axis, start_with_corr))
                 else:
-                    buf.write(f"G1 {axis}{start_with_corr:.4f} S0\n")
+                    W("G1 %s%.4f S0" % (axis, start_with_corr))
 
-            # 2. Boucle de traitement des pixels par segments
+            # ── Boucle pixel via Numba JIT ────────────────────────────
+            vals    = np.ascontiguousarray(
+                row_data if is_fwd else row_data[::-1], dtype=np.float64)
+            base_pos = scan_pos_fwd if is_fwd else scan_pos_rev
+            targets  = np.ascontiguousarray(
+                base_pos + scan_offset + corr, dtype=np.float64)
+
+            seg_pos, seg_pwr, n_segs = _compute_segments(
+                vals, targets, start_with_corr, ctrl_max)
+
             current_pos = start_with_corr
-            current_p = None
-            group_target = start_with_corr
-            
-            pixel_indices = range(inner_count) if is_fwd else range(inner_count - 1, -1, -1)
-            
-            for pix_idx in pixel_indices:
-                p_val = max(0.0, min(row_data[pix_idx], ctrl_max))
-                
-                # Application de l'hystérésis pour éviter les micro-variations de puissance
-                if abs(p_val - hyst_p) < HYST_THRESHOLD:
-                    p_val = hyst_p
-                else:
-                    hyst_p = p_val
+            for si in range(n_segs):
+                p_val       = seg_pwr[si]
+                seg_end_pos = seg_pos[si]
+                if abs(seg_end_pos - current_pos) > 0.0001:
+                    if not use_s_mode:
+                        W("M67 E%s Q%.3f G1 %s%.4f" % (e_num, p_val, axis, seg_end_pos))
+                    else:
+                        W("G1 %s%.4f S%.3f" % (axis, seg_end_pos, p_val))
+                    current_pos = seg_end_pos
 
-                target_idx = (pix_idx + 1) if is_fwd else pix_idx
-                target_scan = (target_idx * step_scan) + scan_offset + corr
-                
-                if current_p is None:
-                    current_p = p_val
-
-                # Si la puissance change, on écrit le segment parcouru
-                if abs(p_val - current_p) > 0.001:
-                    if abs(group_target - current_pos) > 0.0001:
-                        if not use_s_mode:
-                            buf.write(f"M67 E{e_num} Q{current_p:.3f} G1 {axis}{group_target:.4f}\n")
-                        else:
-                            buf.write(f"G1 {axis}{group_target:.4f} S{current_p:.3f}\n")
-                        current_pos = group_target
-                    current_p = p_val
-                
-                group_target = target_scan
-
-            # 3. Finalisation du dernier segment de l'image
             end_with_corr = scan_end + corr
-            last_p = current_p if current_p is not None else 0.0
-
+            last_p = float(vals[-1]) if len(vals) > 0 else 0.0
             if abs(end_with_corr - current_pos) > 0.0001:
                 if not use_s_mode:
-                    buf.write(f"M67 E{e_num} Q{last_p:.3f} G1 {axis}{end_with_corr:.4f}\n")
+                    W("M67 E%s Q%.3f G1 %s%.4f" % (e_num, last_p, axis, end_with_corr))
                 else:
-                    buf.write(f"G1 {axis}{end_with_corr:.4f} S{last_p:.3f}\n")
-            
+                    W("G1 %s%.4f S%.3f" % (axis, end_with_corr, last_p))
             current_pos = end_with_corr
 
-            # 4. Overscan de sortie haché (pour maintenir la stabilité de la vitesse)
-            overscan_step = step_scan * 4
-            dist_to_go = abs(pre_end - current_pos)
+            # Overscan de sortie
+            overscan_step     = step_scan * 4
+            dist_to_go        = abs(pre_end - current_pos)
             num_steps_overscan = int(dist_to_go / overscan_step)
-            
             for _ in range(num_steps_overscan):
-                current_pos += (overscan_step * scan_dir)
+                current_pos += overscan_step * scan_dir
                 if not use_s_mode:
-                    buf.write(f"M67 E{e_num} Q0.00 G1 {axis}{current_pos:.4f}\n")
+                    W("M67 E%s Q0.00 G1 %s%.4f" % (e_num, axis, current_pos))
                 else:
-                    buf.write(f"G1 {axis}{current_pos:.4f} S0\n")
+                    W("G1 %s%.4f S0" % (axis, current_pos))
 
-            # Positionnement final de sécurité en bout de ligne
             if abs(pre_end - current_pos) > 0.0001:
                 if not use_s_mode:
-                    buf.write(f"M67 E{e_num} Q0.00 G1 {axis}{pre_end:.4f}\n")
+                    W("M67 E%s Q0.00 G1 %s%.4f" % (e_num, axis, pre_end))
                 else:
-                    buf.write(f"G1 {axis}{pre_end:.4f} S0\n")
+                    W("G1 %s%.4f S0" % (axis, pre_end))
 
-        return buf.getvalue()
-    
+        return "\n".join(parts) + "\n"
+
+
     def generate_framing_gcode(self, w, h, offX, offY, power,
                                 feedrate, pause_cmd=None,
                                 use_s_mode=True, e_num=0):
