@@ -34,21 +34,13 @@ def run_compilation():
     params = [
         'pyinstaller',
         '--name', EXE_NAME,
-        '--onefile',       # Un seul fichier .exe
+        '--onefile',
         '--clean',
         '--noconfirm',
-        '--windowed',      # Pas de console noire en arrière-plan
-        
-        # On n'ajoute que les fichiers de ressources (images, icônes)
+        '--windowed',
+
         '--add-data', f'{os.path.join(BASE_DIR, "assets")}{os.pathsep}assets',
-
-        # CustomTkinter a besoin de collect-all pour ses fichiers json/thèmes
-        '--collect-all', 'customtkinter',
-
-        # PIL est souvent nécessaire en hidden-import pour certaines versions de PyInstaller
         '--hidden-import', 'PIL.Image',
-        '--hidden-import', 'PIL.ImageTk',
-
         '--icon', ICON_PATH,
         MAIN_SCRIPT
     ]

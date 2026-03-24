@@ -1,7 +1,6 @@
-customtkinter
-Pillow
+
 numpy
 matplotlib
-opencv-python
+#opencv-python
 
 PyQt6

@@ -7,7 +7,11 @@ import os
 import sys
 from PIL import Image
 import datetime
-import customtkinter as ctk
+from PyQt6.QtWidgets import (
+    QDialog, QLabel, QPushButton, QFrame, QHBoxLayout, QVBoxLayout
+)
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 
 from core.translations import TRANSLATIONS
 
@@ -60,33 +64,26 @@ def save_dashboard_data(config_manager, matrix, gcode_content, estimated_time=0)
         square_img.save(thumb_path, "PNG")
 
         # --- 6. MISE À JOUR DES STATISTIQUES ---
-        # On s'assure que toutes les données lues sont des types Python natifs
         current_lines = int(config_manager.get_item("stats", "total_lines", 0))
         current_gcodes = int(config_manager.get_item("stats", "total_gcodes", 0))
-        
-        # Attention ici : vous utilisiez "total_sec" pour lire et "total_time_seconds" pour écrire. 
-        # Harmonisons sur "total_time_seconds"
         current_time = float(config_manager.get_item("stats", "total_time_seconds", 0.0))
 
         # Calcul des nouvelles valeurs
         new_lines = len(gcode_content.splitlines())
         
-        # --- CORRECTION ICI : Conversion forcée en types Python natifs ---
-        # On utilise float() et int() pour nettoyer les types NumPy éventuels
+        # Conversion forcée en types Python natifs
         total_lines_updated = int(current_lines + new_lines)
         total_gcodes_updated = int(current_gcodes + 1)
-        total_time_updated = float(current_time + float(estimated_time)) # Double conversion par sécurité
+        total_time_updated = float(current_time + float(estimated_time))
         
         # Enregistrement des données cumulées
         config_manager.set_item("stats", "total_lines", total_lines_updated)
         config_manager.set_item("stats", "total_gcodes", total_gcodes_updated)
-        config_manager.set_item("stats", "total_time_seconds", total_time_updated) 
+        config_manager.set_item("stats", "total_time_seconds", total_time_updated)
         
-        # Enregistrement du dernier projet (forcé en float Python)
+        # Enregistrement du dernier projet
         config_manager.set_item("stats", "last_project_time", float(estimated_time))
         
-        # Note : Votre set_item appelle déjà save(), donc cet appel est optionnel 
-        # mais ne fait pas de mal.
         config_manager.save()
         
         return thumb_path
@@ -96,21 +93,18 @@ def save_dashboard_data(config_manager, matrix, gcode_content, estimated_time=0)
         import traceback
         traceback.print_exc()
         return None
-        
+
 
 def ask_confirmation(parent, message, action_callback, danger_color="#8b0000"):
     """
     Crée une fenêtre de confirmation modale réutilisable.
     """
     # 1. RÉCUPÉRATION DE LA LANGUE
-    # On essaie de récupérer le manager via le parent (app)
-    # Si parent n'a pas de config_manager, on se rabat sur l'Anglais par défaut
     config = getattr(parent, "config_manager", None)
-    if not config and hasattr(parent, "app"): # Si le parent est une View
+    if not config and hasattr(parent, "app"):  # Si le parent est une View
         config = parent.app.config_manager
-        
+
     lang = config.get_item("machine_settings", "language", "English") if config else "English"
-    # On récupère les textes de la section 'common' ou 'settings' selon votre structure
     texts = TRANSLATIONS.get(lang, TRANSLATIONS["English"]).get("common", {
         "confirm_title": "Confirmation",
         "confirm_subtitle": "This action is irreversible.",
@@ -118,39 +112,65 @@ def ask_confirmation(parent, message, action_callback, danger_color="#8b0000"):
         "btn_confirm": "Confirm"
     })
 
-    dialog = ctk.CTkToplevel(parent)
-    dialog.title(texts.get("confirm_title", "Confirmation"))
-    
-    width, height = 300, 160
-    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
-    dialog.geometry(f"{width}x{height}+{x}+{y}")
-    
-    dialog.attributes("-topmost", True)
-    dialog.grab_set()
-    dialog.resizable(False, False)
+    # 2. CRÉATION DE LA DIALOG PYQT6
+    dialog = QDialog(parent)
+    dialog.setWindowTitle(texts.get("confirm_title", "Confirmation"))
+    dialog.setFixedSize(300, 160)
+    dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
 
-    # 2. APPLICATION DES TEXTES TRADUITS
-    lbl_title = ctk.CTkLabel(dialog, text=message, font=("Arial", 14, "bold"), wraplength=250)
-    lbl_title.pack(pady=(20, 5))
-    
-    lbl_subtitle = ctk.CTkLabel(dialog, text=texts.get("confirm_subtitle"), font=("Arial", 11), text_color="gray")
-    lbl_subtitle.pack(pady=(0, 20))
-    
-    btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-    btn_frame.pack(pady=10)
-    
-    btn_cancel = ctk.CTkButton(
-        btn_frame, text=texts.get("btn_cancel"), width=100, fg_color="gray", 
-        command=dialog.destroy
+    # Centrage par rapport au parent
+    parent_geo = parent.geometry()
+    x = parent_geo.x() + (parent_geo.width() // 2) - 150
+    y = parent_geo.y() + (parent_geo.height() // 2) - 80
+    dialog.move(x, y)
+
+    # 3. LAYOUT PRINCIPAL
+    layout = QVBoxLayout(dialog)
+    layout.setContentsMargins(20, 20, 20, 15)
+    layout.setSpacing(5)
+
+    # Label message principal
+    lbl_title = QLabel(message)
+    font_title = QFont("Arial", 12)
+    font_title.setBold(True)
+    lbl_title.setFont(font_title)
+    lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    lbl_title.setWordWrap(True)
+    layout.addWidget(lbl_title)
+
+    # Label sous-titre
+    lbl_subtitle = QLabel(texts.get("confirm_subtitle", "This action is irreversible."))
+    lbl_subtitle.setFont(QFont("Arial", 10))
+    lbl_subtitle.setStyleSheet("color: gray;")
+    lbl_subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    layout.addWidget(lbl_subtitle)
+
+    layout.addSpacing(10)
+
+    # 4. BOUTONS
+    btn_frame = QFrame()
+    btn_layout = QHBoxLayout(btn_frame)
+    btn_layout.setContentsMargins(0, 0, 0, 0)
+    btn_layout.setSpacing(10)
+
+    btn_cancel = QPushButton(texts.get("btn_cancel", "Cancel"))
+    btn_cancel.setFixedWidth(100)
+    btn_cancel.setStyleSheet("background-color: gray; color: white; border-radius: 4px; padding: 5px;")
+    btn_cancel.clicked.connect(dialog.reject)
+
+    btn_confirm = QPushButton(texts.get("btn_confirm", "Confirm"))
+    btn_confirm.setFixedWidth(100)
+    btn_confirm.setStyleSheet(
+        f"background-color: {danger_color}; color: white; border-radius: 4px; padding: 5px;"
     )
-    btn_cancel.pack(side="left", padx=10)
-    
-    btn_confirm = ctk.CTkButton(
-        btn_frame, text=texts.get("btn_confirm"), width=100, fg_color=danger_color,
-        command=lambda: [action_callback(), dialog.destroy()]
-    )
-    btn_confirm.pack(side="left", padx=10)
+    btn_confirm.clicked.connect(lambda: [action_callback(), dialog.accept()])
+
+    btn_layout.addWidget(btn_cancel)
+    btn_layout.addWidget(btn_confirm)
+    layout.addWidget(btn_frame, alignment=Qt.AlignmentFlag.AlignCenter)
+
+    dialog.exec()
+
 
 def truncate_path(path, max_length=60):
     if not path or len(path) <= max_length:
@@ -172,19 +192,16 @@ def truncate_path(path, max_length=60):
     
     # Si le nom de fichier lui-même est plus long que la limite
     if len(filename) >= max_length - 5:
-        # On garde le début de l'extension
         name_part, ext_part = (filename.rsplit('.', 1) + [""])[:2]
         if ext_part:
             ext_part = "." + ext_part
         
-        # On coupe le nom de fichier au milieu pour garder l'extension
         remaining_space = max_length - len(start_part) - len(ext_part) - 5
         return f"{start_part}/...{name_part[-remaining_space:]}{ext_part}"
 
     # Tentative d'inclure le dossier parent si possible
     if len(parts) > 2:
         parent = parts[-2]
-        # Si (Debut + Parent + Fichier) entre dans la limite
         if len(start_part) + len(parent) + len(filename) + 5 <= max_length:
             return f"{start_part}/.../{parent}/{filename}"
     
