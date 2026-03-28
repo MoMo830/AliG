@@ -1,3 +1,14 @@
+# -*- coding: utf-8 -*-
+"""
+A.L.I.G. - Advanced Laser Imaging Generator
+===========================================
+Compiler script for ALIG Qt version 0.99b
+Author: Alexandre "MoMo"
+
+Only works for windows, as it uses PyInstaller to create a standalone executable.
+"""
+
+
 import os
 import sys
 import subprocess

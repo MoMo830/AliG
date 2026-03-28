@@ -2,7 +2,7 @@
     "machine_settings": {
         "theme": "Dark",
         "language": "Fran\u00e7ais",
-        "cmd_mode": "M67 (Analog)",
+        "cmd_mode": "S (Spindle)",
         "firing_mode": "M3/M5",
         "m67_e_num": 0,
         "ctrl_max": 1000,
@@ -22,7 +22,7 @@
         "last_project_time": 0.0
     },
     "app_state": {
-        "onboarding_done": false
+        "onboarding_done": true
     },
     "window_settings": {
         "is_maximized": true,
