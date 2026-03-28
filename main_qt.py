@@ -10,15 +10,41 @@ License: MIT
 import sys
 import os
 import traceback
-import ctypes
 
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPalette, QColor
 
 from core.config_manager import ConfigManager
 from utils.gui_utils import setup_app_id
 from gui.main_window_qt import MainWindowQt
+
+IS_WINDOWS = sys.platform == "win32"
+
+
+def show_fatal_error(message: str) -> None:
+    """Affiche une erreur fatale de manière cross-platform."""
+    if IS_WINDOWS:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, message, "ALIG Qt - Fatal Error", 0x10)
+    else:
+        # Fallback Qt (fonctionne même sans fenêtre principale)
+        app = QApplication.instance() or QApplication(sys.argv)
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Icon.Critical)
+        msg.setWindowTitle("ALIG Qt - Fatal Error")
+        msg.setText("Une erreur fatale s'est produite.")
+        msg.setDetailedText(message)
+        msg.exec()
+
+
+def supports_window_opacity() -> bool:
+    """Vérifie si le backend Qt supporte la transparence des fenêtres."""
+    # XCB (Linux X11) ne supporte pas toujours windowOpacity sans composite manager.
+    # Wayland et macOS le supportent en général.
+    platform = QApplication.platformName() if QApplication.instance() else ""
+    return platform not in ("xcb",)
+
 
 def main():
     try:
@@ -28,9 +54,12 @@ def main():
         config_manager = ConfigManager(config_path)
 
         app = QApplication(sys.argv)
-    
+
         window = MainWindowQt(controller=config_manager)
-        window.setWindowOpacity(0.0)
+
+        use_opacity = supports_window_opacity()
+        if use_opacity:
+            window.setWindowOpacity(0.0)
 
         # show() dès que ui_ready est émis (dashboard construit + thémé)
         def reveal_final():
@@ -40,16 +69,22 @@ def main():
             else:
                 window.show()
             window.setUpdatesEnabled(True)
-            window.fade_anim = QPropertyAnimation(window, b"windowOpacity")
-            window.fade_anim.setDuration(250)
-            window.fade_anim.setStartValue(0.0)
-            window.fade_anim.setEndValue(1.0)
-            window.fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-            window.fade_anim.start()
-            window.raise_()
-            # Précharger raster_view après l'animation — aucun impact visuel
-            window.fade_anim.finished.connect(
-                lambda: QTimer.singleShot(200, window._preload_raster_view))
+
+            if use_opacity:
+                window.fade_anim = QPropertyAnimation(window, b"windowOpacity")
+                window.fade_anim.setDuration(250)
+                window.fade_anim.setStartValue(0.0)
+                window.fade_anim.setEndValue(1.0)
+                window.fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+                window.fade_anim.start()
+                window.raise_()
+                # Précharger raster_view après l'animation — aucun impact visuel
+                window.fade_anim.finished.connect(
+                    lambda: QTimer.singleShot(200, window._preload_raster_view))
+            else:
+                # Pas d'animation : affichage direct + préchargement différé
+                window.raise_()
+                QTimer.singleShot(200, window._preload_raster_view)
 
         window.ui_ready.connect(reveal_final)
 
@@ -62,7 +97,8 @@ def main():
         print("="*50)
         print(error_message)
         print("="*50 + "\n")
-        ctypes.windll.user32.MessageBoxW(0, error_message, "ALIG Qt - Fatal Error", 0x10)
+        show_fatal_error(error_message)
+
 
 if __name__ == "__main__":
     main()

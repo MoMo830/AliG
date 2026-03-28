@@ -2,7 +2,6 @@
 import os
 import sys
 import webbrowser
-import ctypes
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QStackedWidget, QFrame, QMessageBox)
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
@@ -103,16 +102,17 @@ class MainWindowQt(QMainWindow):
         icon_path = paths.LOGO_ALIG
 
         if os.path.exists(icon_path):
-            # 1. Définir l'icône de la fenêtre principale
+            # 1. Définir l'icône de la fenêtre principale (cross-platform)
             self.setWindowIcon(QIcon(icon_path))
 
-            # 2. Fix pour la barre des tâches Windows (AppUserModelID)
-            # On utilise une chaîne unique pour que Windows identifie l'app
-            try:
-                myappid = f'momo.alig.lasergenerator.{self.version}'
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-            except Exception as e:
-                print(f"Erreur lors du réglage de l'AppUserModelID : {e}")
+            # 2. Fix spécifique Windows : force l'icône dans la barre des tâches
+            if sys.platform == "win32":
+                try:
+                    import ctypes
+                    myappid = f'momo.alig.lasergenerator.{self.version}'
+                    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+                except Exception as e:
+                    print(f"Erreur lors du réglage de l'AppUserModelID : {e}")
         else:
             print(f"Alerte : Icône introuvable à l'emplacement {icon_path}")
 

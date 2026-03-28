@@ -2,57 +2,30 @@
     "machine_settings": {
         "theme": "Dark",
         "language": "Fran\u00e7ais",
-        "enable_thumbnails": true,
         "cmd_mode": "M67 (Analog)",
         "firing_mode": "M3/M5",
         "m67_e_num": 0,
-        "ctrl_max": 100,
+        "ctrl_max": 1000,
         "gcode_extension": ".nc",
         "laser_latency": 0.0,
         "premove": 10.0,
-        "hor_linestep": 0.1307,
+        "hor_linestep": 0.1,
         "ver_linestep": 0.1,
+        "enable_thumbnails": true,
         "custom_header": "",
         "custom_footer": ""
     },
     "stats": {
-        "total_lines": 222062,
-        "total_gcodes": 2,
-        "total_time_seconds": 852.1571655273438,
-        "last_project_time": 426.0785827636719
+        "total_lines": 0,
+        "total_gcodes": 0,
+        "total_time_seconds": 0.0,
+        "last_project_time": 0.0
     },
     "app_state": {
-        "onboarding_done": true
+        "onboarding_done": false
     },
     "window_settings": {
         "is_maximized": true,
-        "geometry": "1440x890+0+-6"
-    },
-    "raster_settings": {
-        "width": 128.35,
-        "dpi": 187.0,
-        "origin_mode": "Lower-Left",
-        "custom_x": 0.0,
-        "custom_y": 0.0,
-        "contrast": 0.0,
-        "gamma": 1.0,
-        "thermal": 1.5,
-        "feedrate": 3000.0,
-        "premove": 10.0,
-        "max_p": 40.0,
-        "min_p": 10.0,
-        "gray_steps": 176.0,
-        "frame_feed_ratio_menu": "20%",
-        "input_path": "C:/Users/momof/Desktop/photo_monnin.png",
-        "output_dir": "C:/Users/momof/Desktop",
-        "custom_header": "",
-        "custom_footer": "",
-        "include_frame": false,
-        "include_pointer": false,
-        "force_width": false,
-        "invert_relief": false,
-        "frame_power": "0",
-        "custom_pause_cmd": "M0",
-        "raster_mode": "horizontal"
+        "geometry": "1920x1009+0+-8"
     }
 }
