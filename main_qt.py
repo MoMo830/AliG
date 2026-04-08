@@ -68,8 +68,10 @@ def main():
 
         window = MainWindowQt(controller=config_manager)
 
-        if use_opacity:
-            window.setWindowOpacity(0.0)
+        # setUpdatesEnabled(False) masque le rendu initial sans toucher à l'opacité.
+        # On ne touche JAMAIS à windowOpacity avant show() — cela génère des warnings
+        # sur XCB (Linux) même quand use_opacity est False.
+        window.setUpdatesEnabled(False)
 
         def reveal_final():
             data = config_manager.get_section("window_settings")
@@ -77,6 +79,11 @@ def main():
                 window.showMaximized()
             else:
                 window.show()
+
+            if use_opacity:
+                # Opacité initialisée à 0 APRÈS show() — XCB ne se plaint plus
+                window.setWindowOpacity(0.0)
+
             window.setUpdatesEnabled(True)
 
             if use_opacity:
