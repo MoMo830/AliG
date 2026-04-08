@@ -28,7 +28,6 @@ def show_fatal_error(message: str) -> None:
         import ctypes
         ctypes.windll.user32.MessageBoxW(0, message, "ALIG Qt - Fatal Error", 0x10)
     else:
-        # Fallback Qt (fonctionne même sans fenêtre principale)
         app = QApplication.instance() or QApplication(sys.argv)
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Icon.Critical)
@@ -39,10 +38,19 @@ def show_fatal_error(message: str) -> None:
 
 
 def supports_window_opacity() -> bool:
-    """Vérifie si le backend Qt supporte la transparence des fenêtres."""
-    # XCB (Linux X11) ne supporte pas toujours windowOpacity sans composite manager.
-    # Wayland et macOS le supportent en général.
-    platform = QApplication.platformName() if QApplication.instance() else ""
+    """
+    Vérifie si le backend Qt supporte la transparence des fenêtres.
+
+    - XCB (Linux X11) : non supporté sans composite manager → False
+    - Wayland, Windows, macOS : supporté → True
+
+    IMPORTANT : doit être appelé APRÈS QApplication.__init__().
+    """
+    app = QApplication.instance()
+    if app is None:
+        return False
+    platform = app.platformName()
+    # XCB = X11 classique. Wayland expose "wayland", Windows "windows", macOS "cocoa".
     return platform not in ("xcb",)
 
 
@@ -55,13 +63,14 @@ def main():
 
         app = QApplication(sys.argv)
 
-        window = MainWindowQt(controller=config_manager)
-
+        # Détection APRÈS création de QApplication — platformName() est alors fiable.
         use_opacity = supports_window_opacity()
+
+        window = MainWindowQt(controller=config_manager, use_opacity=use_opacity)
+
         if use_opacity:
             window.setWindowOpacity(0.0)
 
-        # show() dès que ui_ready est émis (dashboard construit + thémé)
         def reveal_final():
             data = config_manager.get_section("window_settings")
             if data.get("is_maximized", False):
@@ -78,11 +87,10 @@ def main():
                 window.fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
                 window.fade_anim.start()
                 window.raise_()
-                # Précharger raster_view après l'animation — aucun impact visuel
                 window.fade_anim.finished.connect(
                     lambda: QTimer.singleShot(200, window._preload_raster_view))
             else:
-                # Pas d'animation : affichage direct + préchargement différé
+                # Linux XCB ou tout backend sans opacity : affichage direct
                 window.raise_()
                 QTimer.singleShot(200, window._preload_raster_view)
 
