@@ -30,6 +30,15 @@ class MainWindowQt(QMainWindow):
 
     def __init__(self, controller):
         super().__init__()
+        # Forcer les boutons min/max/close dans la décoration native du WM.
+        # Nécessaire sous Linux où certains WM ne les affichent pas sans hint explicite.
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+            | Qt.WindowType.WindowCloseButtonHint
+            | Qt.WindowType.WindowSystemMenuHint
+        )
         # 1. PROTECTION RADICALE (Imports déjà faits en haut du fichier)
         self.setBackgroundRole(QPalette.ColorRole.Window)
         self.setAutoFillBackground(True)
@@ -246,41 +255,6 @@ class MainWindowQt(QMainWindow):
         layout.addWidget(self.btn_settings)
         # btn_settings a une icône — pas de setText, on met à jour le tooltip dans update_ui_language
 
-        # 4. BOUTONS DE FENÊTRE (minimize / maximize / close)
-        # Sous Linux la décoration native ne les affiche pas toujours → on les ajoute
-        # dans la topbar. Sous Windows ils sont fournis par le système → on les cache.
-        layout.addSpacing(6)
-        self._wc_sep = QLabel("|")
-        self._wc_sep.setStyleSheet("color: #444; font-weight: bold;")
-        layout.addWidget(self._wc_sep)
-        layout.addSpacing(2)
-
-        def _wc_btn(label, tooltip, size=30):
-            b = QPushButton(label)
-            b.setFixedSize(size, size)
-            b.setToolTip(tooltip)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setFlat(True)
-            return b
-
-        self.btn_minimize = _wc_btn("─", "Minimize")
-        self.btn_maximize = _wc_btn("□", "Maximize / Restore")
-        self.btn_close    = _wc_btn("✕", "Close")
-
-        self.btn_minimize.clicked.connect(self.showMinimized)
-        self.btn_maximize.clicked.connect(self._toggle_maximize)
-        self.btn_close.clicked.connect(self.close)
-
-        for btn in (self.btn_minimize, self.btn_maximize, self.btn_close):
-            layout.addWidget(btn)
-
-        # Masquer sous Windows (la décoration native suffit)
-        if IS_WINDOWS:
-            self._wc_sep.hide()
-            self.btn_minimize.hide()
-            self.btn_maximize.hide()
-            self.btn_close.hide()
-
         # Enfin, on ajoute la TopBar au layout principal de la fenêtre
         self.main_layout.addWidget(self.top_bar)
 
@@ -374,23 +348,6 @@ class MainWindowQt(QMainWindow):
         if not settings_pix.isNull():
             self.btn_settings.setIcon(QIcon(settings_pix))
 
-        # 5b. Boutons de fenêtre (Linux uniquement — stylés avec le thème courant)
-        if not IS_WINDOWS:
-            text_col  = colors.get('text', '#ffffff')
-            bg_hover  = colors.get('btn_neutral_hover', '#4a4a4a')
-            self._wc_sep.setStyleSheet(f"color: {colors.get('border','#444')}; font-weight: bold; background: transparent;")
-            for btn in (self.btn_minimize, self.btn_maximize):
-                btn.setStyleSheet(
-                    f"QPushButton {{ color: {text_col}; background: transparent; border: none; "
-                    f"font-size: 14px; border-radius: 5px; }}"
-                    f"QPushButton:hover {{ background: {bg_hover}; }}"
-                )
-            self.btn_close.setStyleSheet(
-                f"QPushButton {{ color: {text_col}; background: transparent; border: none; "
-                f"font-size: 13px; border-radius: 5px; }}"
-                f"QPushButton:hover {{ background: #c0392b; color: white; }}"
-            )
-
         # 6. Propager le changement à TOUTES les vues instanciées
         for attr in ("dashboard_view", "raster_view", "settings_view",
                      "calibration_view", "checker_view"):
@@ -404,17 +361,6 @@ class MainWindowQt(QMainWindow):
                        for a in ("dashboard_view", "raster_view", "settings_view",
                                  "calibration_view", "checker_view")):
                 current_view.apply_theme(colors)
-
-    def _toggle_maximize(self):
-        """Bascule entre fenêtre maximisée et taille normale."""
-        if self.isMaximized():
-            self.showNormal()
-            self.btn_maximize.setText("□")
-            self.btn_maximize.setToolTip("Maximize")
-        else:
-            self.showMaximized()
-            self.btn_maximize.setText("❐")
-            self.btn_maximize.setToolTip("Restore")
 
     # --- Routage ---
     def show_dashboard(self):
