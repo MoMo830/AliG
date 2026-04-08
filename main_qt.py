@@ -11,6 +11,13 @@ import sys
 import os
 import traceback
 
+# Force XWayland sous Linux/Wayland pour obtenir la décoration native Qt
+# (boutons min/max/close). Sans ça, GNOME+Wayland délègue au compositeur
+# qui ignore les WindowFlags hints et n'affiche pas les boutons.
+# setdefault : n'écrase pas si l'utilisateur a déjà défini QT_QPA_PLATFORM.
+if sys.platform.startswith("linux"):
+    os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPalette, QColor
