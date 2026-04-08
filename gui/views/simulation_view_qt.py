@@ -1205,8 +1205,8 @@ class SimulationViewQt(QWidget):
 
     def _on_error(self, msg):
         self._hide_loading()
-        QMessageBox.critical(self, 'Engine Error',
-                             f'Failed to generate G-code:\n{msg}')
+        self._msgbox(QMessageBox.Icon.Critical, 'Engine Error',
+                     f'Failed to generate G-code:\n{msg}')
 
     def _on_done(self, d):
         self._hide_loading()
@@ -1777,12 +1777,61 @@ class SimulationViewQt(QWidget):
             ';;'.join(parts))
         if path: self._save(path.replace('\\', '/'))
 
+    # ── Helper : QMessageBox isolé du stylesheet parent ──────────────────────
+    def _msgbox(self, icon: QMessageBox.Icon, title: str, text: str) -> None:
+        """
+        Affiche un QMessageBox avec un stylesheet complet et autonome.
+
+        Pourquoi : le stylesheet appliqué sur les widgets parents (background,
+        border, color…) est hérité par les QDialog/QMessageBox enfants sous Qt,
+        ce qui provoque un fond corrompu ou transparent.  En appliquant un
+        stylesheet *complet* directement sur la boîte de dialogue — et en
+        utilisant setParent(None) pour couper l'héritage — on neutralise cet effet.
+        """
+        colors = getattr(self, '_theme_colors', {})
+        bg     = colors.get('bg_card_alt',       '#2b2b2b')
+        bg_btn = colors.get('btn_neutral',        '#3a3a3a')
+        bg_hov = colors.get('btn_neutral_hover',  '#4a4a4a')
+        fg     = colors.get('text',               '#ffffff')  # renommé fg pour éviter
+        border = colors.get('border',             '#555555')  # la collision avec le param text
+
+        mb = QMessageBox()          # Pas de parent → aucun héritage de stylesheet
+        mb.setIcon(icon)
+        mb.setWindowTitle(title)
+        mb.setText(text)            # <-- param text (message), pas fg (couleur)
+        mb.setStyleSheet(f"""
+            QMessageBox {{
+                background-color: {bg};
+                color: {fg};
+            }}
+            QMessageBox QLabel {{
+                color: {fg};
+                background: transparent;
+                border: none;
+                font-size: 13px;
+                padding: 4px;
+            }}
+            QPushButton {{
+                background-color: {bg_btn};
+                color: {fg};
+                border: 1px solid {border};
+                border-radius: 5px;
+                padding: 5px 18px;
+                font-size: 12px;
+                min-width: 70px;
+            }}
+            QPushButton:hover {{
+                background-color: {bg_hov};
+            }}
+        """)
+        mb.exec()
+
     def _save(self, path):
         """Sauvegarde le G-Code physiquement et met à jour les statistiques du dashboard."""
         try:
             if not hasattr(self, 'final_gcode') or not self.final_gcode:
-                QMessageBox.critical(self, 'Error',
-                                     self.t.get('no_gcode', 'No G-Code to save.'))
+                self._msgbox(QMessageBox.Icon.Critical, 'Error',
+                             self.t.get('no_gcode', 'No G-Code to save.'))
                 return
 
             with open(path, 'w') as f:
@@ -1800,13 +1849,13 @@ class SimulationViewQt(QWidget):
                 )
                 print(estimated_time)
 
-            QMessageBox.information(self, 'Success',
-                                    f'{self.t.get("save_success", "G-Code saved successfully:")}\n{path}')
+            self._msgbox(QMessageBox.Icon.Information, 'Success',
+                         f'{self.t.get("save_success", "G-Code saved successfully:")}\n{path}')
             self._navigate_back()
 
         except Exception as e:
-            QMessageBox.critical(self, 'Error',
-                                 f'{self.t.get("save_failed", "Save failed:")}\n{str(e)}')
+            self._msgbox(QMessageBox.Icon.Critical, 'Error',
+                         f'{self.t.get("save_failed", "Save failed:")}\n{str(e)}')
 
     # ══════════════════════════════════════════════════════════════
     #  NAVIGATION / FERMETURE

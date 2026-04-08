@@ -2,12 +2,15 @@
 import os
 import sys
 import webbrowser
-import ctypes
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QStackedWidget, QFrame, QMessageBox)
-from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap, QColor, QPalette
 from PyQt6.QtWidgets import QApplication
+
+IS_WINDOWS = sys.platform == "win32"
+if IS_WINDOWS:
+    import ctypes
 
 from core.translations import TRANSLATIONS
 from core.themes import get_theme
@@ -21,6 +24,9 @@ from gui.utils_qt import get_svg_pixmap
 
 
 class MainWindowQt(QMainWindow):
+    # Signal émis quand l'UI est prête — utilisé par main_qt.py pour le fade-in
+    ui_ready = pyqtSignal()
+
     def __init__(self, controller):
         super().__init__()
         # 1. PROTECTION RADICALE (Imports déjà faits en haut du fichier)
@@ -35,7 +41,8 @@ class MainWindowQt(QMainWindow):
         pal.setColor(QPalette.ColorRole.Base, dark_color)
         pal.setColor(QPalette.ColorRole.Button, dark_color)
         self.setPalette(pal)
-        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        # NOTE : WA_NoSystemBackground supprimé — il masque les boutons de fenêtre
+        # sous Linux et n'est pas nécessaire avec setAutoFillBackground(True).
         
         
         # On force le style CSS sur la Window ET le CentralWidget
@@ -76,7 +83,8 @@ class MainWindowQt(QMainWindow):
         # Appliquer le thème en premier pour éviter un double rendu
         self.update_ui_theme()
         self.show_dashboard()
-        QTimer.singleShot(300, self._preload_raster_view)
+        # Signale à main_qt.py que l'UI est prête (fade-in, show, etc.)
+        self.ui_ready.emit()
 
     def _preload_raster_view(self):
         """Crée raster_view en avance pour un basculement immédiat au clic."""
@@ -105,12 +113,12 @@ class MainWindowQt(QMainWindow):
             self.setWindowIcon(QIcon(icon_path))
 
             # 2. Fix pour la barre des tâches Windows (AppUserModelID)
-            # On utilise une chaîne unique pour que Windows identifie l'app
-            try:
-                myappid = f'momo.alig.lasergenerator.{self.version}'
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-            except Exception as e:
-                print(f"Erreur lors du réglage de l'AppUserModelID : {e}")
+            if IS_WINDOWS:
+                try:
+                    myappid = f'momo.alig.lasergenerator.{self.version}'
+                    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+                except Exception as e:
+                    print(f"Erreur lors du réglage de l'AppUserModelID : {e}")
         else:
             print(f"Alerte : Icône introuvable à l'emplacement {icon_path}")
 

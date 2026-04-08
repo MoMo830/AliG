@@ -16,10 +16,10 @@
         "custom_footer": ""
     },
     "stats": {
-        "total_lines": 0,
-        "total_gcodes": 0,
-        "total_time_seconds": 0.0,
-        "last_project_time": 0.0
+        "total_lines": 262377,
+        "total_gcodes": 3,
+        "total_time_seconds": 943.5693969726562,
+        "last_project_time": 314.52313232421875
     },
     "app_state": {
         "onboarding_done": true

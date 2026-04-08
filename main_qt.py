@@ -66,7 +66,7 @@ def main():
         # Détection APRÈS création de QApplication — platformName() est alors fiable.
         use_opacity = supports_window_opacity()
 
-        window = MainWindowQt(controller=config_manager, use_opacity=use_opacity)
+        window = MainWindowQt(controller=config_manager)
 
         if use_opacity:
             window.setWindowOpacity(0.0)
