@@ -17,6 +17,9 @@ import traceback
 # setdefault : n'écrase pas si l'utilisateur a déjà défini QT_QPA_PLATFORM.
 if sys.platform.startswith("linux"):
     os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+    # Désactive la détection du thème GNOME via D-Bus (indisponible sous XWayland)
+    # ce qui supprime le warning "org.freedesktop.portal.Desktop not provided".
+    os.environ.setdefault("QT_QPA_PLATFORMTHEME", "")
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
