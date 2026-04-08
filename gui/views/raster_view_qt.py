@@ -1863,11 +1863,57 @@ class RasterViewQt(QWidget):
 
     # ── Génération G-Code ─────────────────────────────────────────────
 
+    # ── Helper : QMessageBox isolé du stylesheet parent ──────────────────────
+    def _msgbox(self, icon: QMessageBox.Icon, title: str, text: str) -> None:
+        """
+        QMessageBox sans héritage de stylesheet parent.
+        Évite le fond transparent/corrompu sous Linux causé par les styles
+        globaux appliqués sur les widgets parents.
+        """
+        colors = getattr(self, '_theme_colors', {})
+        bg     = colors.get('bg_card_alt',      '#2b2b2b')
+        bg_btn = colors.get('btn_neutral',       '#3a3a3a')
+        bg_hov = colors.get('btn_neutral_hover', '#4a4a4a')
+        fg     = colors.get('text',              '#ffffff')
+        border = colors.get('border',            '#555555')
+
+        mb = QMessageBox()
+        mb.setIcon(icon)
+        mb.setWindowTitle(title)
+        mb.setText(text)
+        mb.setStyleSheet(f"""
+            QMessageBox {{
+                background-color: {bg};
+                color: {fg};
+            }}
+            QMessageBox QLabel {{
+                color: {fg};
+                background: transparent;
+                border: none;
+                font-size: 13px;
+                padding: 4px;
+            }}
+            QPushButton {{
+                background-color: {bg_btn};
+                color: {fg};
+                border: 1px solid {border};
+                border-radius: 5px;
+                padding: 5px 18px;
+                font-size: 12px;
+                min-width: 70px;
+            }}
+            QPushButton:hover {{
+                background-color: {bg_hov};
+            }}
+        """)
+        mb.exec()
+
     def generate_gcode(self):
         self.save_settings()
         res = self.process_logic()
         if not res or res[0] is None:
-            QMessageBox.warning(self, "No image", "Please select a valid image first.")
+            self._msgbox(QMessageBox.Icon.Warning, "No image",
+                         "Please select a valid image first.")
             return
 
         matrix, geom = res
@@ -1985,9 +2031,11 @@ class RasterViewQt(QWidget):
             }
             success, err = save_json_file(path, export)
             if success:
-                QMessageBox.information(self, "Export", "Profile saved successfully.")
+                self._msgbox(QMessageBox.Icon.Information, "Export",
+                             "Profile saved successfully.")
             else:
-                QMessageBox.critical(self, "Error", f"Export failed:\n{err}")
+                self._msgbox(QMessageBox.Icon.Critical, "Error",
+                             f"Export failed:\n{err}")
 
     def load_profile_from(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -2003,9 +2051,11 @@ class RasterViewQt(QWidget):
                 else:
                     self._apply_settings(data)
                 self._schedule_preview()
-                QMessageBox.information(self, "Profile", f"Loaded:\n{os.path.basename(path)}")
+                self._msgbox(QMessageBox.Icon.Information, "Profile",
+                             f"Loaded:\n{os.path.basename(path)}")
             else:
-                QMessageBox.critical(self, "Error", f"Could not load:\n{err}")
+                self._msgbox(QMessageBox.Icon.Critical, "Error",
+                             f"Could not load:\n{err}")
 
     # ── Save / Load settings ──────────────────────────────────────────
 

@@ -16,9 +16,9 @@
         "custom_footer": ""
     },
     "stats": {
-        "total_lines": 262377,
-        "total_gcodes": 3,
-        "total_time_seconds": 943.5693969726562,
+        "total_lines": 349836,
+        "total_gcodes": 4,
+        "total_time_seconds": 1258.092529296875,
         "last_project_time": 314.52313232421875
     },
     "app_state": {
